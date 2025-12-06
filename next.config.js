@@ -12,6 +12,9 @@ const nextConfig = {
 
   experimental: {
     instrumentationHook: process.env.NODE_ENV === 'production',
+    outputFileTracingIncludes: {
+      '/': ['./server.js', './start.js'],
+    },
   },
 
   // Uncoment to add domain whitelist
