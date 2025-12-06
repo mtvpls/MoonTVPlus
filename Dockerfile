@@ -52,8 +52,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# 安装 Socket.IO 依赖（使用 npm 更轻量）
-RUN npm install --omit=dev --no-save --legacy-peer-deps socket.io@^4.8.1 socket.io-client@^4.8.1 && \
+# 安装 Socket.IO 依赖
+# 先删除可能存在的 npm 配置，避免认证问题
+RUN rm -f .npmrc package-lock.json && \
+    npm install --omit=dev --no-save --legacy-peer-deps --registry=https://registry.npmjs.org socket.io@^4.8.1 socket.io-client@^4.8.1 && \
     npm cache clean --force
 
 # 切换到非特权用户
