@@ -28,26 +28,6 @@ ENV DOCKER_ENV=true
 # 生成生产构建
 RUN pnpm run build
 
-# 打包 Socket.IO 依赖（pnpm 结构需要完整的 node_modules）
-RUN cd /app && tar czf /tmp/socketio-deps.tar.gz \
-    node_modules/socket.io \
-    node_modules/socket.io-client \
-    node_modules/.pnpm/socket.io@* \
-    node_modules/.pnpm/socket.io-client@* \
-    node_modules/.pnpm/socket.io-parser@* \
-    node_modules/.pnpm/socket.io-adapter@* \
-    node_modules/.pnpm/engine.io@* \
-    node_modules/.pnpm/engine.io-client@* \
-    node_modules/.pnpm/engine.io-parser@* \
-    node_modules/.pnpm/@socket.io+* \
-    node_modules/.pnpm/ws@* \
-    node_modules/.pnpm/debug@* \
-    node_modules/.pnpm/ms@* \
-    node_modules/.pnpm/cookie@* \
-    node_modules/.pnpm/accepts@* \
-    node_modules/.pnpm/base64id@* \
-    node_modules/.pnpm/cors@* 2>/dev/null || true
-
 # ---- 第 3 阶段：生成运行时镜像 ----
 FROM node:24-alpine AS runner
 
@@ -68,14 +48,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/start.js ./start.js
 # 从构建器中复制自定义 server.js（包含 Socket.IO 支持）
 COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
-
-# 复制并解压 Socket.IO 依赖
-COPY --from=builder /tmp/socketio-deps.tar.gz /tmp/
-RUN tar xzf /tmp/socketio-deps.tar.gz -C /app && rm /tmp/socketio-deps.tar.gz && chown -R nextjs:nodejs /app/node_modules
-
 # 从构建器中复制 public 和 .next/static 目录
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# 安装 Socket.IO 依赖（使用 npm 更轻量）
+RUN npm install --omit=dev --no-save socket.io@^4.8.1 socket.io-client@^4.8.1 && \
+    npm cache clean --force
 
 # 切换到非特权用户
 USER nextjs
