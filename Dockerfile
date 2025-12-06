@@ -31,9 +31,6 @@ RUN pnpm run build
 # ---- 第 3 阶段：生成运行时镜像 ----
 FROM node:24-alpine AS runner
 
-# 安装 pnpm（用于安装 Socket.IO）
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
 # 创建非 root 用户
 RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
 
@@ -55,14 +52,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# 安装 Socket.IO 依赖
-# 使用 --shamefully-hoist 将依赖扁平化，避免符号链接问题
-RUN mkdir -p /tmp/socketio && cd /tmp/socketio && \
-    pnpm init && \
-    pnpm add socket.io@4.8.1 socket.io-client@4.8.1 --prod --shamefully-hoist && \
-    mkdir -p /app/node_modules && \
-    cp -r /tmp/socketio/node_modules/* /app/node_modules/ && \
-    rm -rf /tmp/socketio ~/.local/share/pnpm
+# 从 builder 复制 Socket.IO 依赖（完整的 pnpm 结构）
+RUN mkdir -p /app/node_modules/.pnpm
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io /app/node_modules/socket.io
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io-client /app/node_modules/socket.io-client
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.pnpm /app/node_modules/.pnpm
 
 # 切换到非特权用户
 USER nextjs
