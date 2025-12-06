@@ -56,13 +56,14 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # 安装 Socket.IO 依赖
-# 在临时目录使用 pnpm 安装，避免 package.json 干扰
+# 使用 pnpm deploy 创建独立部署目录
 RUN mkdir -p /tmp/socketio && cd /tmp/socketio && \
     pnpm init && \
     pnpm add socket.io@4.8.1 socket.io-client@4.8.1 --prod && \
     mkdir -p /app/node_modules && \
-    cp -rL /tmp/socketio/node_modules/* /app/node_modules/ && \
-    rm -rf /tmp/socketio ~/.local/share/pnpm
+    pnpm deploy --prod /tmp/deploy && \
+    cp -r /tmp/deploy/node_modules/* /app/node_modules/ && \
+    rm -rf /tmp/socketio /tmp/deploy ~/.local/share/pnpm
 
 # 切换到非特权用户
 USER nextjs
