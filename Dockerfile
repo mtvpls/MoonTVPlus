@@ -31,6 +31,9 @@ RUN pnpm run build
 # ---- 第 3 阶段：生成运行时镜像 ----
 FROM node:24-alpine AS runner
 
+# 安装 pnpm（用于安装 Socket.IO）
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 # 创建非 root 用户
 RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
 
@@ -53,13 +56,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # 安装 Socket.IO 依赖
-# 在临时目录安装，避免 package.json 干扰
+# 在临时目录使用 pnpm 安装，避免 package.json 干扰
 RUN mkdir -p /tmp/socketio && cd /tmp/socketio && \
-    npm init -y && \
-    npm install --omit=dev socket.io@4.8.1 socket.io-client@4.8.1 && \
-    cp -r /tmp/socketio/node_modules/* /app/node_modules/ && \
-    rm -rf /tmp/socketio && \
-    npm cache clean --force
+    pnpm init && \
+    pnpm add socket.io@4.8.1 socket.io-client@4.8.1 --prod && \
+    mkdir -p /app/node_modules && \
+    cp -rL /tmp/socketio/node_modules/* /app/node_modules/ && \
+    rm -rf /tmp/socketio ~/.local/share/pnpm
 
 # 切换到非特权用户
 USER nextjs
