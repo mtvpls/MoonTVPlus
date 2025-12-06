@@ -53,7 +53,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # 安装 Socket.IO 依赖（使用 npm 更轻量）
-RUN npm install --omit=dev --no-save socket.io@^4.8.1 socket.io-client@^4.8.1 && \
+RUN npm install --omit=dev --no-save --legacy-peer-deps socket.io@^4.8.1 socket.io-client@^4.8.1 && \
     npm cache clean --force
 
 # 切换到非特权用户
