@@ -28,6 +28,26 @@ ENV DOCKER_ENV=true
 # 生成生产构建
 RUN pnpm run build
 
+# 打包 Socket.IO 依赖（pnpm 结构需要完整的 node_modules）
+RUN cd /app && tar czf /tmp/socketio-deps.tar.gz \
+    node_modules/socket.io \
+    node_modules/socket.io-client \
+    node_modules/.pnpm/socket.io@* \
+    node_modules/.pnpm/socket.io-client@* \
+    node_modules/.pnpm/socket.io-parser@* \
+    node_modules/.pnpm/socket.io-adapter@* \
+    node_modules/.pnpm/engine.io@* \
+    node_modules/.pnpm/engine.io-client@* \
+    node_modules/.pnpm/engine.io-parser@* \
+    node_modules/.pnpm/@socket.io+* \
+    node_modules/.pnpm/ws@* \
+    node_modules/.pnpm/debug@* \
+    node_modules/.pnpm/ms@* \
+    node_modules/.pnpm/cookie@* \
+    node_modules/.pnpm/accepts@* \
+    node_modules/.pnpm/base64id@* \
+    node_modules/.pnpm/cors@* 2>/dev/null || true
+
 # ---- 第 3 阶段：生成运行时镜像 ----
 FROM node:24-alpine AS runner
 
@@ -49,20 +69,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/start.js ./start.js
 # 从构建器中复制自定义 server.js（包含 Socket.IO 支持）
 COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
 
-# 手动复制 Socket.IO 相关依赖（standalone 不会自动包含）
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io ./node_modules/socket.io
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io-client ./node_modules/socket.io-client
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io-parser ./node_modules/socket.io-parser
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io-adapter ./node_modules/socket.io-adapter
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/engine.io ./node_modules/engine.io
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/engine.io-parser ./node_modules/engine.io-parser
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/engine.io-client ./node_modules/engine.io-client
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@socket.io ./node_modules/@socket.io
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/ws ./node_modules/ws
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/debug ./node_modules/debug
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/ms ./node_modules/ms
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/cookie ./node_modules/cookie
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/cors ./node_modules/cors
+# 复制并解压 Socket.IO 依赖
+COPY --from=builder /tmp/socketio-deps.tar.gz /tmp/
+RUN tar xzf /tmp/socketio-deps.tar.gz -C /app && rm /tmp/socketio-deps.tar.gz && chown -R nextjs:nodejs /app/node_modules
 
 # 从构建器中复制 public 和 .next/static 目录
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
