@@ -9,6 +9,8 @@ export interface ApiSite {
   api: string;
   name: string;
   detail?: string;
+  sourceType?: 'applecms' | 'quark' | 'ali'; // 源类型
+  ext?: string; // 扩展配置
 }
 
 export interface LiveCfg {
@@ -230,6 +232,7 @@ async function getInitConfig(configFile: string, subConfig: {
     SourceConfig: [],
     CustomCategories: [],
     LiveConfig: [],
+    TvboxSubscriptions: [],
   };
 
   // 补充用户信息
@@ -363,6 +366,9 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (!adminConfig.LiveConfig || !Array.isArray(adminConfig.LiveConfig)) {
     adminConfig.LiveConfig = [];
   }
+  if (!adminConfig.TvboxSubscriptions || !Array.isArray(adminConfig.TvboxSubscriptions)) {
+    adminConfig.TvboxSubscriptions = [];
+  }
 
   // 站长变更自检
   const ownerUser = process.env.USERNAME;
@@ -402,6 +408,13 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     }
     seenSourceKeys.add(source.key);
     return true;
+  });
+
+  // 确保所有源都有 sourceType（默认为 applecms）
+  adminConfig.SourceConfig.forEach((source) => {
+    if (!source.sourceType) {
+      source.sourceType = 'applecms';
+    }
   });
 
   // 自定义分类去重

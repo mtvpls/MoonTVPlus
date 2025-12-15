@@ -10,7 +10,10 @@
       "WebFetch(domain:m.douban.com)",
       "WebFetch(domain:movie.douban.com)",
       "Bash(cat:*)",
-      "Bash(pnpm typecheck)"
+      "Bash(pnpm typecheck)",
+      "WebFetch(domain:wget.la)",
+      "WebFetch(domain:www.xn--sss604efuw.com)",
+      "Bash(node test-tvbox-parser.js:*)"
     ],
     "deny": [],
     "ask": []

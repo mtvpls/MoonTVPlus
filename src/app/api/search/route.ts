@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getAvailableApiSites, getCacheTime, getConfig } from '@/lib/config';
-import { searchFromApi } from '@/lib/downstream';
+import { SourceManager } from '@/lib/source-manager';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
@@ -36,15 +36,31 @@ export async function GET(request: NextRequest) {
   const config = await getConfig();
   const apiSites = await getAvailableApiSites(authInfo.username);
 
-  // 添加超时控制和错误处理，避免慢接口拖累整体响应
-  const searchPromises = apiSites.map((site) =>
+  // 将 ApiSite 转换为 SourceConfig 格式
+  const sourceConfigs = apiSites.map(site => {
+    // 从 SourceConfig 中查找完整配置
+    const fullSource = config.SourceConfig.find(s => s.key === site.key);
+
+    return {
+      key: site.key,
+      name: site.name,
+      api: site.api,
+      detail: site.detail,
+      sourceType: fullSource?.sourceType || 'applecms',
+      auth: fullSource?.auth,
+      ext: fullSource?.ext,
+    };
+  });
+
+  // 使用 SourceManager 搜索
+  const searchPromises = sourceConfigs.map((sourceConfig) =>
     Promise.race([
-      searchFromApi(site, query),
+      SourceManager.searchFromSource(sourceConfig, query),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`${site.name} timeout`)), 20000)
+        setTimeout(() => reject(new Error(`${sourceConfig.name} timeout`)), 20000)
       ),
     ]).catch((err) => {
-      console.warn(`搜索失败 ${site.name}:`, err.message);
+      console.warn(`搜索失败 ${sourceConfig.name}:`, err.message);
       return []; // 返回空数组而不是抛出错误
     })
   );

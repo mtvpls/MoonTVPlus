@@ -57,11 +57,14 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'add': {
-        const { key, name, api, detail } = body as {
+        const { key, name, api, detail, sourceType, cookie, ext } = body as {
           key?: string;
           name?: string;
           api?: string;
           detail?: string;
+          sourceType?: 'applecms' | 'quark' | 'ali';
+          cookie?: string;
+          ext?: string;
         };
         if (!key || !name || !api) {
           return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
@@ -76,6 +79,9 @@ export async function POST(request: NextRequest) {
           detail,
           from: 'custom',
           disabled: false,
+          sourceType: sourceType || 'applecms',
+          auth: cookie ? { cookie } : undefined,
+          ext: ext || undefined,
         });
         break;
       }

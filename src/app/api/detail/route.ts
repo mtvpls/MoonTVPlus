@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
-import { getAvailableApiSites, getCacheTime } from '@/lib/config';
-import { getDetailFromApi } from '@/lib/downstream';
+import { getAvailableApiSites, getCacheTime, getConfig } from '@/lib/config';
+import { SourceManager } from '@/lib/source-manager';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const config = await getConfig();
     const apiSites = await getAvailableApiSites(authInfo.username);
     const apiSite = apiSites.find((site) => site.key === sourceCode);
 
@@ -32,7 +33,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '无效的API来源' }, { status: 400 });
     }
 
-    const result = await getDetailFromApi(apiSite, id);
+    // 从 SourceConfig 中查找完整配置
+    const fullSource = config.SourceConfig.find(s => s.key === apiSite.key);
+
+    const sourceConfig = {
+      key: apiSite.key,
+      name: apiSite.name,
+      api: apiSite.api,
+      detail: apiSite.detail,
+      sourceType: fullSource?.sourceType || 'applecms',
+      auth: fullSource?.auth,
+      ext: fullSource?.ext,
+    };
+
+    // 使用 SourceManager 获取详情
+    const result = await SourceManager.getDetail(sourceConfig, id);
     const cacheTime = await getCacheTime();
 
     return NextResponse.json(result, {

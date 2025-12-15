@@ -60,8 +60,26 @@ export interface AdminConfig {
     name: string;
     api: string;
     detail?: string;
-    from: 'config' | 'custom';
+    from: 'config' | 'custom' | 'tvbox-subscription';
     disabled?: boolean;
+    subscriptionId?: string; // 如果来自订阅，记录订阅ID
+    sourceType?: 'applecms' | 'quark' | 'ali'; // 源类型，默认为 applecms
+    auth?: {
+      token?: string;
+      cookie?: string;
+      refreshToken?: string;
+      userId?: string;
+    }; // 认证信息（用于网盘源）
+    ext?: string; // 扩展配置（如夸克分享链接等）
+  }[];
+  TvboxSubscriptions?: {
+    id: string; // 唯一标识
+    name: string; // 订阅名称
+    url: string; // 订阅URL
+    enabled: boolean; // 是否启用
+    lastUpdate?: string; // 最后更新时间
+    lastError?: string; // 最后错误信息
+    autoUpdate?: boolean; // 是否自动更新
   }[];
   CustomCategories: {
     name?: string;

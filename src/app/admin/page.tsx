@@ -47,6 +47,7 @@ import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 
 import DataMigration from '@/components/DataMigration';
 import PageLayout from '@/components/PageLayout';
+import TvboxSubscriptionConfig from '@/components/TvboxSubscriptionConfig';
 
 // 统一按钮样式系统
 const buttonStyles = {
@@ -321,7 +322,16 @@ interface DataSource {
   api: string;
   detail?: string;
   disabled?: boolean;
-  from: 'config' | 'custom';
+  from: 'config' | 'custom' | 'tvbox-subscription';
+  sourceType?: 'applecms' | 'quark' | 'ali';
+  auth?: {
+    token?: string;
+    cookie?: string;
+    refreshToken?: string;
+    userId?: string;
+  };
+  ext?: string;
+  subscriptionId?: string;
 }
 
 // 直播源数据类型
@@ -2539,6 +2549,8 @@ const VideoSourceConfig = ({
     detail: '',
     disabled: false,
     from: 'config',
+    sourceType: 'applecms',
+    ext: '',
   });
 
   // 批量操作相关状态
@@ -2656,6 +2668,9 @@ const VideoSourceConfig = ({
         name: newSource.name,
         api: newSource.api,
         detail: newSource.detail,
+        sourceType: newSource.sourceType,
+        cookie: newSource.auth?.cookie || '',
+        ext: newSource.ext || '',
       });
       setNewSource({
         name: '',
@@ -2664,6 +2679,8 @@ const VideoSourceConfig = ({
         detail: '',
         disabled: false,
         from: 'custom',
+        sourceType: 'applecms',
+        ext: '',
       });
       setShowAddForm(false);
     }).catch(() => {
@@ -2883,6 +2900,32 @@ const VideoSourceConfig = ({
       transition,
     } as React.CSSProperties;
 
+    // 获取源类型徽章
+    const getSourceTypeBadge = (sourceType?: string) => {
+      const type = sourceType || 'applecms';
+      switch (type) {
+        case 'quark':
+          return (
+            <span className='px-2 py-1 text-xs rounded-full bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-300'>
+              夸克网盘
+            </span>
+          );
+        case 'ali':
+          return (
+            <span className='px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300'>
+              阿里云盘
+            </span>
+          );
+        case 'applecms':
+        default:
+          return (
+            <span className='px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-900/20 text-gray-600 dark:text-gray-400'>
+              苹果CMS
+            </span>
+          );
+      }
+    };
+
     return (
       <tr
         ref={setNodeRef}
@@ -2910,6 +2953,9 @@ const VideoSourceConfig = ({
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100'>
           {source.key}
+        </td>
+        <td className='px-6 py-4 whitespace-nowrap'>
+          {getSourceTypeBadge(source.sourceType)}
         </td>
         <td
           className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 max-w-[12rem] truncate'
@@ -3228,7 +3274,65 @@ const VideoSourceConfig = ({
               }
               className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
             />
+            <select
+              value={newSource.sourceType || 'applecms'}
+              onChange={(e) =>
+                setNewSource((prev) => ({
+                  ...prev,
+                  sourceType: e.target.value as 'applecms' | 'quark' | 'ali'
+                }))
+              }
+              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+            >
+              <option value='applecms'>Apple CMS (苹果CMS)</option>
+              <option value='quark'>Quark Drive (夸克网盘)</option>
+              <option value='ali'>Ali Drive (阿里云盘)</option>
+            </select>
           </div>
+
+          {/* 网盘源配置 */}
+          {(newSource.sourceType === 'quark' || newSource.sourceType === 'ali') && (
+            <div className='space-y-4'>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+                  Cookie 配置 {newSource.sourceType === 'quark' ? '(夸克网盘)' : '(阿里云盘)'}
+                </label>
+                <textarea
+                  placeholder={`请输入${newSource.sourceType === 'quark' ? '夸克网盘' : '阿里云盘'} Cookie...`}
+                  value={newSource.auth?.cookie || ''}
+                  onChange={(e) =>
+                    setNewSource((prev) => ({
+                      ...prev,
+                      auth: { ...prev.auth, cookie: e.target.value }
+                    }))
+                  }
+                  rows={3}
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm'
+                />
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  请从浏览器中复制完整的 Cookie 字符串
+                </p>
+              </div>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+                  扩展配置 (选填)
+                </label>
+                <textarea
+                  placeholder='分享链接列表，每行一个，格式：https://pan.quark.cn/s/xxx'
+                  value={newSource.ext || ''}
+                  onChange={(e) =>
+                    setNewSource((prev) => ({ ...prev, ext: e.target.value }))
+                  }
+                  rows={4}
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm'
+                />
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  可配置分享链接列表，搜索时会从这些分享链接中查找资源
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className='flex justify-end'>
             <button
               onClick={handleAddSource}
@@ -3275,6 +3379,9 @@ const VideoSourceConfig = ({
               </th>
               <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider'>
                 Key
+              </th>
+              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider'>
+                源类型
               </th>
               <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider'>
                 API 地址
@@ -6724,6 +6831,7 @@ function AdminPageClient() {
   const [expandedTabs, setExpandedTabs] = useState<{ [key: string]: boolean }>({
     userConfig: false,
     videoSource: false,
+    tvboxSubscription: false,
     liveSource: false,
     siteConfig: false,
     categoryConfig: false,
@@ -6920,6 +7028,18 @@ function AdminPageClient() {
               onToggle={() => toggleTab('videoSource')}
             >
               <VideoSourceConfig config={config} refreshConfig={fetchConfig} />
+            </CollapsibleTab>
+
+            {/* TVBOX订阅管理标签 */}
+            <CollapsibleTab
+              title='TVBOX订阅管理'
+              icon={
+                <Database size={20} className='text-gray-600 dark:text-gray-400' />
+              }
+              isExpanded={expandedTabs.tvboxSubscription}
+              onToggle={() => toggleTab('tvboxSubscription')}
+            >
+              <TvboxSubscriptionConfig config={config} refreshConfig={fetchConfig} />
             </CollapsibleTab>
 
             {/* 直播源配置标签 */}

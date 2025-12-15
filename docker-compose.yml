@@ -1,0 +1,76 @@
+services:
+  moontv-core:
+    image: ghcr.io/mtvpls/moontvplus:latest
+    container_name: moontv-core
+    restart: on-failure
+    ports:
+      - '3000:3000'
+    environment:
+      # 必填：站长账号和密码
+      - USERNAME=admin
+      - PASSWORD=admin  # 请修改为强密码
+
+      # 必填：存储类型
+      - NEXT_PUBLIC_STORAGE_TYPE=kvrocks
+      - KVROCKS_URL=redis://moontv-kvrocks:6666
+
+      # 可选：站点配置
+      - SITE_BASE=  # 站点URL，如 https://example.com
+      - NEXT_PUBLIC_SITE_NAME=MoonTV
+      - ANNOUNCEMENT=本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。
+
+      # 可选：搜索配置
+      - NEXT_PUBLIC_SEARCH_MAX_PAGE=5
+      - NEXT_PUBLIC_FLUID_SEARCH=true
+
+      # 可选：豆瓣配置
+      - NEXT_PUBLIC_DOUBAN_PROXY_TYPE=cmliussss-cdn-tencent
+      - NEXT_PUBLIC_DOUBAN_PROXY=
+      - NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE=cmliussss-cdn-tencent
+      - NEXT_PUBLIC_DOUBAN_IMAGE_PROXY=
+
+      # 可选：内容过滤
+      - NEXT_PUBLIC_DISABLE_YELLOW_FILTER=false
+
+      # 可选：M3U8代理配置
+      - NEXT_PUBLIC_PROXY_M3U8_TOKEN=
+
+      # 可选：弹幕配置
+      - DANMAKU_API_BASE=http://localhost:9321
+      - DANMAKU_API_TOKEN=87654321
+      - NEXT_PUBLIC_DANMAKU_CACHE_EXPIRE_MINUTES=4320
+
+      # 可选：TVBOX订阅功能
+      - ENABLE_TVBOX_SUBSCRIBE=false
+      - TVBOX_SUBSCRIBE_TOKEN=
+
+      # 可选：观影室功能
+      - WATCH_ROOM_ENABLED=false
+      - NEXT_PUBLIC_VOICE_CHAT_STRATEGY=webrtc-fallback
+
+      # 可选：离线下载功能
+      - NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD=false
+      - OFFLINE_DOWNLOAD_DIR=/data
+
+    networks:
+      - moontv-network
+    depends_on:
+      - moontv-kvrocks
+    volumes:
+      - ./data:/data  # 用于离线下载等功能
+
+  moontv-kvrocks:
+    image: apache/kvrocks
+    container_name: moontv-kvrocks
+    restart: unless-stopped
+    volumes:
+      - kvrocks-data:/var/lib/kvrocks
+    networks:
+      - moontv-network
+
+networks:
+  moontv-network:
+    driver: bridge
+
+volumes:
+  kvrocks-data:
