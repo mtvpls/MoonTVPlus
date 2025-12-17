@@ -24,7 +24,7 @@ jobs:
               uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
               with:
                   target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-                  upstream_sync_repo: huangxd-/danmu_api
+                  upstream_sync_repo: mtvpls/MoonTVPlus
                   upstream_sync_branch: main
                   target_sync_branch: main
                   test_mode: false
