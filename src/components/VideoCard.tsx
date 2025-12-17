@@ -47,6 +47,8 @@ export interface VideoCardProps {
   isBangumi?: boolean;
   isAggregate?: boolean;
   origin?: 'vod' | 'live';
+  releaseDate?: string; // 上映日期，格式：YYYY-MM-DD
+  isUpcoming?: boolean; // 是否为即将上映
 }
 
 export type VideoCardHandle = {
@@ -76,6 +78,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
     isBangumi = false,
     isAggregate = false,
     origin = 'vod',
+    releaseDate,
+    isUpcoming = false,
   }: VideoCardProps,
   ref
 ) {
@@ -223,6 +227,11 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
   );
 
   const handleClick = useCallback(() => {
+    // 即将上映的电影不跳转
+    if (isUpcoming) {
+      return;
+    }
+
     if (origin === 'live' && actualSource && actualId) {
       // 直播内容跳转到直播页面
       const url = `/live?source=${actualSource.replace('live_', '')}&id=${actualId.replace('live_', '')}`;
@@ -240,6 +249,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
       router.push(url);
     }
   }, [
+    isUpcoming,
     origin,
     from,
     actualSource,
@@ -254,6 +264,11 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
 
   // 新标签页播放处理函数
   const handlePlayInNewTab = useCallback(() => {
+    // 即将上映的电影不跳转
+    if (isUpcoming) {
+      return;
+    }
+
     if (origin === 'live' && actualSource && actualId) {
       // 直播内容跳转到直播页面
       const url = `/live?source=${actualSource.replace('live_', '')}&id=${actualId.replace('live_', '')}`;
@@ -270,6 +285,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
       window.open(url, '_blank');
     }
   }, [
+    isUpcoming,
     origin,
     from,
     actualSource,
@@ -295,6 +311,11 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
 
   // 长按操作
   const handleLongPress = useCallback(() => {
+    // 即将上映的电影不显示操作菜单
+    if (isUpcoming) {
+      return;
+    }
+
     if (!showMobileActions) { // 防止重复触发
       // 立即显示菜单，避免等待数据加载导致动画卡顿
       setShowMobileActions(true);
@@ -304,7 +325,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
         checkSearchFavoriteStatus();
       }
     }
-  }, [showMobileActions, from, isAggregate, actualSource, actualId, searchFavorited, checkSearchFavoriteStatus]);
+  }, [isUpcoming, showMobileActions, from, isAggregate, actualSource, actualId, searchFavorited, checkSearchFavoriteStatus]);
 
   // 长按手势hook
   const longPressProps = useLongPress({
@@ -312,6 +333,28 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
     onClick: handleClick, // 保持点击播放功能
     longPressDelay: 500,
   });
+
+  // 计算距离上映的天数（使用本地时区）
+  const daysUntilRelease = useMemo(() => {
+    if (!isUpcoming || !releaseDate) return null;
+
+    // 获取今天的本地日期（午夜）
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    // 将日期字符串解析为本地时区的日期对象
+    // 使用 'YYYY-MM-DD' 格式直接构造，避免 UTC 解析问题
+    const [releaseYear, releaseMonth, releaseDay] = releaseDate.split('-').map(Number);
+    const release = new Date(releaseYear, releaseMonth - 1, releaseDay);
+
+    const [todayYear, todayMonth, todayDay] = todayStr.split('-').map(Number);
+    const todayDate = new Date(todayYear, todayMonth - 1, todayDay);
+
+    const diffTime = release.getTime() - todayDate.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    return diffDays;
+  }, [isUpcoming, releaseDate]);
 
   const config = useMemo(() => {
     const configs = {
@@ -348,7 +391,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
       douban: {
         showSourceName: false,
         showProgress: false,
-        showPlayButton: true,
+        showPlayButton: !isUpcoming, // 即将上映不显示播放按钮
         showHeart: false,
         showCheckCircle: false,
         showDoubanLink: true,
@@ -357,7 +400,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
       },
     };
     return configs[from] || configs.search;
-  }, [from, isAggregate, douban_id, rate]);
+  }, [from, isAggregate, douban_id, rate, isUpcoming]);
 
   // 移动端操作菜单配置
   const mobileActions = useMemo(() => {
@@ -495,7 +538,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
   return (
     <>
       <div
-        className='group relative w-full rounded-lg bg-transparent cursor-pointer transition-all duration-300 ease-in-out hover:scale-[1.05] hover:z-[500]'
+        className={`group relative w-full rounded-lg bg-transparent transition-all duration-300 ease-in-out hover:scale-[1.05] hover:z-[500] ${isUpcoming ? 'cursor-default' : 'cursor-pointer'}`}
         onClick={handleClick}
         {...longPressProps}
         style={{
@@ -512,6 +555,11 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
           // 阻止默认右键菜单
           e.preventDefault();
           e.stopPropagation();
+
+          // 即将上映的电影不显示操作菜单
+          if (isUpcoming) {
+            return false;
+          }
 
           // 右键弹出操作菜单
           setShowMobileActions(true);
@@ -595,8 +643,37 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
             }}
           />
 
-          {/* 播放按钮 */}
-          {config.showPlayButton && (
+          {/* 播放按钮或上映倒计时 */}
+          {isUpcoming && daysUntilRelease !== null ? (
+            <div
+              data-button="true"
+              className='absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 ease-in-out delay-75 group-hover:opacity-100'
+              style={{
+                WebkitUserSelect: 'none',
+                userSelect: 'none',
+                WebkitTouchCallout: 'none',
+              } as React.CSSProperties}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                return false;
+              }}
+            >
+              <div
+                className='bg-black/70 backdrop-blur-sm text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg'
+                style={{
+                  WebkitUserSelect: 'none',
+                  userSelect: 'none',
+                  WebkitTouchCallout: 'none',
+                } as React.CSSProperties}
+              >
+                {daysUntilRelease > 0
+                  ? `${daysUntilRelease}天后上映`
+                  : daysUntilRelease === 0
+                    ? '今日上映'
+                    : '已上映'}
+              </div>
+            </div>
+          ) : config.showPlayButton && (
             <div
               data-button="true"
               className='absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 ease-in-out delay-75 group-hover:opacity-100 group-hover:scale-100'

@@ -360,9 +360,12 @@ function LivePageClient() {
 
       // 默认选中第一个频道
       if (channels.length > 0) {
+        let selectedChannel: LiveChannel | null = null;
+
         if (needLoadChannel) {
           const foundChannel = channels.find((c: LiveChannel) => c.id === needLoadChannel);
           if (foundChannel) {
+            selectedChannel = foundChannel;
             setCurrentChannel(foundChannel);
             setVideoUrl(foundChannel.url);
             // 延迟滚动到选中的频道
@@ -370,12 +373,19 @@ function LivePageClient() {
               scrollToChannel(foundChannel);
             }, 200);
           } else {
+            selectedChannel = channels[0];
             setCurrentChannel(channels[0]);
             setVideoUrl(channels[0].url);
           }
         } else {
+          selectedChannel = channels[0];
           setCurrentChannel(channels[0]);
           setVideoUrl(channels[0].url);
+        }
+
+        // 获取初始频道的节目单
+        if (selectedChannel) {
+          await fetchEpgData(selectedChannel, source);
         }
       }
 
@@ -466,6 +476,35 @@ function LivePageClient() {
     }
   };
 
+  // 获取节目单信息的辅助函数
+  const fetchEpgData = async (channel: LiveChannel, source: LiveSource) => {
+    if (channel.tvgId && source) {
+      try {
+        setIsEpgLoading(true); // 开始加载 EPG 数据
+        const response = await fetch(`/api/live/epg?source=${source.key}&tvgId=${channel.tvgId}`);
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            // 清洗EPG数据，去除重叠的节目
+            const cleanedData = {
+              ...result.data,
+              programs: cleanEpgData(result.data.programs)
+            };
+            setEpgData(cleanedData);
+          }
+        }
+      } catch (error) {
+        console.error('获取节目单信息失败:', error);
+      } finally {
+        setIsEpgLoading(false); // 无论成功失败都结束加载状态
+      }
+    } else {
+      // 如果没有 tvgId 或 source，清空 EPG 数据
+      setEpgData(null);
+      setIsEpgLoading(false);
+    }
+  };
+
   // 切换频道
   const handleChannelChange = async (channel: LiveChannel) => {
     // 如果正在切换直播源，则禁用频道切换
@@ -486,30 +525,8 @@ function LivePageClient() {
     }, 100);
 
     // 获取节目单信息
-    if (channel.tvgId && currentSource) {
-      try {
-        setIsEpgLoading(true); // 开始加载 EPG 数据
-        const response = await fetch(`/api/live/epg?source=${currentSource.key}&tvgId=${channel.tvgId}`);
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success) {
-            // 清洗EPG数据，去除重叠的节目
-            const cleanedData = {
-              ...result.data,
-              programs: cleanEpgData(result.data.programs)
-            };
-            setEpgData(cleanedData);
-          }
-        }
-      } catch (error) {
-        console.error('获取节目单信息失败:', error);
-      } finally {
-        setIsEpgLoading(false); // 无论成功失败都结束加载状态
-      }
-    } else {
-      // 如果没有 tvgId 或 currentSource，清空 EPG 数据
-      setEpgData(null);
-      setIsEpgLoading(false);
+    if (currentSource) {
+      await fetchEpgData(channel, currentSource);
     }
   };
 

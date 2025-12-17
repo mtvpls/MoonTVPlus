@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
       FluidSearch,
       DanmakuApiBase,
       DanmakuApiToken,
+      TMDBApiKey,
       EnableComments,
       CustomAdFilterCode,
       CustomAdFilterVersion,
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
       FluidSearch: boolean;
       DanmakuApiBase: string;
       DanmakuApiToken: string;
+      TMDBApiKey?: string;
       EnableComments: boolean;
       CustomAdFilterCode?: string;
       CustomAdFilterVersion?: number;
@@ -106,6 +108,7 @@ export async function POST(request: NextRequest) {
       typeof FluidSearch !== 'boolean' ||
       typeof DanmakuApiBase !== 'string' ||
       typeof DanmakuApiToken !== 'string' ||
+      (TMDBApiKey !== undefined && typeof TMDBApiKey !== 'string') ||
       typeof EnableComments !== 'boolean' ||
       (CustomAdFilterCode !== undefined && typeof CustomAdFilterCode !== 'string') ||
       (CustomAdFilterVersion !== undefined && typeof CustomAdFilterVersion !== 'number') ||
@@ -155,6 +158,7 @@ export async function POST(request: NextRequest) {
       FluidSearch,
       DanmakuApiBase,
       DanmakuApiToken,
+      TMDBApiKey,
       EnableComments,
       CustomAdFilterCode,
       CustomAdFilterVersion,

@@ -201,7 +201,7 @@ async function getInitConfig(configFile: string, subConfig: {
     ConfigFile: configFile,
     ConfigSubscribtion: subConfig,
     SiteConfig: {
-      SiteName: process.env.NEXT_PUBLIC_SITE_NAME || 'MoonTV',
+      SiteName: process.env.NEXT_PUBLIC_SITE_NAME || 'MoonTVPlus',
       Announcement:
         process.env.ANNOUNCEMENT ||
         '本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。',
@@ -221,6 +221,8 @@ async function getInitConfig(configFile: string, subConfig: {
       // 弹幕配置
       DanmakuApiBase: process.env.DANMAKU_API_BASE || 'http://localhost:9321',
       DanmakuApiToken: process.env.DANMAKU_API_TOKEN || '87654321',
+      // TMDB配置
+      TMDBApiKey: '',
       // 评论功能开关
       EnableComments: false,
     },
@@ -302,19 +304,29 @@ export async function getConfig(): Promise<AdminConfig> {
 
   // 读 db
   let adminConfig: AdminConfig | null = null;
+  let dbReadFailed = false;
   try {
     adminConfig = await db.getAdminConfig();
   } catch (e) {
     console.error('获取管理员配置失败:', e);
+    dbReadFailed = true;
   }
 
   // db 中无配置，执行一次初始化
   if (!adminConfig) {
-    adminConfig = await getInitConfig("");
+    if (dbReadFailed) {
+      // 数据库读取失败，使用默认配置但不保存，避免覆盖数据库
+      console.warn('数据库读取失败，使用临时默认配置（不会保存到数据库）');
+      adminConfig = await getInitConfig("");
+    } else {
+      // 数据库中确实没有配置，首次初始化并保存
+      console.log('首次初始化配置');
+      adminConfig = await getInitConfig("");
+      await db.saveAdminConfig(adminConfig);
+    }
   }
   adminConfig = configSelfCheck(adminConfig);
   cachedConfig = adminConfig;
-  db.saveAdminConfig(cachedConfig);
   return cachedConfig;
 }
 
@@ -322,7 +334,7 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   // 确保必要的属性存在和初始化
   if (!adminConfig.SiteConfig) {
     adminConfig.SiteConfig = {
-      SiteName: 'MoonTV',
+      SiteName: 'MoonTVPlus',
       Announcement: '',
       SearchDownstreamMaxPage: 5,
       SiteInterfaceCacheTime: 7200,

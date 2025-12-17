@@ -537,7 +537,7 @@ export const UserMenu: React.FC = () => {
   const showOfflineDownload =
     (authInfo?.role === 'owner' || authInfo?.role === 'admin') &&
     typeof window !== 'undefined' &&
-    process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true';
+    (window as any).RUNTIME_CONFIG?.ENABLE_OFFLINE_DOWNLOAD === true;
 
   // 检查是否显示修改密码按钮
   const showChangePassword =

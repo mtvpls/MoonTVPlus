@@ -10,7 +10,8 @@
       "WebFetch(domain:m.douban.com)",
       "WebFetch(domain:movie.douban.com)",
       "Bash(cat:*)",
-      "Bash(pnpm typecheck)"
+      "Bash(pnpm typecheck)",
+      "Bash(gunzip:*)"
     ],
     "deny": [],
     "ask": []

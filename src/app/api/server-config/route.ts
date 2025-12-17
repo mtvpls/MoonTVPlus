@@ -23,10 +23,11 @@ export async function GET(request: NextRequest) {
   // 如果使用 localStorage，返回默认配置
   if (storageType === 'localstorage') {
     return NextResponse.json({
-      SiteName: process.env.NEXT_PUBLIC_SITE_NAME || 'MoonTV',
+      SiteName: process.env.NEXT_PUBLIC_SITE_NAME || 'MoonTVPlus',
       StorageType: 'localstorage',
       Version: CURRENT_VERSION,
       WatchRoom: watchRoomConfig,
+      EnableOfflineDownload: process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
     });
   }
 
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
     StorageType: storageType,
     Version: CURRENT_VERSION,
     WatchRoom: watchRoomConfig,
+    EnableOfflineDownload: process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
     EnableRegistration: config.SiteConfig.EnableRegistration || false,
     RegistrationRequireTurnstile: config.SiteConfig.RegistrationRequireTurnstile || false,
     LoginRequireTurnstile: config.SiteConfig.LoginRequireTurnstile || false,

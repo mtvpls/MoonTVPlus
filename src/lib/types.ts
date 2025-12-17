@@ -143,3 +143,16 @@ export interface DanmakuFilterRule {
 export interface DanmakuFilterConfig {
   rules: DanmakuFilterRule[]; // 过滤规则列表
 }
+
+// 集数过滤规则数据结构
+export interface EpisodeFilterRule {
+  keyword: string; // 关键字
+  type: 'normal' | 'regex'; // 普通模式或正则模式
+  enabled: boolean; // 是否启用
+  id?: string; // 规则ID（用于前端管理）
+}
+
+// 集数过滤配置数据结构
+export interface EpisodeFilterConfig {
+  rules: EpisodeFilterRule[]; // 过滤规则列表
+}

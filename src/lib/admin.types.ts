@@ -19,6 +19,8 @@ export interface AdminConfig {
     // 弹幕配置
     DanmakuApiBase: string;
     DanmakuApiToken: string;
+    // TMDB配置
+    TMDBApiKey?: string;
     // 评论功能开关
     EnableComments: boolean;
     // 自定义去广告代码

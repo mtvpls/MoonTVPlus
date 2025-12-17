@@ -19,7 +19,7 @@ type VoiceStrategy = 'webrtc-fallback' | 'server-only';
 // 获取语音聊天策略配置
 function getVoiceStrategy(): VoiceStrategy {
   if (typeof window === 'undefined') return 'webrtc-fallback';
-  const strategy = process.env.NEXT_PUBLIC_VOICE_CHAT_STRATEGY || 'webrtc-fallback';
+  const strategy = (window as any).RUNTIME_CONFIG?.VOICE_CHAT_STRATEGY || 'webrtc-fallback';
   return strategy as VoiceStrategy;
 }
 
