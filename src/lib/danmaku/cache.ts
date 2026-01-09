@@ -14,6 +14,13 @@ export interface DanmakuCacheData {
   timestamp: number; // 缓存时间戳
   title?: string; // 可选：视频标题
   episodeIndex?: number; // 可选：集数索引
+  // 弹幕元信息
+  animeId?: number; // 动漫ID
+  episodeId?: number; // 剧集ID
+  animeTitle?: string; // 动漫标题
+  episodeTitle?: string; // 剧集标题
+  searchKeyword?: string; // 搜索关键词
+  danmakuCount?: number; // 弹幕数量
 }
 
 // 生成缓存键（title + episodeIndex）
@@ -73,7 +80,15 @@ async function openDB(): Promise<IDBDatabase> {
 export async function saveDanmakuToCache(
   title: string,
   episodeIndex: number,
-  comments: DanmakuComment[]
+  comments: DanmakuComment[],
+  metadata?: {
+    animeId?: number;
+    episodeId?: number;
+    animeTitle?: string;
+    episodeTitle?: string;
+    searchKeyword?: string;
+    danmakuCount?: number;
+  }
 ): Promise<void> {
   // 验证参数
   if (!title || title.trim() === '') {
@@ -104,6 +119,13 @@ export async function saveDanmakuToCache(
       timestamp: Date.now(),
       title,
       episodeIndex,
+      // 保存弹幕元信息
+      animeId: metadata?.animeId,
+      episodeId: metadata?.episodeId,
+      animeTitle: metadata?.animeTitle,
+      episodeTitle: metadata?.episodeTitle,
+      searchKeyword: metadata?.searchKeyword,
+      danmakuCount: metadata?.danmakuCount ?? comments.length, // 使用提供的数量或comments长度
     };
 
     // 添加调试日志
@@ -141,7 +163,17 @@ export async function saveDanmakuToCache(
 export async function getDanmakuFromCache(
   title: string,
   episodeIndex: number
-): Promise<DanmakuComment[] | null> {
+): Promise<{
+  comments: DanmakuComment[];
+  metadata?: {
+    animeId?: number;
+    episodeId?: number;
+    animeTitle?: string;
+    episodeTitle?: string;
+    searchKeyword?: string;
+    danmakuCount?: number;
+  };
+} | null> {
   // 如果缓存时间设置为 0，不使用缓存
   const expireTime = getDanmakuCacheExpireTime();
   if (expireTime === 0) {
@@ -186,7 +218,17 @@ export async function getDanmakuFromCache(
         console.log(
           `从缓存获取弹幕: title=${title}, episodeIndex=${episodeIndex}, 数量=${result.comments.length}, 年龄=${ageMinutes}分钟`
         );
-        resolve(result.comments);
+        resolve({
+          comments: result.comments,
+          metadata: {
+            animeId: result.animeId,
+            episodeId: result.episodeId,
+            animeTitle: result.animeTitle,
+            episodeTitle: result.episodeTitle,
+            searchKeyword: result.searchKeyword,
+            danmakuCount: result.danmakuCount ?? result.comments.length,
+          },
+        });
       };
 
       request.onerror = () => {

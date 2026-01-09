@@ -238,6 +238,11 @@ export default function DanmakuPanel({
             <p className='text-xs text-gray-600 dark:text-gray-400'>
               {currentSelection.episodeTitle}
             </p>
+            {currentSelection.danmakuCount !== undefined && (
+              <p className='mt-1 text-xs text-gray-500 dark:text-gray-500'>
+                弹幕数量: {currentSelection.danmakuCount}
+              </p>
+            )}
           </div>
         )}
 

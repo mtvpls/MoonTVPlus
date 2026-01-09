@@ -114,4 +114,5 @@ export interface DanmakuSelection {
   animeTitle: string;
   episodeTitle: string;
   searchKeyword?: string; // 用户搜索时使用的关键词
+  danmakuCount?: number; // 弹幕数量
 }

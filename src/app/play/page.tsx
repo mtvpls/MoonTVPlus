@@ -606,9 +606,21 @@ function PlayPageClient() {
 
       // 先尝试从 IndexedDB 缓存加载
       try {
-        const cachedComments = await getDanmakuFromCache(title, episodeIndex);
-        if (cachedComments && cachedComments.length > 0) {
-          console.log(`[弹幕] 使用缓存: title="${title}", episodeIndex=${episodeIndex}, 数量=${cachedComments.length}`);
+        const cachedData = await getDanmakuFromCache(title, episodeIndex);
+        if (cachedData && cachedData.comments.length > 0) {
+          console.log(`[弹幕] 使用缓存: title="${title}", episodeIndex=${episodeIndex}, 数量=${cachedData.comments.length}`);
+
+          // 如果缓存中有元信息，更新当前选择状态
+          if (cachedData.metadata) {
+            setCurrentDanmakuSelection({
+              animeId: cachedData.metadata.animeId || 0,
+              episodeId: cachedData.metadata.episodeId || 0,
+              animeTitle: cachedData.metadata.animeTitle || '',
+              episodeTitle: cachedData.metadata.episodeTitle || '',
+              searchKeyword: cachedData.metadata.searchKeyword,
+              danmakuCount: cachedData.metadata.danmakuCount || cachedData.comments.length,
+            });
+          }
 
           // 如果弹幕插件还未初始化，等待初始化
           if (!danmakuPluginRef.current) {
@@ -620,7 +632,7 @@ function PlayPageClient() {
           setDanmakuLoading(true);
 
           // 转换弹幕格式
-          let danmakuData = convertDanmakuFormat(cachedComments);
+          let danmakuData = convertDanmakuFormat(cachedData.comments);
 
           // 手动应用过滤规则
           const filterConfig = danmakuFilterConfigRef.current;
@@ -3007,7 +3019,13 @@ function PlayPageClient() {
   };
 
   // 加载弹幕到播放器
-  const loadDanmaku = async (episodeId: number) => {
+  const loadDanmaku = async (episodeId: number, metadata?: {
+    animeId?: number;
+    animeTitle?: string;
+    episodeTitle?: string;
+    searchKeyword?: string;
+    danmakuCount?: number;
+  }) => {
     if (!danmakuPluginRef.current) {
       console.warn('弹幕插件未初始化');
       return;
@@ -3036,7 +3054,7 @@ function PlayPageClient() {
 
       console.log(`[弹幕加载] episodeId=${episodeId}, title="${title}", episodeIndex=${episodeIndex}`);
 
-      const comments = await getDanmakuById(episodeId, title, episodeIndex);
+      const comments = await getDanmakuById(episodeId, title, episodeIndex, metadata);
 
       if (comments.length === 0) {
         console.warn('未获取到弹幕数据');
@@ -3214,8 +3232,14 @@ function PlayPageClient() {
       }
     }
 
-    // 加载弹幕
-    await loadDanmaku(selection.episodeId);
+    // 加载弹幕，传递元信息
+    await loadDanmaku(selection.episodeId, {
+      animeId: selection.animeId,
+      animeTitle: selection.animeTitle,
+      episodeTitle: selection.episodeTitle,
+      searchKeyword: selection.searchKeyword,
+      danmakuCount: selection.danmakuCount,
+    });
   };
 
   // 处理用户选择弹幕源
@@ -3330,9 +3354,21 @@ function PlayPageClient() {
 
     // 先尝试从 IndexedDB 缓存加载
     try {
-      const cachedComments = await getDanmakuFromCache(title, currentEpisodeIndex);
-      if (cachedComments && cachedComments.length > 0) {
-        console.log(`[弹幕] 使用缓存: title="${title}", episodeIndex=${currentEpisodeIndex}, 数量=${cachedComments.length}`);
+      const cachedData = await getDanmakuFromCache(title, currentEpisodeIndex);
+      if (cachedData && cachedData.comments.length > 0) {
+        console.log(`[弹幕] 使用缓存: title="${title}", episodeIndex=${currentEpisodeIndex}, 数量=${cachedData.comments.length}`);
+
+        // 如果缓存中有元信息，更新当前选择状态
+        if (cachedData.metadata) {
+          setCurrentDanmakuSelection({
+            animeId: cachedData.metadata.animeId || 0,
+            episodeId: cachedData.metadata.episodeId || 0,
+            animeTitle: cachedData.metadata.animeTitle || '',
+            episodeTitle: cachedData.metadata.episodeTitle || '',
+            searchKeyword: cachedData.metadata.searchKeyword,
+            danmakuCount: cachedData.metadata.danmakuCount || cachedData.comments.length,
+          });
+        }
 
         // 直接加载缓存的弹幕，不需要调用 API
         if (!danmakuPluginRef.current) {
@@ -3343,7 +3379,7 @@ function PlayPageClient() {
         setDanmakuLoading(true);
 
         // 转换弹幕格式
-        let danmakuData = convertDanmakuFormat(cachedComments);
+        let danmakuData = convertDanmakuFormat(cachedData.comments);
 
         // 手动应用过滤规则
         const filterConfig = danmakuFilterConfigRef.current;
