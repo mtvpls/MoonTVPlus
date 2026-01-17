@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
       DanmakuApiToken: string;
       TMDBApiKey?: string;
       TMDBProxy?: string;
+      TMDBReverseProxy?: string;
       BannerDataSource?: string;
       RecommendationDataSource?: string;
       PansouApiUrl?: string;

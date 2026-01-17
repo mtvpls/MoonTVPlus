@@ -329,6 +329,7 @@ interface SiteConfig {
   DanmakuApiToken: string;
   TMDBApiKey?: string;
   TMDBProxy?: string;
+  TMDBReverseProxy?: string;
   BannerDataSource?: string;
   RecommendationDataSource?: string;
   PansouApiUrl?: string;

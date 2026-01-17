@@ -216,7 +216,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               title: title,
               intro: cmsData.desc,
               episodesCount: cmsData.episodes?.length,
-              poster: poster,
+              poster: poster ? processImageUrl(poster) : poster,
             });
             setLoading(false);
             return;
@@ -234,7 +234,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                   title: data.title || title,
                   intro: data.desc || '',
                   episodesCount: data.episodes?.length || cmsData.episodes?.length,
-                  poster: data.poster || poster,
+                  poster: data.poster ? processImageUrl(data.poster) : poster,
                   year: data.year,
                 });
                 setLoading(false);
@@ -260,7 +260,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
             title: data.name_cn || data.name,
             originalTitle: data.name,
             year: data.date ? data.date.substring(0, 4) : undefined,
-            poster: data.images?.large || poster,
+            poster: data.images?.large ? processImageUrl(data.images.large) : poster,
             rating: data.rating
               ? {
                   value: data.rating.score,
@@ -287,7 +287,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
             title: data.title,
             originalTitle: data.original_title,
             year: data.year,
-            poster: data.pic?.large || data.pic?.normal || poster,
+            poster: (data.pic?.large || data.pic?.normal) ? processImageUrl(data.pic?.large || data.pic?.normal) : poster,
             rating: data.rating
               ? {
                   value: data.rating.value,
