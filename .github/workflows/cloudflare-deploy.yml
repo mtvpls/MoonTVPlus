@@ -66,7 +66,14 @@ jobs:
           echo "KVROCKS_URL=${{ secrets.KVROCKS_URL }}" >> $GITHUB_ENV
           echo "INIT_CONFIG=${{ secrets.INIT_CONFIG }}" >> $GITHUB_ENV
           echo "CONFIG_SUBSCRIPTION_URL=${{ secrets.CONFIG_SUBSCRIPTION_URL }}" >> $GITHUB_ENV
-
+          
+      - name: Remove D1 configuration if not using D1
+        run: |
+          sed -i '/^\[\[d1_databases\]\]/,/^$/d' wrangler.toml
+          echo "D1 configuration removed from wrangler.toml"
+          echo "Updated wrangler.toml:"
+          cat wrangler.toml
+          
       - name: Replace D1 Database ID in wrangler.toml
         run: |
           if [ -n "${{ secrets.D1_DATABASE_ID }}" ]; then
