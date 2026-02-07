@@ -1,0 +1,102 @@
+{
+  "cache_time": 7200,
+  "api_site": {
+    "lzzy": {
+      "api": "https://api.lzzy.cc/api.php/provide/vod",
+      "name": "量子资源",
+      "detail": "https://api.lzzy.cc"
+    },
+    "ffzy": {
+      "api": "https://www.ffzy.tv/api.php/provide/vod",
+      "name": "非凡资源",
+      "detail": "https://www.ffzy.tv"
+    },
+    "hnzy": {
+      "api": "https://www.hnzy.tv/api.php/provide/vod",
+      "name": "红牛资源",
+      "detail": "https://www.hnzy.tv"
+    },
+    "snzy": {
+      "api": "https://www.suonizy.com/api.php/provide/vod",
+      "name": "索尼资源",
+      "detail": "https://www.suonizy.com"
+    },
+    "ukzy": {
+      "api": "https://api.ukuzy.com/api.php/provide/vod",
+      "name": "U酷资源",
+      "detail": "https://api.ukuzy.com"
+    },
+    "bjzy": {
+      "api": "https://api.bjzy.vip/api.php/provide/vod",
+      "name": "八戒资源",
+      "detail": "https://api.bjzy.vip"
+    },
+    "ykzy": {
+      "api": "https://api.1080zyku.com/api.php/provide/vod",
+      "name": "1080资源库",
+      "detail": "https://api.1080zyku.com"
+    },
+    "jszyck": {
+      "api": "https://api.jszyck.com/api.php/provide/vod",
+      "name": "极速资源",
+      "detail": "https://api.jszyck.com"
+    },
+    "wjzy": {
+      "api": "https://www.wjzy.vip/api.php/provide/vod",
+      "name": "无尽资源",
+      "detail": "https://www.wjzy.vip"
+    },
+    "kuaikan": {
+      "api": "https://www.kuaikan-api.com/api.php/provide/vod",
+      "name": "快看资源",
+      "detail": "https://www.kuaikan-api.com"
+    },
+    "4k": {
+      "api": "https://www.4kvm.com/api.php/provide/vod",
+      "name": "4K影视",
+      "detail": "https://www.4kvm.com"
+    },
+    "bdzy": {
+      "api": "https://api.bdzy.vip/api.php/provide/vod",
+      "name": "百度资源",
+      "detail": "https://api.bdzy.vip"
+    },
+    "gszyck": {
+      "api": "https://api.gszyck.com/api.php/provide/vod",
+      "name": "光速资源",
+      "detail": "https://api.gszyck.com"
+    },
+    "dmzy": {
+      "api": "https://www.dmzy.vip/api.php/provide/vod",
+      "name": "动漫资源",
+      "detail": "https://www.dmzy.vip"
+    },
+    "yhzy": {
+      "api": "https://www.yhzy.cc/api.php/provide/vod",
+      "name": "樱花资源",
+      "detail": "https://www.yhzy.cc"
+    }
+  },
+  "custom_category": [
+    {
+      "name": "华语",
+      "type": "movie",
+      "query": "华语"
+    },
+    {
+      "name": "欧美",
+      "type": "movie",
+      "query": "欧美"
+    },
+    {
+      "name": "日本",
+      "type": "movie",
+      "query": "日本"
+    },
+    {
+      "name": "韩国",
+      "type": "movie",
+      "query": "韩国"
+    }
+  ]
+}

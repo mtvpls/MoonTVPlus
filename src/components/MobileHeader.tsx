@@ -55,9 +55,17 @@ const MobileHeader = ({ showBackButton = false }: MobileHeaderProps) => {
         <Link
           href='/'
           prefetch={false}
-          className='text-2xl font-bold text-green-600 tracking-tight hover:opacity-80 transition-opacity'
+          className='flex items-center gap-1.5 hover:opacity-80 transition-opacity'
         >
-          {siteName}
+          <div className='relative w-7 h-7'>
+            <div className='absolute inset-0 bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 rounded-lg'></div>
+            <div className='absolute inset-0 flex items-center justify-center'>
+              <span className='text-white font-bold text-sm'>F</span>
+            </div>
+          </div>
+          <span className='text-lg font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent'>
+            FoxAI
+          </span>
         </Link>
       </div>
     </header>

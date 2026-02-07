@@ -17,9 +17,17 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { password: string } }
 ) {
-  console.log(request.url);
-
-  const cronPassword = process.env.CRON_PASSWORD || 'mtvpls';
+  // Do not log full URL here; it contains the cron password in the path.
+  const cronPassword = process.env.CRON_PASSWORD;
+  if (!cronPassword || cronPassword.trim() === '') {
+    return NextResponse.json(
+      {
+        success: false,
+        message: 'CRON_PASSWORD is not configured',
+      },
+      { status: 503 }
+    );
+  }
   if (params.password !== cronPassword) {
     return NextResponse.json(
       { success: false, message: 'Unauthorized' },
@@ -30,7 +38,8 @@ export async function GET(
   try {
     console.log('Cron job triggered:', new Date().toISOString());
 
-    cronJob();
+    // Await to avoid premature termination on serverless runtimes.
+    await cronJob();
 
     return NextResponse.json({
       success: true,
@@ -427,4 +436,3 @@ async function refreshOpenList() {
     console.error('OpenList 定时扫描失败:', err);
   }
 }
-

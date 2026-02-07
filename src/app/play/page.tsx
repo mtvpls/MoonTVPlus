@@ -3,6 +3,7 @@
 'use client';
 
 import { AlertCircle,Cloud, Heart, Sparkles, X } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 
@@ -52,19 +53,20 @@ import { base58Decode, getVideoResolutionFromM3u8, processImageUrl } from '@/lib
 import { useEnableComments } from '@/hooks/useEnableComments';
 import { usePlaySync } from '@/hooks/usePlaySync';
 
-import AIChatPanel from '@/components/AIChatPanel';
 import CorrectDialog from '@/components/CorrectDialog';
 import DanmakuFilterSettings from '@/components/DanmakuFilterSettings';
-import DoubanComments from '@/components/DoubanComments';
-import DownloadEpisodeSelector from '@/components/DownloadEpisodeSelector';
 import EpisodeSelector from '@/components/EpisodeSelector';
 import PageLayout from '@/components/PageLayout';
-import PansouSearch from '@/components/PansouSearch';
 import { useSite } from '@/components/SiteProvider';
-import SmartRecommendations from '@/components/SmartRecommendations';
 import Toast, { ToastProps } from '@/components/Toast';
 
 import { useDownload } from '@/contexts/DownloadContext';
+
+const AIChatPanel = dynamic(() => import('@/components/AIChatPanel'), { ssr: false });
+const DoubanComments = dynamic(() => import('@/components/DoubanComments'), { ssr: false });
+const DownloadEpisodeSelector = dynamic(() => import('@/components/DownloadEpisodeSelector'), { ssr: false });
+const PansouSearch = dynamic(() => import('@/components/PansouSearch'), { ssr: false });
+const SmartRecommendations = dynamic(() => import('@/components/SmartRecommendations'), { ssr: false });
 
 // 扩展 HTMLVideoElement 类型以支持 hls 属性
 declare global {
@@ -90,6 +92,9 @@ function PlayPageClient() {
 
   // 获取 Proxy M3U8 Token
   const proxyToken = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_PROXY_M3U8_TOKEN || '' : '';
+  const disableCustomAdFilterCode = typeof window !== 'undefined'
+    ? process.env.NEXT_PUBLIC_DISABLE_CUSTOM_ADFILTER_CODE === 'true'
+    : false;
 
   // 获取用户认证信息
   const authInfo = typeof window !== 'undefined' ? getAuthInfoFromBrowserCookie() : null;
@@ -2520,7 +2525,7 @@ function PlayPageClient() {
 
   function filterAdsFromM3U8(type: string, m3u8Content: string): string {
     // 尝试使用缓存的自定义去广告代码
-    if (customAdFilterCodeRef.current && customAdFilterCodeRef.current.trim()) {
+    if (!disableCustomAdFilterCode && customAdFilterCodeRef.current && customAdFilterCodeRef.current.trim()) {
       try {
         // 移除 TypeScript 类型注解，转换为纯 JavaScript
         const jsCode = customAdFilterCodeRef.current
@@ -4916,6 +4921,32 @@ function PlayPageClient() {
               maxBufferLength: bufferConfig.maxBufferLength, // 前向缓冲长度
               backBufferLength: bufferConfig.backBufferLength, // 已播放内容保留长度
               maxBufferSize: bufferConfig.maxBufferSize, // 最大缓冲大小
+
+              /* 🆕 缓冲优化配置 */
+              maxBufferHole: 0.5, // 允许的最大缓冲空洞
+              maxMaxBufferLength: 600, // 最大缓冲上限 (10分钟)
+              maxLoadingDelay: 4, // 最大加载延迟
+              highBufferWatchdogPeriod: 2, // 高缓冲监控周期
+              nudgeMaxRetry: 3, // 最大重试次数
+
+              /* 🆕 ABR（自适应码率）优化 */
+              abrEwmaDefaultEstimate: 500000, // 默认带宽估计 (500kbps)
+              abrBandWidthFactor: 0.95, // 带宽安全系数
+              abrBandWidthUpFactor: 0.7, // 升级带宽阈值
+
+              /* 🆕 片段加载优化 */
+              fragLoadingTimeOut: 20000, // 片段加载超时 (20s)
+              fragLoadingMaxRetry: 6, // 片段加载最大重试
+              fragLoadingRetryDelay: 1000, // 重试延迟 (1s)
+              fragLoadingMaxRetryTimeout: 64000, // 最大重试超时
+
+              /* 🆕 Manifest 加载优化 */
+              manifestLoadingTimeOut: 10000, // Manifest 加载超时
+              manifestLoadingMaxRetry: 3, // Manifest 最大重试
+              manifestLoadingRetryDelay: 1000, // 重试延迟
+
+              /* 🆕 渐进式加载 */
+              progressive: true,
 
               /* 自定义loader */
               loader: (shouldUseCustomLoader

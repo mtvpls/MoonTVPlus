@@ -89,6 +89,14 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/mtvpls/MoonTVPlus)
 
+> Vercel 部署后建议优先完成：
+> 1. 设置环境变量 `CRON_PASSWORD`，并将 `vercel.json` 中的 cron `path` 改为 `/api/cron/<CRON_PASSWORD>`（避免使用默认/弱口令）。
+> 2. 设置环境变量 `PASSWORD`，不要公开分享你的实例链接。
+>
+> PWA：
+> 本项目使用 `vite-plugin-pwa` 生成 Service Worker（`public/sw.js`）与 Web Manifest（`public/manifest.webmanifest`），应用图标来源为 `public/foxaiTV.png`。
+> 在 Vercel 上仅建议在 Production 环境启用 SW（Preview 域名启用可能带来缓存干扰）。
+
 **一键部署到zeabur**
 
 [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/SCHCAY/deploy)
@@ -183,7 +191,7 @@ on:
 
 **7. 配置外部定时任务（可选）**
 
-可使用外部定时请求/api/cron/mtvpls端点以触发定时任务，或新建一个workers请求触发，推荐每小时请求一次。
+可使用外部定时请求 `/api/cron/<CRON_PASSWORD>` 端点以触发定时任务，或新建一个 workers 请求触发，推荐每小时请求一次。
 
 ---
 
@@ -337,7 +345,7 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 | ---------------------------------------- | ------------------------------------------------------------ | --------------------------- | ------------------------------------------------------------ |
 | USERNAME                                 | 站长账号                                                     | 任意字符串                  | 无默认，必填字段                                             |
 | PASSWORD                                 | 站长密码                                                     | 任意字符串                  | 无默认，必填字段                                             |
-| CRON_PASSWORD                            | 定时任务 API 访问密码（用于保护 /api/cron 端点）             | 任意字符串                  | mtvpls                                                       |
+| CRON_PASSWORD                            | 定时任务 API 访问密码（用于保护 `/api/cron/<password>` 端点）。注意：Vercel 的 `vercel.json` 里 cron `path` 需要与该值一致。 | 任意字符串（建议足够长且随机） | 无默认，必填字段                                             |
 | SITE_BASE                                | 站点 url                                                     | 形如 https://example.com    | 空                                                           |
 | NEXT_PUBLIC_SITE_NAME                    | 站点名称                                                     | 任意字符串                  | MoonTV                                                       |
 | ANNOUNCEMENT                             | 站点公告                                                     | 任意字符串                  | 本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。 |
@@ -353,7 +361,15 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 | NEXT_PUBLIC_DOUBAN_IMAGE_PROXY           | 自定义豆瓣图片代理 URL                                       | url prefix                  | (空)                                                         |
 | NEXT_PUBLIC_DISABLE_YELLOW_FILTER        | 关闭色情内容过滤                                             | true/false                  | false                                                        |
 | NEXT_PUBLIC_FLUID_SEARCH                 | 是否开启搜索接口流式输出                                     | true/ false                 | true                                                         |
-| NEXT_PUBLIC_PROXY_M3U8_TOKEN             | M3U8 代理 API 鉴权 Token（外部播放器跳转时的鉴权token，不填为无鉴权） | 任意字符串                  | (空)                                                         |
+| PROXY_M3U8_TOKEN                         | M3U8 代理 API 鉴权 Token（服务端优先，推荐）。设置后访问 `/api/proxy-m3u8` 需要携带 `token` 参数。 | 任意字符串                  | (空)                                                         |
+| NEXT_PUBLIC_PROXY_M3U8_TOKEN             | M3U8 代理 API 鉴权 Token（兼容旧配置）。这是前端可见变量，不应当被当作“秘密”。如同时设置 `PROXY_M3U8_TOKEN`，以 `PROXY_M3U8_TOKEN` 为准。 | 任意字符串                  | (空)                                                         |
+| PROXY_M3U8_FETCH_TIMEOUT_MS              | `/api/proxy-m3u8` 拉取上游 m3u8 的超时（毫秒）                | 正整数                      | 15000                                                        |
+| PROXY_M3U8_MAX_BYTES                     | `/api/proxy-m3u8` 允许返回的最大 m3u8 文本大小（字节）        | 正整数                      | 524288                                                       |
+| PROXY_M3U8_ALLOWED_ORIGINS               | `/api/proxy-m3u8` 的 CORS 允许来源（逗号分隔）。为空则为 `*`  | 逗号分隔的 Origin 列表      | (空)                                                         |
+| PROXY_M3U8_DNS_BLOCK_PRIVATE             | `/api/proxy-m3u8` 是否启用 DNS 解析后的私网地址拦截（SSRF 加固，可能在部分运行时不可用） | true/false                  | false                                                        |
+| PROXY_M3U8_ALLOW_LOCALHOST               | `/api/proxy-m3u8` 是否允许代理到本机/私网地址（仅建议本地调试使用） | true/false                  | false                                                        |
+| DISABLE_CUSTOM_ADFILTER_CODE             | 是否禁用“自定义去广告代码”（后端执行），降低执行任意代码风险  | true/false                  | false                                                        |
+| NEXT_PUBLIC_DISABLE_CUSTOM_ADFILTER_CODE | 是否禁用“自定义去广告代码”（前端执行/后台保存）              | true/false                  | false                                                        |
 | NEXT_PUBLIC_DANMAKU_CACHE_EXPIRE_MINUTES | 弹幕缓存失效时间（分钟数，设为 0 时不缓存）                  | 0 或正整数                  | 4320（3天）                                                  |
 | ENABLE_TVBOX_SUBSCRIBE                   | 是否启用 TVBOX 订阅功能                                      | true/false                  | false                                                        |
 | TVBOX_SUBSCRIBE_TOKEN                    | TVBOX 订阅 API 访问 Token，如启用TVBOX功能必须设置该项       | 任意字符串                  | (空)                                                         |
@@ -374,7 +390,7 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 | TMDB_PROXY                               | TMDB 代理地址                                                | URL                         | (空)                                                         |
 | TMDB_REVERSE_PROXY                       | TMDB 反向代理地址                                            | URL                         | (空)                                                         |
 | DANMAKU_API_BASE                         | 弹幕 API 地址                                                | URL                         | http://localhost:9321                                        |
-| DANMAKU_API_TOKEN                        | 弹幕 API Token                                               | 任意字符串                  | 87654321                                                     |
+| DANMAKU_API_TOKEN                        | 弹幕 API Token（如后端需要鉴权才填写；不填表示不携带 token）  | 任意字符串                  | (空)                                                         |
 
 NEXT_PUBLIC_DOUBAN_PROXY_TYPE 选项解释：
 
@@ -479,6 +495,7 @@ NEXT_PUBLIC_VOICE_CHAT_STRATEGY 选项解释：
 1. **设置环境变量 `PASSWORD`**：为您的实例设置一个强密码
 2. **仅供个人使用**：请勿将您的实例链接公开分享或传播
 3. **遵守当地法律**：请确保您的使用行为符合当地法律法规
+4. **谨慎启用自定义去广告代码**：如无必要建议设置 `DISABLE_CUSTOM_ADFILTER_CODE=true` 与 `NEXT_PUBLIC_DISABLE_CUSTOM_ADFILTER_CODE=true`，避免执行任意代码风险
 
 ### 重要声明
 

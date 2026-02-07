@@ -31,16 +31,13 @@ export async function GET(request: NextRequest) {
     const { DanmakuApiBase, DanmakuApiToken } = config.SiteConfig;
 
     // 构建 API URL
-    const baseUrl =
-      DanmakuApiToken === '87654321'
-        ? DanmakuApiBase
-        : `${DanmakuApiBase}/${DanmakuApiToken}`;
+    const baseUrl = DanmakuApiToken ? `${DanmakuApiBase}/${DanmakuApiToken}` : DanmakuApiBase;
 
     const apiUrl = `${baseUrl}/api/v2/bangumi/${animeId}`;
 
     // 添加超时控制和重试机制
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 10秒超时
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
 
     try {
       const response = await fetch(apiUrl, {

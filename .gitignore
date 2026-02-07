@@ -49,6 +49,10 @@ sitemap-*.xml
 # generated files
 src/lib/runtime.ts
 public/manifest.json
+public/manifest.webmanifest
+public/registerSW.js
+public/pwa-entry.js
+public/pwa-assets/
 
 # PWA files
 public/sw.js

@@ -27,17 +27,29 @@ const SidebarContext = createContext<SidebarContextType>({
 
 export const useSidebar = () => useContext(SidebarContext);
 
-// 可替换为你自己的 logo 图片
+// FoxAI Logo 组件
 const Logo = () => {
-  const { siteName } = useSite();
   return (
     <Link
       href='/'
-      className='flex items-center justify-center h-16 select-none hover:opacity-80 transition-opacity duration-200'
+      className='flex items-center justify-center h-16 select-none hover:opacity-80 transition-all duration-300 group'
     >
-      <span className='text-2xl font-bold text-green-600 tracking-tight'>
-        {siteName}
-      </span>
+      <div className='flex items-center gap-2'>
+        <div className='relative w-10 h-10'>
+          <div className='absolute inset-0 bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 rounded-xl rotate-6 group-hover:rotate-12 transition-transform duration-300'></div>
+          <div className='absolute inset-0 bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-600 rounded-xl flex items-center justify-center'>
+            <span className='text-white font-bold text-xl'>F</span>
+          </div>
+        </div>
+        <div className='flex flex-col'>
+          <span className='text-xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent'>
+            FoxAI
+          </span>
+          <span className='text-[10px] text-gray-500 dark:text-gray-400 -mt-1'>
+            影视聚合
+          </span>
+        </div>
+      </div>
     </Link>
   );
 };

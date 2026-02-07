@@ -282,12 +282,13 @@ function HomeClient() {
         return (
           <section key="hotMovies" className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+              <h2 className='text-xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent flex items-center gap-2'>
+                <span className='w-1 h-6 bg-gradient-to-b from-purple-600 to-blue-600 rounded-full'></span>
                 热门电影
               </h2>
               <Link
                 href='/douban?type=movie'
-                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                className='flex items-center text-sm text-gray-500 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors'
               >
                 查看更多
                 <ChevronRight className='w-4 h-4 ml-1' />
@@ -329,7 +330,8 @@ function HomeClient() {
         return (
           <section key="hotDuanju" className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+              <h2 className='text-xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent flex items-center gap-2'>
+                <span className='w-1 h-6 bg-gradient-to-b from-blue-600 to-cyan-600 rounded-full'></span>
                 热播短剧
               </h2>
             </div>
@@ -376,12 +378,13 @@ function HomeClient() {
         return (
           <section key="bangumiCalendar" className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+              <h2 className='text-xl font-bold bg-gradient-to-r from-cyan-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2'>
+                <span className='w-1 h-6 bg-gradient-to-b from-cyan-600 to-purple-600 rounded-full'></span>
                 新番放送
               </h2>
               <Link
                 href='/douban?type=anime'
-                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                className='flex items-center text-sm text-gray-500 hover:text-cyan-600 dark:text-gray-400 dark:hover:text-cyan-400 transition-colors'
               >
                 查看更多
                 <ChevronRight className='w-4 h-4 ml-1' />
@@ -441,12 +444,13 @@ function HomeClient() {
         return (
           <section key="hotTvShows" className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+              <h2 className='text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent flex items-center gap-2'>
+                <span className='w-1 h-6 bg-gradient-to-b from-purple-600 to-pink-600 rounded-full'></span>
                 热门剧集
               </h2>
               <Link
                 href='/douban?type=tv'
-                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                className='flex items-center text-sm text-gray-500 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors'
               >
                 查看更多
                 <ChevronRight className='w-4 h-4 ml-1' />
@@ -487,12 +491,13 @@ function HomeClient() {
         return (
           <section key="hotVarietyShows" className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+              <h2 className='text-xl font-bold bg-gradient-to-r from-pink-600 to-orange-600 bg-clip-text text-transparent flex items-center gap-2'>
+                <span className='w-1 h-6 bg-gradient-to-b from-pink-600 to-orange-600 rounded-full'></span>
                 热门综艺
               </h2>
               <Link
                 href='/douban?type=tv&category=show'
-                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                className='flex items-center text-sm text-gray-500 hover:text-pink-600 dark:text-gray-400 dark:hover:text-pink-400 transition-colors'
               >
                 查看更多
                 <ChevronRight className='w-4 h-4 ml-1' />
@@ -534,7 +539,8 @@ function HomeClient() {
         return (
           <section key="upcomingContent" className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+              <h2 className='text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent flex items-center gap-2'>
+                <span className='w-1 h-6 bg-gradient-to-b from-orange-600 to-red-600 rounded-full'></span>
                 即将上映
               </h2>
             </div>
@@ -572,9 +578,68 @@ function HomeClient() {
   return (
     <PageLayout>
       <FireworksCanvas />
+      
+      {/* Hero Section - FoxAI 品牌展示 */}
+      <div className='relative w-full mb-8 overflow-hidden'>
+        <div className='absolute inset-0 bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-cyan-500/10 dark:from-purple-500/5 dark:via-blue-500/5 dark:to-cyan-500/5'></div>
+        <div className='relative px-4 sm:px-10 py-12 sm:py-16'>
+          <div className='max-w-4xl mx-auto text-center'>
+            <div className='flex items-center justify-center mb-6'>
+              <div className='relative w-20 h-20 sm:w-24 sm:h-24'>
+                <div className='absolute inset-0 bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 rounded-2xl animate-pulse'></div>
+                <div className='absolute inset-1 bg-white dark:bg-gray-900 rounded-2xl flex items-center justify-center'>
+                  <span className='text-4xl sm:text-5xl font-bold bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent'>
+                    F
+                  </span>
+                </div>
+              </div>
+            </div>
+            <h1 className='text-4xl sm:text-5xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent'>
+              FoxAI 影视
+            </h1>
+            <p className='text-lg sm:text-xl text-gray-600 dark:text-gray-400 mb-6'>
+              智能聚合 · 极致体验 · 海量资源
+            </p>
+            <div className='flex items-center justify-center gap-3 flex-wrap'>
+              <button
+                onClick={handleDirectPlay}
+                className='px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:scale-105 transition-all duration-300 flex items-center gap-2'
+                title='直链播放'
+              >
+                <LinkIcon size={18} />
+                <span>直链播放</span>
+              </button>
+
+              {sourceSearchEnabled && (
+                <Link href='/source-search'>
+                  <button
+                    className='px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:scale-105 transition-all duration-300 flex items-center gap-2'
+                    title='源站寻片'
+                  >
+                    <ListVideo size={20} />
+                    <span>源站寻片</span>
+                  </button>
+                </Link>
+              )}
+
+              {aiEnabled && (
+                <button
+                  onClick={() => setShowAIChat(true)}
+                  className='px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-500 text-white font-medium hover:shadow-lg hover:scale-105 transition-all duration-300 flex items-center gap-2'
+                  title='AI问片'
+                >
+                  <Bot size={20} />
+                  <span>AI 问片</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* TMDB 热门轮播图 */}
       {homeBannerEnabled && (
-        <div className='w-full mb-4'>
+        <div className='w-full mb-6 px-2 sm:px-10'>
           <BannerCarousel delayLoad={true} />
         </div>
       )}
@@ -583,40 +648,6 @@ function HomeClient() {
         <div className='max-w-[95%] mx-auto'>
           {/* 首页内容 */}
           <>
-            {/* 源站寻片和AI问片入口 */}
-            <div className={`flex items-center justify-end gap-2 mb-4 ${homeBannerEnabled ? '' : 'mt-[30px]'}`}>
-              <button
-                onClick={handleDirectPlay}
-                className='p-1.5 rounded-lg text-blue-500 hover:text-blue-600 transition-colors'
-                title='直链播放'
-              >
-                <LinkIcon size={18} />
-              </button>
-
-              {/* 源站寻片入口 */}
-              {sourceSearchEnabled && (
-                <Link href='/source-search'>
-                  <button
-                    className='p-2 rounded-lg text-blue-500 hover:text-blue-600 transition-colors'
-                    title='源站寻片'
-                  >
-                    <ListVideo size={20} />
-                  </button>
-                </Link>
-              )}
-
-              {/* AI问片入口 */}
-              {aiEnabled && (
-                <button
-                  onClick={() => setShowAIChat(true)}
-                  className='p-2 rounded-lg text-purple-500 hover:text-purple-600 transition-colors'
-                  title='AI问片'
-                >
-                  <Bot size={20} />
-                </button>
-              )}
-            </div>
-
             {/* 继续观看 */}
             {homeContinueWatchingEnabled && <ContinueWatching />}
 

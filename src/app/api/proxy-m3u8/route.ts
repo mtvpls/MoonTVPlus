@@ -4,6 +4,110 @@ import { getConfig } from '@/lib/config';
 
 export const runtime = 'nodejs';
 
+function parseCommaList(value: string | undefined | null): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function isIpv4(hostname: string): boolean {
+  const parts = hostname.split('.');
+  if (parts.length !== 4) return false;
+  return parts.every((p) => {
+    if (!/^\d+$/.test(p)) return false;
+    const n = Number(p);
+    return Number.isInteger(n) && n >= 0 && n <= 255;
+  });
+}
+
+function ipv4ToInt(ip: string): number {
+  return ip.split('.').reduce((acc, part) => (acc << 8) + (parseInt(part, 10) & 0xff), 0) >>> 0;
+}
+
+function isPrivateIpv4(ip: string): boolean {
+  // 10.0.0.0/8
+  const n = ipv4ToInt(ip);
+  const inRange = (cidrBase: string, maskBits: number) => {
+    const base = ipv4ToInt(cidrBase);
+    const mask = maskBits === 0 ? 0 : (~((1 << (32 - maskBits)) - 1) >>> 0) >>> 0;
+    return (n & mask) === (base & mask);
+  };
+
+  return (
+    inRange('0.0.0.0', 8) ||
+    inRange('10.0.0.0', 8) ||
+    inRange('127.0.0.0', 8) ||
+    inRange('169.254.0.0', 16) ||
+    inRange('172.16.0.0', 12) ||
+    inRange('192.168.0.0', 16)
+  );
+}
+
+function isBlockedHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local');
+}
+
+async function isHostnameResolvingToPrivateIp(hostname: string): Promise<boolean> {
+  // Best-effort defense. On some runtimes (e.g. Workers), DNS may not be available.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const dns = require('dns') as typeof import('dns');
+    const results = await dns.promises.lookup(hostname, { all: true, verbatim: true });
+    return results.some((r) => {
+      if (r.family === 4) return isPrivateIpv4(r.address);
+      // Block obvious local IPv6 forms (loopback, link-local, ULA).
+      const a = r.address.toLowerCase();
+      return a === '::1' || a.startsWith('fe80:') || a.startsWith('fc') || a.startsWith('fd');
+    });
+  } catch {
+    return false;
+  }
+}
+
+async function readTextWithLimit(response: Response, maxBytes: number): Promise<string> {
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) {
+    const len = parseInt(contentLength, 10);
+    if (!Number.isNaN(len) && len > maxBytes) {
+      throw new Error(`M3U8 too large (content-length=${len}, max=${maxBytes})`);
+    }
+  }
+
+  const body: any = (response as any).body;
+  if (body && typeof body.getReader === 'function') {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let received = 0;
+    let text = '';
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      received += value?.byteLength || 0;
+      if (received > maxBytes) {
+        try {
+          reader.cancel();
+        } catch {
+          // ignore
+        }
+        throw new Error(`M3U8 too large (received>${maxBytes})`);
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  }
+
+  const text = await response.text();
+  if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+    throw new Error(`M3U8 too large (received>${maxBytes})`);
+  }
+  return text;
+}
+
 /**
  * M3U8 代理接口
  * 用于外部播放器访问,会执行去广告逻辑并处理相对链接
@@ -16,9 +120,11 @@ export async function GET(request: Request) {
     const source = searchParams.get('source') || '';
     const token = searchParams.get('token');
 
-    // Token 鉴权：如果环境变量设置了 token，则必须验证
-    const envToken = process.env.NEXT_PUBLIC_PROXY_M3U8_TOKEN;
-    if (envToken && envToken.trim() !== '') {
+    // Token 鉴权：
+    // 1) Prefer server-only token (PROXY_M3U8_TOKEN).
+    // 2) Keep NEXT_PUBLIC_PROXY_M3U8_TOKEN as backward-compatible fallback.
+    const envToken = (process.env.PROXY_M3U8_TOKEN || process.env.NEXT_PUBLIC_PROXY_M3U8_TOKEN || '').trim();
+    if (envToken) {
       if (!token || token !== envToken) {
         return NextResponse.json(
           { error: '无效的访问令牌' },
@@ -34,16 +140,58 @@ export async function GET(request: Request) {
       );
     }
 
+    if (m3u8Url.length > 4096) {
+      return NextResponse.json({ error: 'url 参数过长' }, { status: 400 });
+    }
+
+    let targetUrl: URL;
+    try {
+      targetUrl = new URL(m3u8Url);
+    } catch {
+      return NextResponse.json({ error: 'url 参数格式错误' }, { status: 400 });
+    }
+
+    if (targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:') {
+      return NextResponse.json({ error: '仅支持 http/https 协议' }, { status: 400 });
+    }
+
+    const hostname = targetUrl.hostname;
+    const allowLocalhost = process.env.PROXY_M3U8_ALLOW_LOCALHOST === 'true';
+    if (!hostname || (!allowLocalhost && isBlockedHostname(hostname))) {
+      return NextResponse.json({ error: '目标地址不被允许' }, { status: 400 });
+    }
+
+    if (!allowLocalhost && isIpv4(hostname) && isPrivateIpv4(hostname)) {
+      return NextResponse.json({ error: '目标地址不被允许' }, { status: 400 });
+    }
+
+    // Optional hardening: DNS resolution based private IP blocking.
+    if (process.env.PROXY_M3U8_DNS_BLOCK_PRIVATE === 'true') {
+      const isPrivate = await isHostnameResolvingToPrivateIp(hostname);
+      if (isPrivate) {
+        return NextResponse.json({ error: '目标地址不被允许' }, { status: 400 });
+      }
+    }
+
     // 获取当前请求的 origin
     const requestUrl = new URL(request.url);
     const origin = `${requestUrl.protocol}//${requestUrl.host}`;
 
     // 获取原始 m3u8 内容
-    const response = await fetch(m3u8Url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
+    const timeoutMs = parseInt(process.env.PROXY_M3U8_FETCH_TIMEOUT_MS || '15000', 10);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 15000);
+    let response: Response;
+    try {
+      response = await fetch(m3u8Url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       return NextResponse.json(
@@ -52,13 +200,18 @@ export async function GET(request: Request) {
       );
     }
 
-    let m3u8Content = await response.text();
+    const maxBytes = parseInt(process.env.PROXY_M3U8_MAX_BYTES || String(512 * 1024), 10);
+    let m3u8Content = await readTextWithLimit(
+      response,
+      Number.isFinite(maxBytes) && maxBytes > 0 ? maxBytes : 512 * 1024
+    );
 
     // 执行去广告逻辑
     const config = await getConfig();
     const customAdFilterCode = config.SiteConfig?.CustomAdFilterCode || '';
+    const disableCustomAdFilterCode = process.env.DISABLE_CUSTOM_ADFILTER_CODE === 'true';
 
-    if (customAdFilterCode && customAdFilterCode.trim()) {
+    if (!disableCustomAdFilterCode && customAdFilterCode && customAdFilterCode.trim()) {
       try {
         // 移除 TypeScript 类型注解,转换为纯 JavaScript
         const jsCode = customAdFilterCode
@@ -84,11 +237,21 @@ export async function GET(request: Request) {
     // 处理 m3u8 中的相对链接
     m3u8Content = resolveM3u8Links(m3u8Content, m3u8Url, source, origin, token || '');
 
+    const allowedOrigins = parseCommaList(process.env.PROXY_M3U8_ALLOWED_ORIGINS);
+    const requestOrigin = request.headers.get('origin');
+    const corsOrigin =
+      allowedOrigins.length === 0
+        ? '*'
+        : requestOrigin && allowedOrigins.includes(requestOrigin)
+          ? requestOrigin
+          : 'null';
+
     // 返回处理后的 m3u8 内容
     return new NextResponse(m3u8Content, {
       headers: {
         'Content-Type': 'application/vnd.apple.mpegurl',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin,
+        ...(allowedOrigins.length > 0 ? { Vary: 'Origin' } : {}),
         'Cache-Control': 'no-cache',
       },
     });

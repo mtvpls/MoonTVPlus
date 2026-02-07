@@ -246,7 +246,8 @@ async function getInitConfig(configFile: string, subConfig: {
         process.env.NEXT_PUBLIC_FLUID_SEARCH !== 'false',
       // 弹幕配置
       DanmakuApiBase: process.env.DANMAKU_API_BASE || 'http://localhost:9321',
-      DanmakuApiToken: process.env.DANMAKU_API_TOKEN || '87654321',
+      // Do not provide a default token. If your danmaku backend requires auth, set DANMAKU_API_TOKEN explicitly.
+      DanmakuApiToken: process.env.DANMAKU_API_TOKEN || '',
       // TMDB配置
       TMDBApiKey: process.env.TMDB_API_KEY || '',
       TMDBProxy: process.env.TMDB_PROXY || '',
@@ -427,7 +428,7 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       DisableYellowFilter: false,
       FluidSearch: true,
       DanmakuApiBase: 'http://localhost:9321',
-      DanmakuApiToken: '87654321',
+      DanmakuApiToken: '',
       PansouApiUrl: '',
       PansouUsername: '',
       PansouPassword: '',
@@ -439,8 +440,8 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (!adminConfig.SiteConfig.DanmakuApiBase) {
     adminConfig.SiteConfig.DanmakuApiBase = 'http://localhost:9321';
   }
-  if (!adminConfig.SiteConfig.DanmakuApiToken) {
-    adminConfig.SiteConfig.DanmakuApiToken = '87654321';
+  if (adminConfig.SiteConfig.DanmakuApiToken === undefined || adminConfig.SiteConfig.DanmakuApiToken === null) {
+    adminConfig.SiteConfig.DanmakuApiToken = '';
   }
   // 确保评论开关存在
   if (adminConfig.SiteConfig.EnableComments === undefined) {

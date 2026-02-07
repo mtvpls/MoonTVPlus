@@ -6765,7 +6765,7 @@ const SiteConfigComponent = ({
     DisableYellowFilter: false,
     FluidSearch: true,
     DanmakuApiBase: 'http://localhost:9321',
-    DanmakuApiToken: '87654321',
+    DanmakuApiToken: '',
     TMDBApiKey: '',
     TMDBProxy: '',
     BannerDataSource: 'Douban',
@@ -6856,7 +6856,7 @@ const SiteConfigComponent = ({
         FluidSearch: config.SiteConfig.FluidSearch || true,
         DanmakuApiBase:
           config.SiteConfig.DanmakuApiBase || 'http://localhost:9321',
-        DanmakuApiToken: config.SiteConfig.DanmakuApiToken || '87654321',
+        DanmakuApiToken: config.SiteConfig.DanmakuApiToken || '',
         TMDBApiKey: config.SiteConfig.TMDBApiKey || '',
         TMDBProxy: config.SiteConfig.TMDBProxy || '',
         BannerDataSource: config.SiteConfig.BannerDataSource || 'Douban',
@@ -7428,7 +7428,7 @@ const SiteConfigComponent = ({
           </label>
           <input
             type='text'
-            placeholder='87654321'
+            placeholder='（可选）如后端需要鉴权请填写'
             value={siteSettings.DanmakuApiToken}
             onChange={(e) =>
               setSiteSettings((prev) => ({
@@ -7439,7 +7439,7 @@ const SiteConfigComponent = ({
             className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent'
           />
           <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-            弹幕服务器的访问令牌，默认为 87654321
+            弹幕服务器的访问令牌（可选）。不填表示不携带 token。
           </p>
         </div>
       </div>
@@ -8634,6 +8634,11 @@ const CustomAdFilterConfig = ({
   const handleSave = async () => {
     await withLoading('saveAdFilterCode', async () => {
       try {
+        if (process.env.NEXT_PUBLIC_DISABLE_CUSTOM_ADFILTER_CODE === 'true') {
+          showError('当前部署已禁用自定义去广告代码功能（NEXT_PUBLIC_DISABLE_CUSTOM_ADFILTER_CODE=true）', showAlert);
+          return;
+        }
+
         // 验证代码语法
         try {
           // 移除类型注解后验证

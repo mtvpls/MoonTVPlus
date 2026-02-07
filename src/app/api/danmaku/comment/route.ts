@@ -53,10 +53,7 @@ export async function GET(request: NextRequest) {
     const { DanmakuApiBase, DanmakuApiToken } = config.SiteConfig;
 
     // 构建 API URL
-    const baseUrl =
-      DanmakuApiToken === '87654321'
-        ? DanmakuApiBase
-        : `${DanmakuApiBase}/${DanmakuApiToken}`;
+    const baseUrl = DanmakuApiToken ? `${DanmakuApiBase}/${DanmakuApiToken}` : DanmakuApiBase;
 
     let apiUrl: string;
 
