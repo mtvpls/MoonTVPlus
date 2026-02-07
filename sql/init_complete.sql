@@ -85,11 +85,11 @@ CREATE TABLE IF NOT EXISTS search_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL,
   keyword TEXT NOT NULL,
-  timestamp INTEGER NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
   FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
   UNIQUE(username, keyword)
 );
-CREATE INDEX IF NOT EXISTS idx_search_history_user_time ON search_history(username, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_search_history_user_time ON search_history(username, created_at DESC);
 
 -- 7. 跳过配置表（依赖 users）
 CREATE TABLE IF NOT EXISTS skip_configs (
