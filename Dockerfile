@@ -1,5 +1,5 @@
 # ---- 第 1 阶段：安装依赖 ----
-FROM node:24-alpine AS deps
+FROM node:22-alpine AS deps
 
 # 启用 corepack 并激活 pnpm（Node20 默认提供 corepack）
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -13,7 +13,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # ---- 第 2 阶段：构建项目 ----
-FROM node:24-alpine AS builder
+FROM node:22-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
@@ -32,7 +32,7 @@ RUN pnpm run build
 RUN pnpm deploy --filter=. --prod --legacy /tmp/prod-deps
 
 # ---- 第 3 阶段：生成运行时镜像 ----
-FROM node:24-alpine AS runner
+FROM node:22-alpine AS runner
 
 # 启用 corepack 并激活 pnpm（用于安装额外依赖）
 RUN corepack enable && corepack prepare pnpm@latest --activate

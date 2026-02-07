@@ -97,6 +97,9 @@
 > 本项目使用 `vite-plugin-pwa` 生成 Service Worker（`public/sw.js`）与 Web Manifest（`public/manifest.webmanifest`），应用图标来源为 `public/foxaiTV.png`。
 > 在 Vercel 上仅建议在 Production 环境启用 SW（Preview 域名启用可能带来缓存干扰）。
 
+> Node 版本：
+> 建议使用 Node.js 22.x（与 Vercel 默认 LTS 对齐）。
+
 **一键部署到zeabur**
 
 [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/SCHCAY/deploy)
