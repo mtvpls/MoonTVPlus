@@ -1324,7 +1324,7 @@ export class D1Storage implements IStorage {
   async getSearchHistory(userName: string): Promise<string[]> {
     try {
       const results = await this.db
-        .prepare('SELECT keyword FROM search_history WHERE username = ? ORDER BY timestamp DESC LIMIT 20')
+        .prepare('SELECT keyword FROM search_history WHERE username = ? ORDER BY created_at DESC LIMIT 20')
         .bind(userName)
         .all();
 
@@ -1338,16 +1338,16 @@ export class D1Storage implements IStorage {
 
   async addSearchHistory(userName: string, keyword: string): Promise<void> {
     try {
-      const timestamp = Date.now();
+      const created_at = Date.now();
 
       // 插入或更新时间戳
       await this.db
         .prepare(`
-          INSERT INTO search_history (username, keyword, timestamp)
+          INSERT INTO search_history (username, keyword, created_at)
           VALUES (?, ?, ?)
-          ON CONFLICT(username, keyword) DO UPDATE SET timestamp = excluded.timestamp
+          ON CONFLICT(username, keyword) DO UPDATE SET created_at = excluded.created_at
         `)
-        .bind(userName, keyword, timestamp)
+        .bind(userName, keyword, created_at)
         .run();
 
       // 保持最多 20 条记录
@@ -1365,7 +1365,7 @@ export class D1Storage implements IStorage {
             AND id NOT IN (
               SELECT id FROM search_history
               WHERE username = ?
-              ORDER BY timestamp DESC
+              ORDER BY created_at DESC
               LIMIT 20
             )
           `)
