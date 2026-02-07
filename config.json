@@ -525,6 +525,10 @@
       "api": "https://www.inmi.app/api.php/provide/vod/",
       "name": "映迷影院"
     },
+    "tv1080": {
+      "api": "https://1080p.tv/api.php/provide/vod/",
+      "name": "1080资源"
+    },
     "fox": {
       "api": "https://api.foxzyapi.com/api.php/provide/vod/",
       "name": "FOX资源"
