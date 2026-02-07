@@ -6,7 +6,7 @@ import { RedisStorage } from './redis.db';
 import { DanmakuFilterConfig,Favorite, IStorage, PlayRecord, SkipConfig } from './types';
 import { UpstashRedisStorage } from './upstash.db';
 
-// storage type 常量: 'localstorage' | 'redis' | 'upstash' | 'kvrocks' | 'd1'，默认 'localstorage'
+// storage type 常量: 'localstorage' | 'redis' | 'upstash' | 'kvrocks' | 'd1' | 'postgres'，默认 'localstorage'
 const STORAGE_TYPE =
   (process.env.NEXT_PUBLIC_STORAGE_TYPE as
     | 'localstorage'
@@ -14,6 +14,7 @@ const STORAGE_TYPE =
     | 'upstash'
     | 'kvrocks'
     | 'd1'
+    | 'postgres'
     | undefined) || 'localstorage';
 
 // 创建存储实例
@@ -30,14 +31,36 @@ function createStorage(): IStorage {
       if (typeof window !== 'undefined') {
         throw new Error('D1Storage can only be used on the server side');
       }
-      const adapter = getD1Adapter();
+      const d1Adapter = getD1Adapter();
       // 动态导入 D1Storage 以避免客户端打包
       const { D1Storage } = require('./d1.db');
-      return new D1Storage(adapter);
+      return new D1Storage(d1Adapter);
+    case 'postgres':
+      // PostgresStorage 只能在服务端使用，客户端会报错
+      if (typeof window !== 'undefined') {
+        throw new Error('PostgresStorage can only be used on the server side');
+      }
+      const postgresAdapter = getPostgresAdapter();
+      // 动态导入 PostgresStorage 以避免客户端打包
+      const { PostgresStorage } = require('./postgres.db');
+      return new PostgresStorage(postgresAdapter);
     case 'localstorage':
     default:
       return null as unknown as IStorage;
   }
+}
+
+/**
+ * 获取 Postgres 适配器
+ * 使用 Vercel Postgres (@vercel/postgres)
+ */
+function getPostgresAdapter(): any {
+  // 动态导入适配器以避免客户端打包
+  const { PostgresAdapter } = require('./postgres-adapter');
+
+  console.log('Using Vercel Postgres database');
+
+  return new PostgresAdapter();
 }
 
 /**

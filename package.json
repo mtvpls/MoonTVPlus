@@ -23,6 +23,7 @@
     "prepare": "husky install",
     "watch-room:server": "node server/watch-room-standalone-server.js --port 3001 --auth YOUR_SECRET_KEY",
     "init:sqlite": "node scripts/init-sqlite.js",
+    "init:postgres": "node scripts/init-postgres.js",
     "db:reset": "rm -f .data/moontv.db .data/moontv.db-shm .data/moontv.db-wal && node scripts/init-sqlite.js"
   },
   "dependencies": {
@@ -92,6 +93,7 @@
     "@types/node": "24.0.3",
     "@types/node-fetch": "^2.6.13",
     "@types/nodemailer": "^7.0.5",
+    "@types/pg": "^8.16.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^19.1.6",
     "@types/react-window": "^2.0.0",
