@@ -166,12 +166,16 @@ jobs:
             exit 0
           fi
 
+          # Get database name from wrangler.toml
+          DATABASE_NAME=$(grep "^name\s*=" wrangler.toml | sed 's/.*=\s*"\([^"]*\)"/\1/')
+          echo "Using database: $DATABASE_NAME"
+
           echo "Running D1 database migrations..."
 
           for migration_file in ./migrations/*.sql; do
             if [ -f "$migration_file" ]; then
               echo "Executing migration: $(basename $migration_file)"
-              wrangler d1 execute moontvplus --remote --file="$migration_file" || echo "⚠️ Migration may have been skipped (already applied)"
+              wrangler d1 execute "$DATABASE_NAME" --remote --file="$migration_file" || echo "⚠️ Migration may have been skipped (already applied)"
             fi
           done
 
@@ -187,7 +191,7 @@ jobs:
 
           # Get database name from wrangler.toml
           DATABASE_NAME=$(grep "^name\s*=" wrangler.toml | sed 's/.*=\s*"\([^"]*\)"/\1/')
-          echo "Database name: $DATABASE_NAME"
+          echo "Using database: $DATABASE_NAME"
 
           # Calculate SHA-256 hash of password
           PASSWORD_HASH=$(echo -n "${{ secrets.PASSWORD }}" | sha256sum | awk '{print $1}')
