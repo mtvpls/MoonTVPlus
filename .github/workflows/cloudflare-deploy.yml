@@ -185,8 +185,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Create initial owner user
-        if: secrets.USERNAME != '' && secrets.PASSWORD != ''
         run: |
+          # Check if USERNAME and PASSWORD are set
+          if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
+            echo "USERNAME or PASSWORD not set, skipping owner user creation"
+            exit 0
+          fi
+
           echo "Creating initial owner user..."
 
           # Get database name from wrangler.toml
