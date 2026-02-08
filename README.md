@@ -134,6 +134,8 @@ Cloudflare Workers 提供免费的边缘计算服务，通过 GitHub Actions 可
 | `NEXT_PUBLIC_STORAGE_TYPE` | 存储类型              | `upstash`                |
 | `UPSTASH_URL`              | Upstash Redis URL     | `https://xxx.upstash.io` |
 | `UPSTASH_TOKEN`            | Upstash Redis Token   | `your_upstash_token`     |
+| `PROJECT_NAME`            | 自定义项目名称（用于 wrangler.toml） | `moontv-plus`          |
+| `D1_DATABASE_NAME`        | 自定义 D1 数据库名称（用于 wrangler.toml） | `moontvplus`           |
 
 **3. 触发部署**
 
