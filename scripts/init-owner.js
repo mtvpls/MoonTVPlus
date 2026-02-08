@@ -36,7 +36,7 @@ ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash, role
   const fs = require('fs');
   fs.writeFileSync('./init_owner.sql', sql);
   console.log('\n已生成 init_owner.sql 文件');
-  console.log('运行命令: npx wrangler d1 execute mdhfuep --file=init_owner.sql --remote');
+  console.log('运行命令: npx wrangler d1 execute <your-database-name> --file=init_owner.sql --remote');
 }
 
 main().catch(console.error);
