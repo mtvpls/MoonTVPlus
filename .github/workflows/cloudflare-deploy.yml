@@ -68,8 +68,8 @@ jobs:
           echo "CONFIG_SUBSCRIPTION_URL=${{ secrets.CONFIG_SUBSCRIPTION_URL }}" >> $GITHUB_ENV
           echo "ENABLE_TVBOX_SUBSCRIBE=${{ secrets.ENABLE_TVBOX_SUBSCRIBE }}" >> $GITHUB_ENV
           echo "TVBOX_SUBSCRIBE_TOKEN=${{ secrets.TVBOX_SUBSCRIBE_TOKEN }}" >> $GITHUB_ENV
-           echo "TVBOX_BLOCKED_SOURCES=${{ secrets.TVBOX_BLOCKED_SOURCES }}" >> $GITHUB_ENV
-           echo "D1_DATABASE_ID=${{ secrets.D1_DATABASE_ID }}" >> $GITHUB_ENV
+          echo "TVBOX_BLOCKED_SOURCES=${{ secrets.TVBOX_BLOCKED_SOURCES }}" >> $GITHUB_ENV
+          echo "D1_DATABASE_ID=${{ secrets.D1_DATABASE_ID }}" >> $GITHUB_ENV
 
       - name: Replace D1 Database ID in wrangler.toml
         run: |
@@ -124,8 +124,8 @@ jobs:
           append_var "CONFIG_SUBSCRIPTION_URL" "${{ secrets.CONFIG_SUBSCRIPTION_URL }}"
           append_var "ENABLE_TVBOX_SUBSCRIBE" "${{ secrets.ENABLE_TVBOX_SUBSCRIBE }}"
           append_var "TVBOX_SUBSCRIBE_TOKEN" "${{ secrets.TVBOX_SUBSCRIBE_TOKEN }}"
-           append_var "TVBOX_BLOCKED_SOURCES" "${{ secrets.TVBOX_BLOCKED_SOURCES }}"
-           append_var "D1_DATABASE_ID" "${{ secrets.D1_DATABASE_ID }}"
+          append_var "TVBOX_BLOCKED_SOURCES" "${{ secrets.TVBOX_BLOCKED_SOURCES }}"
+          append_var "D1_DATABASE_ID" "${{ secrets.D1_DATABASE_ID }}"
 
           echo "Updated wrangler.toml:"
           cat wrangler.toml
