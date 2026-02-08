@@ -1,4 +1,4 @@
-name = "mdhfuep"
+name = "moontv-plus"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 main = ".open-next/worker.js"
@@ -12,7 +12,7 @@ binding = "ASSETS"
 # D1 数据库绑定
 [[d1_databases]]
 binding = "DB"
-database_name = "mdhfuep"
+database_name = "moontvplus"
 database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 
 [vars]
