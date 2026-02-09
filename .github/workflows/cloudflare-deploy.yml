@@ -70,14 +70,14 @@ jobs:
           echo "INIT_CONFIG=${{ secrets.INIT_CONFIG }}" >> $GITHUB_ENV
           echo "CONFIG_SUBSCRIPTION_URL=${{ secrets.CONFIG_SUBSCRIPTION_URL }}" >> $GITHUB_ENV
 
-      - name: Replace D1 Database ID in wrangler.toml
-        run: |
-          if [ -n "${{ secrets.D1_DATABASE_ID }}" ]; then
-            sed -i 's/REPLACE_WITH_YOUR_D1_DATABASE_ID/${{ secrets.D1_DATABASE_ID }}/g' wrangler.toml
-            echo "D1 Database ID replaced successfully"
-          else
-            echo "D1_DATABASE_ID secret not set, skipping replacement"
-          fi
+      # - name: Replace D1 Database ID in wrangler.toml
+      #   run: |
+      #     if [ -n "${{ secrets.D1_DATABASE_ID }}" ]; then
+      #       sed -i 's/REPLACE_WITH_YOUR_D1_DATABASE_ID/${{ secrets.D1_DATABASE_ID }}/g' wrangler.toml
+      #       echo "D1 Database ID replaced successfully"
+      #     else
+      #       echo "D1_DATABASE_ID secret not set, skipping replacement"
+      #     fi
 
       - name: Update wrangler.toml with environment variables
         run: |
@@ -131,23 +131,23 @@ jobs:
       - name: Install Wrangler
         run: pnpm add -g wrangler@4.60.0
 
-      - name: Run D1 Database Migrations
-        run: |
-          if [ -z "${{ secrets.D1_DATABASE_ID }}" ]; then
-            echo "D1_DATABASE_ID not set, skipping migrations"
-            exit 0
-          fi
+      # - name: Run D1 Database Migrations
+      #   run: |
+      #     if [ -z "${{ secrets.D1_DATABASE_ID }}" ]; then
+      #       echo "D1_DATABASE_ID not set, skipping migrations"
+      #       exit 0
+      #     fi
 
-          echo "Running D1 database migrations..."
+      #     echo "Running D1 database migrations..."
 
-          for migration_file in ./migrations/*.sql; do
-            if [ -f "$migration_file" ]; then
-              echo "Executing migration: $(basename $migration_file)"
-              wrangler d1 execute moontvplus --remote --file="$migration_file" || echo "⚠️ Migration may have been skipped (already applied)"
-            fi
-          done
+      #     for migration_file in ./migrations/*.sql; do
+      #       if [ -f "$migration_file" ]; then
+      #         echo "Executing migration: $(basename $migration_file)"
+      #         wrangler d1 execute moontvplus --remote --file="$migration_file" || echo "⚠️ Migration may have been skipped (already applied)"
+      #       fi
+      #     done
 
-          echo "✅ Migrations completed"
+          # echo "✅ Migrations completed"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
