@@ -14,11 +14,18 @@ export const runtime = 'nodejs';
  */
 function cleanPath(path: string): string {
   // 移除 UTF-8 BOM (U+FEFF) 和其他零宽度字符
-  return path
+  let cleaned = path
     .replace(/^\uFEFF/, '') // 移除开头的 BOM
     .replace(/\uFEFF/g, '') // 移除所有 BOM
     .replace(/[\u200B-\u200D\uFEFF]/g, '') // 移除零宽度字符
     .trim(); // 移除首尾空白
+
+  // 移除末尾的 /（除非路径就是 /）
+  if (cleaned.length > 1 && cleaned.endsWith('/')) {
+    cleaned = cleaned.slice(0, -1);
+  }
+
+  return cleaned;
 }
 
 /**

@@ -359,6 +359,13 @@ export default function MusicPage() {
     }
   }, [playRecords, pendingSongToPlay]);
 
+  // 同步音量状态到 audio 元素
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume / 100;
+    }
+  }, [volume]);
+
   // 执行前端 transform（用于 Cloudflare 环境）
   const executeTransform = (data: any) => {
     if (data && typeof data === 'object' && data.__transform) {
@@ -1171,6 +1178,52 @@ export default function MusicPage() {
     }
   };
 
+  // 触摸/鼠标滑动音量调节（移动端兼容）
+  const handleVolumeSliderInteraction = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const slider = e.currentTarget;
+    const rect = slider.getBoundingClientRect();
+
+    const updateVolume = (clientY: number) => {
+      // 计算相对于滑块顶部的位置
+      const y = clientY - rect.top;
+      // 限制在滑块范围内
+      const clampedY = Math.max(0, Math.min(rect.height, y));
+      // 从上到下：0% -> 100%，从下到上：100% -> 0%
+      const percentage = 100 - (clampedY / rect.height) * 100;
+      const newVolume = Math.round(percentage);
+
+      setVolume(newVolume);
+      if (audioRef.current) {
+        audioRef.current.volume = newVolume / 100;
+      }
+    };
+
+    // 获取初始触摸/点击位置
+    const clientY = 'touches' in e ? e.touches[0]?.clientY || 0 : e.clientY;
+    updateVolume(clientY);
+
+    const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
+      moveEvent.preventDefault();
+      const moveClientY = 'touches' in moveEvent ? moveEvent.touches[0]?.clientY || 0 : moveEvent.clientY;
+      updateVolume(moveClientY);
+    };
+
+    const handleEnd = () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+    };
+
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd);
+  };
+
   // PiP 窗口管理
   const togglePiPLyrics = () => {
     if (!('documentPictureInPicture' in window)) {
@@ -1939,18 +1992,14 @@ export default function MusicPage() {
                     <div className="bg-zinc-800/95 backdrop-blur-sm rounded-lg p-3 shadow-xl border border-white/10">
                       <div className="flex flex-col items-center gap-2">
                         <span className="text-xs text-zinc-400 font-mono">{volume}</span>
-                        <div className="h-24 w-1 bg-white/10 rounded-full relative">
+                        <div
+                          className="h-24 w-6 bg-white/10 rounded-full relative cursor-pointer select-none"
+                          onMouseDown={handleVolumeSliderInteraction}
+                          onTouchStart={handleVolumeSliderInteraction}
+                        >
                           <div
                             className="absolute bottom-0 left-0 right-0 bg-green-500 rounded-full transition-all pointer-events-none"
                             style={{ height: `${volume}%` }}
-                          />
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={volume}
-                            onChange={handleVolumeChange}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer [writing-mode:bt-lr] [-webkit-appearance:slider-vertical]"
                           />
                         </div>
                       </div>

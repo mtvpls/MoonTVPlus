@@ -579,6 +579,7 @@ export default function PrivateLibraryPage() {
             <button
               onClick={() => router.push('/movie-request')}
               className='flex items-center gap-2 px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors'
+              style={{ marginTop: '10px' }}
             >
               <Film size={20} />
               <span>求片</span>

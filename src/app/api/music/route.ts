@@ -125,13 +125,15 @@ async function replaceAudioUrlsWithOpenList(
   quality: string,
   cachePath: string
 ): Promise<any> {
-  if (!openListClient || !data?.data) {
+  // 获取配置，检查是否启用 OpenList 缓存
+  const config = await getConfig();
+  const cacheEnabled = config?.MusicConfig?.OpenListCacheEnabled ?? false;
+  const cacheProxyEnabled = config?.MusicConfig?.OpenListCacheProxyEnabled ?? true;
+
+  // 如果没有启用 OpenList 缓存，直接返回原数据
+  if (!cacheEnabled || !openListClient || !data?.data) {
     return data;
   }
-
-  // 获取配置，检查是否启用缓存代理
-  const config = await getConfig();
-  const cacheProxyEnabled = config?.MusicConfig?.OpenListCacheProxyEnabled ?? true;
 
   // TuneHub 返回的数据结构是 { code: 0, data: { data: [...], total: 1 } }
   // 需要提取内层的 data 数组

@@ -151,6 +151,28 @@ export async function POST(req: NextRequest) {
           } catch (err) {
             console.error(`导入用户 ${username} 失败:`, err);
           }
+        } else if (storageType === 'postgres') {
+          // Postgres 存储：使用 createUserWithHashedPassword 方法
+          try {
+            if (typeof storage.createUserWithHashedPassword === 'function') {
+              await storage.createUserWithHashedPassword(
+                username,
+                user.passwordV2, // 已经是hash过的密码
+                role,
+                createdAt,
+                userV2?.tags,
+                userV2?.oidcSub,
+                userV2?.enabledApis,
+                userV2?.banned
+              );
+              importedCount++;
+              console.log(`用户 ${username} 导入成功 (Postgres)`);
+            } else {
+              console.error(`Postgres storage 缺少 createUserWithHashedPassword 方法`);
+            }
+          } catch (err) {
+            console.error(`导入用户 ${username} 失败:`, err);
+          }
         } else {
           // Redis 存储：直接设置用户信息
           const userInfoKey = `user:${username}:info`;

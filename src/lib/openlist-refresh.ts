@@ -254,7 +254,8 @@ async function performScan(
       const pageFolders = listResponse.data.content.filter((item) => item.is_dir);
       folders.push(...pageFolders);
 
-      if (folders.length >= total) {
+      // 判断是否还有更多数据：当前页为 null 或数据量小于 pageSize 说明已经是最后一页
+      if (!listResponse.data.content || listResponse.data.content.length < pageSize) {
         break;
       }
 

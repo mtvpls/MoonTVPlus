@@ -3621,11 +3621,6 @@ const EmbyConfigComponent = ({
 
   // 删除源
   const handleDelete = async (source: any) => {
-    if (sources.length === 1) {
-      showError('至少需要保留一个Emby源', showAlert);
-      return;
-    }
-
     if (!confirm(`确定要删除 "${source.name}" 吗？`)) {
       return;
     }

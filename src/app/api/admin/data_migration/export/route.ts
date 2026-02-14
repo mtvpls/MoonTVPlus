@@ -170,6 +170,14 @@ async function getUserPasswordV2(username: string): Promise<string | null> {
     // 检查存储类型
     const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
 
+    // PostgreSQL 存储：使用 getUserPasswordHash 方法
+    if (storageType === 'postgres') {
+      if (typeof storage.getUserPasswordHash === 'function') {
+        return await storage.getUserPasswordHash(username);
+      }
+      return null;
+    }
+
     // D1 存储：使用 getUserPasswordHash 方法
     if (storageType === 'd1') {
       if (typeof storage.getUserPasswordHash === 'function') {
