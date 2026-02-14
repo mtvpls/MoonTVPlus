@@ -1,4 +1,12 @@
 /** @type {import('next').NextConfig} */
+const nextConfig = {
+  experimental: {
+    dynamicIO: true
+  }
+}
+
+module.exports = nextConfig
+
 /* eslint-disable @typescript-eslint/no-var-requires */
 
 // 检测是否为 Cloudflare Pages 构建

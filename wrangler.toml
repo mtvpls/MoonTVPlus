@@ -10,10 +10,10 @@ directory = ".open-next/assets"
 binding = "ASSETS"
 
 # D1 数据库绑定
-[[d1_databases]]
-binding = "DB"
-database_name = "moontvplus"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "moontvplus"
+# database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 
 [vars]
 NODE_ENV = "production"
