@@ -22,6 +22,7 @@ import {
   Monitor,
   MoveDown,
   MoveUp,
+  Package,
   Rss,
   Settings,
   Shield,
@@ -65,6 +66,8 @@ export const UserMenu: React.FC = () => {
   const [isFavoritesPanelOpen, setIsFavoritesPanelOpen] = useState(false);
   const [isEmailSettingsOpen, setIsEmailSettingsOpen] = useState(false);
   const [isDeviceManagementOpen, setIsDeviceManagementOpen] = useState(false);
+  const [isEcoAppsOpen, setIsEcoAppsOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
   const [authInfo, setAuthInfo] = useState<AuthInfo | null>(null);
   const [storageType, setStorageType] = useState<string>('localstorage');
   const [mounted, setMounted] = useState(false);
@@ -78,7 +81,7 @@ export const UserMenu: React.FC = () => {
 
   // Body 滚动锁定 - 使用 overflow 方式避免布局问题
   useEffect(() => {
-    if (isSettingsOpen || isChangePasswordOpen || isSubscribeOpen || isOfflineDownloadPanelOpen || isEmailSettingsOpen || isDeviceManagementOpen) {
+    if (isSettingsOpen || isChangePasswordOpen || isSubscribeOpen || isOfflineDownloadPanelOpen || isEmailSettingsOpen || isDeviceManagementOpen || isEcoAppsOpen || isReportOpen) {
       const body = document.body;
       const html = document.documentElement;
 
@@ -97,7 +100,7 @@ export const UserMenu: React.FC = () => {
         html.style.overflow = originalHtmlOverflow;
       };
     }
-  }, [isSettingsOpen, isChangePasswordOpen, isSubscribeOpen, isOfflineDownloadPanelOpen, isEmailSettingsOpen, isDeviceManagementOpen]);
+  }, [isSettingsOpen, isChangePasswordOpen, isSubscribeOpen, isOfflineDownloadPanelOpen, isEmailSettingsOpen, isDeviceManagementOpen, isEcoAppsOpen]);
 
   // 设置相关状态
   const [defaultAggregateSearch, setDefaultAggregateSearch] = useState(true);
@@ -121,6 +124,8 @@ export const UserMenu: React.FC = () => {
   const [danmakuMaxCount, setDanmakuMaxCount] = useState(0);
   const [danmakuHeatmapDisabled, setDanmakuHeatmapDisabled] = useState(false);
   const [searchTraditionalToSimplified, setSearchTraditionalToSimplified] = useState(false);
+  const [exactSearch, setExactSearch] = useState(true);
+  const [maxConcurrentDownloads, setMaxConcurrentDownloads] = useState(6);
 
   // 邮件通知设置
   const [userEmail, setUserEmail] = useState('');
@@ -470,6 +475,18 @@ export const UserMenu: React.FC = () => {
       if (savedSearchTraditionalToSimplified !== null) {
         setSearchTraditionalToSimplified(savedSearchTraditionalToSimplified === 'true');
       }
+
+      // 加载精确搜索设置
+      const savedExactSearch = localStorage.getItem('exactSearch');
+      if (savedExactSearch !== null) {
+        setExactSearch(savedExactSearch === 'true');
+      }
+
+      // 加载最大同时下载限制设置
+      const savedMaxConcurrentDownloads = localStorage.getItem('maxConcurrentDownloads');
+      if (savedMaxConcurrentDownloads !== null) {
+        setMaxConcurrentDownloads(Number(savedMaxConcurrentDownloads));
+      }
     }
   }, []);
 
@@ -811,6 +828,13 @@ export const UserMenu: React.FC = () => {
     }
   };
 
+  const handleMaxConcurrentDownloadsChange = (value: number) => {
+    setMaxConcurrentDownloads(value);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('maxConcurrentDownloads', String(value));
+    }
+  };
+
   const handleFluidSearchToggle = (value: boolean) => {
     setFluidSearch(value);
     if (typeof window !== 'undefined') {
@@ -926,6 +950,13 @@ export const UserMenu: React.FC = () => {
     setSearchTraditionalToSimplified(value);
     if (typeof window !== 'undefined') {
       localStorage.setItem('searchTraditionalToSimplified', String(value));
+    }
+  };
+
+  const handleExactSearchToggle = (value: boolean) => {
+    setExactSearch(value);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('exactSearch', String(value));
     }
   };
 
@@ -1284,6 +1315,18 @@ export const UserMenu: React.FC = () => {
               <span className='font-medium'>订阅</span>
             </button>
           )}
+
+          {/* 生态应用按钮 */}
+          <button
+            onClick={() => {
+              setIsOpen(false);
+              setIsEcoAppsOpen(true);
+            }}
+            className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm'
+          >
+            <Package className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+            <span className='font-medium'>生态应用</span>
+          </button>
 
           {/* 分割线 */}
           <div className='my-1 border-t border-gray-200 dark:border-gray-700'></div>
@@ -1884,6 +1927,93 @@ export const UserMenu: React.FC = () => {
                         <div className='absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-5'></div>
                       </div>
                     </label>
+                  </div>
+
+                  {/* 精确搜索 */}
+                  <div className='flex items-center justify-between'>
+                    <div>
+                      <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                        精确搜索
+                      </h4>
+                      <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                        开启后，搜索结果将过滤掉不包含搜索词的内容
+                      </p>
+                    </div>
+                    <label className='flex items-center cursor-pointer'>
+                      <div className='relative'>
+                        <input
+                          type='checkbox'
+                          className='sr-only peer'
+                          checked={exactSearch}
+                          onChange={(e) => handleExactSearchToggle(e.target.checked)}
+                        />
+                        <div className='w-11 h-6 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>
+                        <div className='absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-5'></div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* 分割线 */}
+                  <div className='border-t border-gray-200 dark:border-gray-700'></div>
+
+                  {/* 最大同时下载限制 */}
+                  <div className='space-y-2'>
+                    <div>
+                      <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                        最大同时下载限制
+                      </h4>
+                      <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                        控制播放页面下载时的同时下载数量
+                      </p>
+                    </div>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-xs text-gray-600 dark:text-gray-400'>
+                        同时下载数量
+                      </span>
+                      <span className='text-xs font-medium text-gray-700 dark:text-gray-300'>
+                        {maxConcurrentDownloads}个
+                      </span>
+                    </div>
+                    <div className='flex items-center gap-2'>
+                      <input
+                        type='range'
+                        min='1'
+                        max='10'
+                        step='1'
+                        value={maxConcurrentDownloads}
+                        onChange={(e) => handleMaxConcurrentDownloadsChange(Number(e.target.value))}
+                        className='flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700'
+                        style={{
+                          background: `linear-gradient(to right, #10b981 0%, #10b981 ${((maxConcurrentDownloads - 1) / (10 - 1)) * 100}%, #e5e7eb ${((maxConcurrentDownloads - 1) / (10 - 1)) * 100}%, #e5e7eb 100%)`
+                        }}
+                      />
+                    </div>
+                    <div className='flex justify-between text-xs text-gray-500 dark:text-gray-400'>
+                      <button
+                        onClick={() => handleMaxConcurrentDownloadsChange(1)}
+                        className={`px-2 py-0.5 rounded ${maxConcurrentDownloads === 1 ? 'bg-green-500 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                      >
+                        1个
+                      </button>
+                      <button
+                        onClick={() => handleMaxConcurrentDownloadsChange(3)}
+                        className={`px-2 py-0.5 rounded ${maxConcurrentDownloads === 3 ? 'bg-green-500 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                      >
+                        3个
+                      </button>
+                      <button
+                        onClick={() => handleMaxConcurrentDownloadsChange(6)}
+                        className={`px-2 py-0.5 rounded ${maxConcurrentDownloads === 6 ? 'bg-green-500 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                      >
+                        6个
+                      </button>
+                      <button
+                        onClick={() => handleMaxConcurrentDownloadsChange(10)}
+                        className={`px-2 py-0.5 rounded ${maxConcurrentDownloads === 10 ? 'bg-green-500 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                      >
+                        10个
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2859,6 +2989,256 @@ export const UserMenu: React.FC = () => {
     </>
   );
 
+  // 举报信息弹窗
+  const reportPanel = (
+    <>
+      {/* 背景遮罩 */}
+      <div
+        className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1002]'
+        onClick={() => setIsReportOpen(false)}
+        onTouchMove={(e) => {
+          e.preventDefault();
+        }}
+        onWheel={(e) => {
+          e.preventDefault();
+        }}
+        style={{
+          touchAction: 'none',
+        }}
+      />
+
+      {/* 举报信息面板 */}
+      <div
+        className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white dark:bg-gray-900 rounded-xl shadow-xl z-[1003] overflow-hidden'
+      >
+        <div
+          className='h-full max-h-[70vh] flex flex-col'
+          data-panel-content
+          onTouchMove={(e) => {
+            e.stopPropagation();
+          }}
+          style={{
+            touchAction: 'auto',
+          }}
+        >
+          {/* 标题栏 */}
+          <div className='flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700'>
+            <h3 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+              耻辱柱
+            </h3>
+            <button
+              onClick={() => setIsReportOpen(false)}
+              className='w-8 h-8 p-1 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors'
+              aria-label='Close'
+            >
+              <X className='w-full h-full' />
+            </button>
+          </div>
+
+          {/* 内容区域 */}
+          <div className='flex-1 overflow-y-auto p-6'>
+            <div className='bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4'>
+              <p className='text-gray-800 dark:text-gray-200 leading-relaxed'>
+                抄袭狗<span className='font-bold text-red-600 dark:text-red-400'>SzeMeng76</span>毫无廉耻，盯着本项目的commit区，疯狂抄袭。警告亦全当看不见，实为开源界耻辱。
+              </p>
+              <p className='text-gray-800 dark:text-gray-200 leading-relaxed mt-3'>
+                超分，观影室，豆瓣反爬，精确搜索等等等等，直接抄袭，最不要脸的就是，刚更新一版，几小时后直接抄走。
+              </p>
+            </div>
+          </div>
+
+          {/* 底部按钮 */}
+          <div className='p-6 border-t border-gray-200 dark:border-gray-700'>
+            <button
+              onClick={() => setIsReportOpen(false)}
+              className='w-full px-4 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium rounded-lg transition-colors'
+            >
+              我知道了
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  // 生态应用面板内容
+  const ecoAppsPanel = (
+    <>
+      {/* 背景遮罩 */}
+      <div
+        className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000]'
+        onClick={() => setIsEcoAppsOpen(false)}
+        onTouchMove={(e) => {
+          e.preventDefault();
+        }}
+        onWheel={(e) => {
+          e.preventDefault();
+        }}
+        style={{
+          touchAction: 'none',
+        }}
+      />
+
+      {/* 生态应用面板 */}
+      <div
+        className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white dark:bg-gray-900 rounded-xl shadow-xl z-[1001] overflow-hidden'
+      >
+        <div
+          className='h-full max-h-[85vh] flex flex-col'
+          data-panel-content
+          onTouchMove={(e) => {
+            e.stopPropagation();
+          }}
+          style={{
+            touchAction: 'auto',
+          }}
+        >
+          {/* 标题栏 */}
+          <div className='flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700'>
+            <h3 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+              生态应用
+            </h3>
+            <div className='flex items-center gap-2'>
+              {/* 举报按钮 */}
+              <button
+                onClick={() => setIsReportOpen(true)}
+                className='w-8 h-8 p-1 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-lg'
+                aria-label='Report'
+                title='举报抄袭'
+              >
+                🐶
+              </button>
+              {/* 关闭按钮 */}
+              <button
+                onClick={() => setIsEcoAppsOpen(false)}
+                className='w-8 h-8 p-1 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors'
+                aria-label='Close'
+              >
+                <X className='w-full h-full' />
+              </button>
+            </div>
+          </div>
+
+          {/* 应用列表 */}
+          <div className='flex-1 overflow-y-auto p-6'>
+            <div className='grid gap-6 md:grid-cols-1'>
+              {/* MoonTVPlus-PC 客户端 */}
+              <div className='bg-gray-50 dark:bg-gray-800 rounded-lg p-5 border border-gray-200 dark:border-gray-700'>
+                <div className='flex items-start gap-4'>
+                  <div className='flex-shrink-0 relative'>
+                    <img
+                      src='/logo.png'
+                      alt='MoonTVPlus-PC'
+                      className='w-16 h-16 rounded-xl object-cover'
+                    />
+                    <div className='absolute -bottom-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center shadow-lg'>
+                      <Monitor className='w-3.5 h-3.5 text-white' />
+                    </div>
+                  </div>
+                  <div className='flex-1 min-w-0'>
+                    <h4 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2'>
+                      MoonTVPlus-PC客户端
+                    </h4>
+                    <p className='text-sm text-gray-600 dark:text-gray-400 mb-3'>
+                      专为Windows开发的客户端，完美支持私人影库mkv视频
+                    </p>
+                    <a
+                      href='https://github.com/mtvpls/MoonTVPlus-PC/releases'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors'
+                    >
+                      <Download className='w-4 h-4' />
+                      下载
+                      <ExternalLink className='w-3 h-3' />
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Selene 跨平台客户端 */}
+              <div className='bg-gray-50 dark:bg-gray-800 rounded-lg p-5 border border-gray-200 dark:border-gray-700'>
+                <div className='flex items-start gap-4'>
+                  <div className='flex-shrink-0 relative'>
+                    <img
+                      src='/icons/Selene.png'
+                      alt='Selene'
+                      className='w-16 h-16 rounded-xl object-cover'
+                    />
+                    <span className='absolute -top-1 -right-1 px-1.5 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded'>
+                      二开
+                    </span>
+                  </div>
+                  <div className='flex-1 min-w-0'>
+                    <h4 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2'>
+                      Selene 跨平台客户端
+                    </h4>
+                    <p className='text-sm text-gray-600 dark:text-gray-400 mb-3'>
+                      多平台客户端
+                    </p>
+                    <div className='flex flex-wrap gap-2'>
+                      <a
+                        href='https://github.com/mtvpls/Selene-Build/releases'
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        className='inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors'
+                      >
+                        <Download className='w-4 h-4' />
+                        下载
+                        <ExternalLink className='w-3 h-3' />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* OrionTV TV专用客户端 */}
+              <div className='bg-gray-50 dark:bg-gray-800 rounded-lg p-5 border border-gray-200 dark:border-gray-700'>
+                <div className='flex items-start gap-4'>
+                  <div className='flex-shrink-0 relative'>
+                    <img
+                      src='/icons/OrionTV.png'
+                      alt='OrionTV'
+                      className='w-16 h-16 rounded-xl object-cover'
+                    />
+                    <span className='absolute -top-1 -right-1 px-1.5 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded'>
+                      二开
+                    </span>
+                  </div>
+                  <div className='flex-1 min-w-0'>
+                    <h4 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2'>
+                      OrionTV TV专用客户端
+                    </h4>
+                    <p className='text-sm text-gray-600 dark:text-gray-400 mb-3'>
+                      tv专用
+                    </p>
+                    <a
+                      href='https://github.com/mtvpls/MoonTVPlus/releases/tag/OrionTV%E9%80%82%E9%85%8D%E7%89%882'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='inline-flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg transition-colors'
+                    >
+                      <Download className='w-4 h-4' />
+                      下载
+                      <ExternalLink className='w-3 h-3' />
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 底部说明 */}
+          <div className='p-6 pt-4 border-t border-gray-200 dark:border-gray-700'>
+            <p className='text-xs text-gray-500 dark:text-gray-400 text-center'>
+              选择适合您设备的客户端下载使用
+            </p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <>
       <div className='relative'>
@@ -2941,6 +3321,16 @@ export const UserMenu: React.FC = () => {
       {isDeviceManagementOpen &&
         mounted &&
         createPortal(deviceManagementPanel, document.body)}
+
+      {/* 使用 Portal 将生态应用面板渲染到 document.body */}
+      {isEcoAppsOpen &&
+        mounted &&
+        createPortal(ecoAppsPanel, document.body)}
+
+      {/* 使用 Portal 将举报信息面板渲染到 document.body */}
+      {isReportOpen &&
+        mounted &&
+        createPortal(reportPanel, document.body)}
 
       {/* 确认对话框 */}
       {confirmDialog.isOpen &&

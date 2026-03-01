@@ -79,11 +79,21 @@ jobs:
           
       - name: Replace D1 Database ID in wrangler.toml
         run: |
-          if [ -n "${{ secrets.D1_DATABASE_ID }}" ]; then
+          STORAGE_TYPE="${{ secrets.NEXT_PUBLIC_STORAGE_TYPE }}"
+
+          if [ "$STORAGE_TYPE" != "d1" ]; then
+            echo "Storage type is not d1 (current: $STORAGE_TYPE), removing D1 database configuration"
+            # Remove the entire [[d1_databases]] section including the comment
+            sed -i '/^# D1 数据库绑定$/,/^database_id = .*$/d' wrangler.toml
+            # Also remove any remaining [[d1_databases]] block
+            sed -i '/^\[\[d1_databases\]\]$/,/^$/{ /^\[\[d1_databases\]\]$/d; /^binding = /d; /^database_name = /d; /^database_id = /d; }' wrangler.toml
+            echo "D1 configuration removed from wrangler.toml"
+          elif [ -n "${{ secrets.D1_DATABASE_ID }}" ]; then
             sed -i 's/REPLACE_WITH_YOUR_D1_DATABASE_ID/${{ secrets.D1_DATABASE_ID }}/g' wrangler.toml
             echo "D1 Database ID replaced successfully"
           else
-            echo "D1_DATABASE_ID secret not set, skipping replacement"
+            echo "⚠️ Storage type is d1 but D1_DATABASE_ID secret not set"
+            exit 1
           fi
 
       - name: Update wrangler.toml with environment variables
@@ -128,7 +138,13 @@ jobs:
           append_var "KVROCKS_URL" "${{ secrets.KVROCKS_URL }}"
           append_var "INIT_CONFIG" "${{ secrets.INIT_CONFIG }}"
           append_var "CONFIG_SUBSCRIPTION_URL" "${{ secrets.CONFIG_SUBSCRIPTION_URL }}"
-
+          append_var ENABLE_TVBOX_SUBSCRIBE "${{ secrets.ENABLE_TVBOX_SUBSCRIBE }}"
+          append_var TVBOX_SUBSCRIBE_TOKEN "${{ secrets.TVBOX_SUBSCRIBE_TOKEN }}"
+          append_var WATCH_ROOM_ENABLED "${{ secrets.WATCH_ROOM_ENABLED }}"
+          append_var WATCH_ROOM_EXTERNAL_SERVER_AUTH "${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_AUTH }}"
+          append_var WATCH_ROOM_EXTERNAL_SERVER_URL "${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_URL }}"
+          append_var WATCH_ROOM_SERVER_TYPE "${{ secrets.WATCH_ROOM_SERVER_TYPE }}"
+          
           echo "Updated wrangler.toml:"
           cat wrangler.toml
 
@@ -140,6 +156,13 @@ jobs:
 
       - name: Run D1 Database Migrations
         run: |
+          STORAGE_TYPE="${{ secrets.NEXT_PUBLIC_STORAGE_TYPE }}"
+
+          if [ "$STORAGE_TYPE" != "d1" ]; then
+            echo "Storage type is not d1 (current: $STORAGE_TYPE), skipping D1 migrations"
+            exit 0
+          fi
+
           if [ -z "${{ secrets.D1_DATABASE_ID }}" ]; then
             echo "D1_DATABASE_ID not set, skipping migrations"
             exit 0

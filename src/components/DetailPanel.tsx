@@ -8,6 +8,8 @@ import { createPortal } from 'react-dom';
 import { getTMDBImageUrl } from '@/lib/tmdb.client';
 import { processImageUrl } from '@/lib/utils';
 
+import ImageViewer from '@/components/ImageViewer';
+
 interface DetailPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -40,8 +42,8 @@ interface DetailData {
   };
   intro?: string;
   genres?: string[];
-  directors?: Array<{ name: string }>;
-  actors?: Array<{ name: string }>;
+  directors?: Array<{ name: string; profile_path?: string }>;
+  actors?: Array<{ name: string; character?: string; profile_path?: string }>;
   countries?: string[];
   languages?: string[];
   duration?: string;
@@ -91,6 +93,14 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
   const [expandedEpisodes, setExpandedEpisodes] = useState<Set<number>>(new Set());
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [seasonsLoaded, setSeasonsLoaded] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string>('');
+
+  // 数据源状态管理
+  const [currentSource, setCurrentSource] = useState<'douban' | 'bangumi' | 'cms' | 'tmdb'>('tmdb');
+  const [originalSource, setOriginalSource] = useState<'douban' | 'bangumi' | 'cms' | 'tmdb'>('tmdb');
+  const [isUsingTmdb, setIsUsingTmdb] = useState(false);
+  const [originalDetailData, setOriginalDetailData] = useState<DetailData | null>(null);
 
   // 拖动滚动状态
   const [isDragging, setIsDragging] = useState(false);
@@ -98,6 +108,17 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const episodesScrollRef = React.useRef<HTMLDivElement>(null);
+  const actorsScrollRef = React.useRef<HTMLDivElement>(null);
+  const [isActorsDragging, setIsActorsDragging] = useState(false);
+  const [isActorsMouseDown, setIsActorsMouseDown] = useState(false);
+  const [actorsStartX, setActorsStartX] = useState(0);
+  const [actorsScrollLeft, setActorsScrollLeft] = useState(0);
+
+  // 图片点击处理
+  const handleImageClick = (imageUrl: string) => {
+    setSelectedImage(imageUrl);
+    setShowImageViewer(true);
+  };
 
   // 确保组件在客户端挂载后才渲染 Portal
   useEffect(() => {
@@ -208,17 +229,27 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       setError(null);
 
       try {
+        // 如果正在使用 TMDB 数据，强制使用 TMDB
+        if (isUsingTmdb && title) {
+          await fetchTmdbData();
+          return;
+        }
+
         // 优先使用苹果CMS数据（短剧等）
         // 如果 cmsData 存在但 desc 为空，尝试通过 source-detail API 获取
         if (cmsData) {
+          setCurrentSource('cms');
+          setOriginalSource('cms');
           if (cmsData.desc) {
             // 有 desc，直接使用
-            setDetailData({
+            const data = {
               title: title,
               intro: cmsData.desc,
               episodesCount: cmsData.episodes?.length,
               poster: poster ? processImageUrl(poster) : poster,
-            });
+            };
+            setDetailData(data);
+            setOriginalDetailData(data);
             setLoading(false);
             return;
           }
@@ -231,13 +262,15 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               );
               if (response.ok) {
                 const data = await response.json();
-                setDetailData({
+                const detailData = {
                   title: data.title || title,
                   intro: data.desc || '',
                   episodesCount: data.episodes?.length || cmsData.episodes?.length,
                   poster: data.poster ? processImageUrl(data.poster) : poster,
                   year: data.year,
-                });
+                };
+                setDetailData(detailData);
+                setOriginalDetailData(detailData);
                 setLoading(false);
                 return;
               }
@@ -250,6 +283,8 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
 
         // 优先使用 Bangumi ID（因为 isBangumi 为 true 时，doubanId 实际上是 bangumiId）
         if (bangumiId || (isBangumi && doubanId)) {
+          setCurrentSource('bangumi');
+          setOriginalSource('bangumi');
           const actualBangumiId = bangumiId || doubanId;
           const response = await fetch(`https://api.bgm.tv/v0/subjects/${actualBangumiId}`);
           if (!response.ok) {
@@ -257,7 +292,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
           }
           const data = await response.json();
 
-          setDetailData({
+          const detailData = {
             title: data.name_cn || data.name,
             originalTitle: data.name,
             year: data.date ? data.date.substring(0, 4) : undefined,
@@ -272,19 +307,23 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
             genres: data.tags?.map((tag: any) => tag.name).slice(0, 5),
             episodesCount: data.eps,
             releaseDate: data.date,
-          });
+          };
+          setDetailData(detailData);
+          setOriginalDetailData(detailData);
           return;
         }
 
         // 使用豆瓣ID
         if (doubanId && !isBangumi) {
+          setCurrentSource('douban');
+          setOriginalSource('douban');
           const response = await fetch(`/api/douban/detail?id=${doubanId}`);
           if (!response.ok) {
             throw new Error('获取豆瓣详情失败');
           }
           const data = await response.json();
 
-          setDetailData({
+          const detailData = {
             title: data.title,
             originalTitle: data.original_title,
             year: data.year,
@@ -303,113 +342,18 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
             languages: data.languages,
             duration: data.durations?.[0],
             episodesCount: data.episodes_count,
-          });
+          };
+          setDetailData(detailData);
+          setOriginalDetailData(detailData);
           return;
         }
 
         // 使用 TMDB 搜索
         if (title) {
-          // 移除季度信息进行搜索
-          let searchTitle = title;
-          let extractedSeasonNumber = seasonNumber;
-
-          // 匹配各种季度格式: 第一季、第1季、第一部、Season 1、S1等
-          const seasonPatterns = [
-            /第([一二三四五六七八九十\d]+)[季部]/,
-            /Season\s*(\d+)/i,
-            /S(\d+)/i,
-          ];
-
-          for (const pattern of seasonPatterns) {
-            const match = title.match(pattern);
-            if (match) {
-              searchTitle = title.replace(pattern, '').trim();
-              // 如果没有传入seasonNumber,尝试从标题中提取
-              if (!extractedSeasonNumber) {
-                const seasonStr = match[1];
-                // 中文数字转数字
-                const chineseNumbers: Record<string, number> = {
-                  '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
-                  '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
-                };
-                extractedSeasonNumber = chineseNumbers[seasonStr] || parseInt(seasonStr) || undefined;
-              }
-              break;
-            }
-          }
-
-          const searchResponse = await fetch(
-            `/api/tmdb/search?query=${encodeURIComponent(searchTitle)}`
-          );
-          if (!searchResponse.ok) {
-            throw new Error('搜索失败');
-          }
-          const searchData = await searchResponse.json();
-
-          if (searchData.results && searchData.results.length > 0) {
-            const result = searchData.results[0];
-            const detailId = result.id;
-            const mediaType = result.media_type || type;
-
-            // 获取详情
-            const detailResponse = await fetch(`/api/tmdb/detail?id=${detailId}&type=${mediaType}`);
-            if (!detailResponse.ok) {
-              throw new Error('获取TMDB详情失败');
-            }
-            const detailResult = await detailResponse.json();
-
-            // 如果有季度信息,尝试获取季度详情
-            let seasonData = null;
-            if (extractedSeasonNumber && mediaType === 'tv') {
-              try {
-                const seasonResponse = await fetch(
-                  `/api/tmdb/seasons?id=${detailId}&season=${extractedSeasonNumber}`
-                );
-                if (seasonResponse.ok) {
-                  seasonData = await seasonResponse.json();
-                }
-              } catch (err) {
-                console.error('获取季度信息失败', err);
-              }
-            }
-
-            setDetailData({
-              title: mediaType === 'movie' ? detailResult.title : detailResult.name,
-              originalTitle:
-                mediaType === 'movie' ? detailResult.original_title : detailResult.original_name,
-              year:
-                mediaType === 'movie'
-                  ? detailResult.release_date?.substring(0, 4)
-                  : detailResult.first_air_date?.substring(0, 4),
-              poster: detailResult.poster_path
-                ? processImageUrl(getTMDBImageUrl(detailResult.poster_path, 'w500'))
-                : poster,
-              rating: detailResult.vote_average
-                ? {
-                    value: detailResult.vote_average,
-                    count: detailResult.vote_count,
-                  }
-                : undefined,
-              intro: seasonData?.overview || detailResult.overview,
-              genres: detailResult.genres?.map((g: any) => g.name),
-              countries: detailResult.production_countries?.map((c: any) => c.name),
-              languages: detailResult.spoken_languages?.map((l: any) => l.name),
-              duration: detailResult.runtime ? `${detailResult.runtime}分钟` : undefined,
-              episodesCount: seasonData?.episodes?.length || detailResult.number_of_episodes,
-              releaseDate:
-                mediaType === 'movie' ? detailResult.release_date : detailResult.first_air_date,
-              status: detailResult.status,
-              tagline: detailResult.tagline,
-              seasons: detailResult.number_of_seasons,
-              overview: detailResult.overview,
-              tmdbId: detailId,
-              mediaType: mediaType,
-              seasonNumber: extractedSeasonNumber,
-            });
-            return;
-          }
-
-          throw new Error('未找到相关内容');
+          setCurrentSource('tmdb');
+          setOriginalSource('tmdb');
+          await fetchTmdbData();
+          return;
         }
 
         throw new Error('缺少必要的查询参数');
@@ -421,8 +365,251 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       }
     };
 
+    // 提取 TMDB 数据获取逻辑为独立函数
+    const fetchTmdbData = async () => {
+      setCurrentSource('tmdb');
+      // 移除季度信息进行搜索
+      let searchTitle = title;
+      let extractedSeasonNumber = seasonNumber;
+
+      // 匹配各种季度格式: 第一季、第1季、第一部、Season 1、S1等
+      const seasonPatterns = [
+        /第([一二三四五六七八九十\d]+)[季部]/,
+        /Season\s*(\d+)/i,
+        /S(\d+)/i,
+      ];
+
+      for (const pattern of seasonPatterns) {
+        const match = title.match(pattern);
+        if (match) {
+          searchTitle = title.replace(pattern, '').trim();
+          // 如果没有传入seasonNumber,尝试从标题中提取
+          if (!extractedSeasonNumber) {
+            const seasonStr = match[1];
+            // 中文数字转数字
+            const chineseNumbers: Record<string, number> = {
+              '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+              '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+            };
+            extractedSeasonNumber = chineseNumbers[seasonStr] || parseInt(seasonStr) || undefined;
+          }
+          break;
+        }
+      }
+
+      const searchResponse = await fetch(
+        `/api/tmdb/search?query=${encodeURIComponent(searchTitle)}`
+      );
+      if (!searchResponse.ok) {
+        throw new Error('搜索失败');
+      }
+      const searchData = await searchResponse.json();
+
+      if (searchData.results && searchData.results.length > 0) {
+        const result = searchData.results[0];
+        const detailId = result.id;
+        const mediaType = result.media_type || type;
+
+        // 获取详情
+        const detailResponse = await fetch(`/api/tmdb/detail?id=${detailId}&type=${mediaType}`);
+        if (!detailResponse.ok) {
+          throw new Error('获取TMDB详情失败');
+        }
+        const detailResult = await detailResponse.json();
+
+        // 如果有季度信息,尝试获取季度详情
+        let seasonData = null;
+        if (extractedSeasonNumber && mediaType === 'tv') {
+          try {
+            const seasonResponse = await fetch(
+              `/api/tmdb/seasons?id=${detailId}&season=${extractedSeasonNumber}`
+            );
+            if (seasonResponse.ok) {
+              seasonData = await seasonResponse.json();
+            }
+          } catch (err) {
+            console.error('获取季度信息失败', err);
+          }
+        }
+
+        setDetailData({
+          title: mediaType === 'movie' ? detailResult.title : detailResult.name,
+          originalTitle:
+            mediaType === 'movie' ? detailResult.original_title : detailResult.original_name,
+          year:
+            mediaType === 'movie'
+              ? detailResult.release_date?.substring(0, 4)
+              : detailResult.first_air_date?.substring(0, 4),
+          poster: detailResult.poster_path
+            ? processImageUrl(getTMDBImageUrl(detailResult.poster_path, 'w500'))
+            : poster,
+          rating: detailResult.vote_average
+            ? {
+                value: detailResult.vote_average,
+                count: detailResult.vote_count,
+              }
+            : undefined,
+          intro: seasonData?.overview || detailResult.overview,
+          genres: detailResult.genres?.map((g: any) => g.name),
+          countries: detailResult.production_countries?.map((c: any) => c.name),
+          languages: detailResult.spoken_languages?.map((l: any) => l.name),
+          duration: detailResult.runtime ? `${detailResult.runtime}分钟` : undefined,
+          episodesCount: seasonData?.episodes?.length || detailResult.number_of_episodes,
+          releaseDate:
+            mediaType === 'movie' ? detailResult.release_date : detailResult.first_air_date,
+          status: detailResult.status,
+          tagline: detailResult.tagline,
+          seasons: detailResult.number_of_seasons,
+          overview: detailResult.overview,
+          tmdbId: detailId,
+          mediaType: mediaType,
+          seasonNumber: extractedSeasonNumber,
+        });
+        return;
+      }
+
+      throw new Error('未找到相关内容');
+    };
+
     fetchDetail();
-  }, [isOpen, doubanId, bangumiId, isBangumi, tmdbId, title, type, seasonNumber, poster, cmsData, sourceId, source]);
+  }, [isOpen, doubanId, bangumiId, isBangumi, tmdbId, title, type, seasonNumber, poster, cmsData, sourceId, source, isUsingTmdb]);
+
+  // 切换数据源的函数
+  const handleToggleSource = async () => {
+    if (currentSource === 'tmdb') {
+      // 切换回原始数据源
+      if (originalDetailData) {
+        setDetailData(originalDetailData);
+        setCurrentSource(originalSource);
+        setError(null);
+      }
+    } else {
+      // 切换到 TMDB
+      // 保存当前数据
+      if (detailData && !originalDetailData) {
+        setOriginalDetailData(detailData);
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        await fetchTmdbDataForToggle();
+      } catch (err) {
+        console.error('切换到TMDB失败:', err);
+        setError(err instanceof Error ? err.message : '切换到TMDB失败');
+        // 切换失败，但保持 currentSource 为 tmdb，这样可以显示切换回按钮
+        setCurrentSource('tmdb');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // 用于切换时获取 TMDB 数据
+  const fetchTmdbDataForToggle = async () => {
+    // 移除季度信息进行搜索
+    let searchTitle = title;
+    let extractedSeasonNumber = seasonNumber;
+
+    // 匹配各种季度格式: 第一季、第1季、第一部、Season 1、S1等
+    const seasonPatterns = [
+      /第([一二三四五六七八九十\d]+)[季部]/,
+      /Season\s*(\d+)/i,
+      /S(\d+)/i,
+    ];
+
+    for (const pattern of seasonPatterns) {
+      const match = title.match(pattern);
+      if (match) {
+        searchTitle = title.replace(pattern, '').trim();
+        // 如果没有传入seasonNumber,尝试从标题中提取
+        if (!extractedSeasonNumber) {
+          const seasonStr = match[1];
+          // 中文数字转数字
+          const chineseNumbers: Record<string, number> = {
+            '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+            '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+          };
+          extractedSeasonNumber = chineseNumbers[seasonStr] || parseInt(seasonStr) || undefined;
+        }
+        break;
+      }
+    }
+
+    const searchResponse = await fetch(
+      `/api/tmdb/search?query=${encodeURIComponent(searchTitle)}`
+    );
+    if (!searchResponse.ok) {
+      throw new Error('搜索失败');
+    }
+    const searchData = await searchResponse.json();
+
+    if (searchData.results && searchData.results.length > 0) {
+      const result = searchData.results[0];
+      const detailId = result.id;
+      const mediaType = result.media_type || type;
+
+      // 获取详情
+      const detailResponse = await fetch(`/api/tmdb/detail?id=${detailId}&type=${mediaType}`);
+      if (!detailResponse.ok) {
+        throw new Error('获取TMDB详情失败');
+      }
+      const detailResult = await detailResponse.json();
+
+      // 如果有季度信息,尝试获取季度详情
+      let seasonData = null;
+      if (extractedSeasonNumber && mediaType === 'tv') {
+        try {
+          const seasonResponse = await fetch(
+            `/api/tmdb/seasons?id=${detailId}&season=${extractedSeasonNumber}`
+          );
+          if (seasonResponse.ok) {
+            seasonData = await seasonResponse.json();
+          }
+        } catch (err) {
+          console.error('获取季度信息失败', err);
+        }
+      }
+
+      setDetailData({
+        title: mediaType === 'movie' ? detailResult.title : detailResult.name,
+        originalTitle:
+          mediaType === 'movie' ? detailResult.original_title : detailResult.original_name,
+        year:
+          mediaType === 'movie'
+            ? detailResult.release_date?.substring(0, 4)
+            : detailResult.first_air_date?.substring(0, 4),
+        poster: detailResult.poster_path
+          ? processImageUrl(getTMDBImageUrl(detailResult.poster_path, 'w500'))
+          : poster,
+        rating: detailResult.vote_average
+          ? {
+              value: detailResult.vote_average,
+              count: detailResult.vote_count,
+            }
+          : undefined,
+        intro: seasonData?.overview || detailResult.overview,
+        genres: detailResult.genres?.map((g: any) => g.name),
+        countries: detailResult.production_countries?.map((c: any) => c.name),
+        languages: detailResult.spoken_languages?.map((l: any) => l.name),
+        duration: detailResult.runtime ? `${detailResult.runtime}分钟` : undefined,
+        episodesCount: seasonData?.episodes?.length || detailResult.number_of_episodes,
+        releaseDate:
+          mediaType === 'movie' ? detailResult.release_date : detailResult.first_air_date,
+        status: detailResult.status,
+        tagline: detailResult.tagline,
+        seasons: detailResult.number_of_seasons,
+        overview: detailResult.overview,
+        tmdbId: detailId,
+        mediaType: mediaType,
+        seasonNumber: extractedSeasonNumber,
+      });
+      setCurrentSource('tmdb');
+      return;
+    }
+
+    throw new Error('未找到相关内容');
+  };
 
   // 异步获取季度和集数详情（仅TMDB）
   useEffect(() => {
@@ -463,6 +650,51 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
 
     fetchSeasonData();
   }, [detailData?.tmdbId, detailData?.mediaType, detailData?.seasonNumber, seasonsLoaded]);
+
+  // 异步获取演职人员信息（仅TMDB）
+  useEffect(() => {
+    if (!detailData?.tmdbId || !detailData?.mediaType || currentSource !== 'tmdb') {
+      return;
+    }
+
+    // 如果已经有演员信息，不重复获取
+    if (detailData.actors && detailData.actors.length > 0) {
+      return;
+    }
+
+    const fetchCredits = async () => {
+      try {
+        const creditsResponse = await fetch(
+          `/api/tmdb/credits?id=${detailData.tmdbId}&type=${detailData.mediaType}`
+        );
+        if (!creditsResponse.ok) return;
+        const creditsData = await creditsResponse.json();
+
+        // 更新演员和导演信息
+        setDetailData(prev => prev ? {
+          ...prev,
+          directors: creditsData.crew
+            ?.filter((person: any) => person.job === 'Director')
+            .slice(0, 5)
+            .map((person: any) => ({
+              name: person.name,
+              profile_path: person.profile_path,
+            })) || prev.directors,
+          actors: creditsData.cast
+            ?.slice(0, 15)
+            .map((person: any) => ({
+              name: person.name,
+              character: person.character,
+              profile_path: person.profile_path,
+            })) || prev.actors,
+        } : null);
+      } catch (err) {
+        console.error('获取演职人员信息失败:', err);
+      }
+    };
+
+    fetchCredits();
+  }, [detailData?.tmdbId, detailData?.mediaType, currentSource, detailData?.actors]);
 
   // 切换季度时获取集数
   const handleSeasonChange = async (seasonNumber: number) => {
@@ -552,6 +784,54 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
     }
   };
 
+  // 演员列表拖动滚动处理函数
+  const handleActorsMouseDown = (e: React.MouseEvent) => {
+    if (!actorsScrollRef.current) return;
+    setIsActorsMouseDown(true);
+    setActorsStartX(e.pageX - actorsScrollRef.current.offsetLeft);
+    setActorsScrollLeft(actorsScrollRef.current.scrollLeft);
+  };
+
+  const handleActorsMouseMove = (e: React.MouseEvent) => {
+    if (!isActorsMouseDown || !actorsScrollRef.current) return;
+
+    const x = e.pageX - actorsScrollRef.current.offsetLeft;
+    const distance = Math.abs(x - actorsStartX);
+
+    // 只有移动超过5px才进入拖动模式
+    if (distance > 5 && !isActorsDragging) {
+      setIsActorsDragging(true);
+      actorsScrollRef.current.style.cursor = 'grabbing';
+      actorsScrollRef.current.style.userSelect = 'none';
+    }
+
+    if (isActorsDragging) {
+      e.preventDefault();
+      const walk = (x - actorsStartX) * 2; // 滚动速度倍数
+      actorsScrollRef.current.scrollLeft = actorsScrollLeft - walk;
+    }
+  };
+
+  const handleActorsMouseUp = () => {
+    setIsActorsMouseDown(false);
+    setIsActorsDragging(false);
+    if (actorsScrollRef.current) {
+      actorsScrollRef.current.style.cursor = 'grab';
+      actorsScrollRef.current.style.userSelect = 'auto';
+    }
+  };
+
+  const handleActorsMouseLeave = () => {
+    if (isActorsMouseDown || isActorsDragging) {
+      setIsActorsMouseDown(false);
+      setIsActorsDragging(false);
+      if (actorsScrollRef.current) {
+        actorsScrollRef.current.style.cursor = 'grab';
+        actorsScrollRef.current.style.userSelect = 'auto';
+      }
+    }
+  };
+
   if (!isVisible || !mounted) return null;
 
   const content = (
@@ -598,8 +878,43 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
           )}
 
           {error && (
-            <div className="p-6 text-center">
-              <p className="text-red-500 dark:text-red-400">{error}</p>
+            <div className="p-6">
+              <div className="text-center mb-6">
+                <p className="text-red-500 dark:text-red-400">{error}</p>
+              </div>
+
+              {/* 数据源显示和切换 - 错误时也显示 */}
+              <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">数据来源:</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 uppercase">
+                      {currentSource === 'douban' && 'Douban'}
+                      {currentSource === 'bangumi' && 'Bangumi'}
+                      {currentSource === 'cms' && 'CMS'}
+                      {currentSource === 'tmdb' && 'TMDB'}
+                    </span>
+                  </div>
+                  {currentSource !== 'tmdb' && (
+                    <button
+                      onClick={handleToggleSource}
+                      disabled={loading}
+                      className="px-3 py-1.5 text-sm rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      切换到 TMDB
+                    </button>
+                  )}
+                  {currentSource === 'tmdb' && originalSource !== 'tmdb' && originalDetailData && (
+                    <button
+                      onClick={handleToggleSource}
+                      disabled={loading}
+                      className="px-3 py-1.5 text-sm rounded-lg bg-gray-500 hover:bg-gray-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      切换回 {originalSource === 'douban' ? 'Douban' : originalSource === 'bangumi' ? 'Bangumi' : 'CMS'}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -608,7 +923,10 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               {/* 海报和基本信息 */}
               <div className="flex gap-6 mb-6">
                 {detailData.poster && (
-                  <div className="relative w-32 h-48 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0">
+                  <div
+                    className="relative w-32 h-48 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => handleImageClick(detailData.poster!)}
+                  >
                     <Image src={detailData.poster} alt={detailData.title} fill className="object-cover" draggable={false} />
                   </div>
                 )}
@@ -709,9 +1027,67 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                     <Users size={16} />
                     演员
                   </h4>
-                  <p className="text-gray-700 dark:text-gray-300">
-                    {detailData.actors.slice(0, 10).map((a) => a.name).join(', ')}
-                  </p>
+                  {currentSource === 'tmdb' ? (
+                    <div
+                      ref={actorsScrollRef}
+                      onMouseDown={handleActorsMouseDown}
+                      onMouseMove={handleActorsMouseMove}
+                      onMouseUp={handleActorsMouseUp}
+                      onMouseLeave={handleActorsMouseLeave}
+                      className="overflow-x-auto -mx-6 px-6 cursor-grab active:cursor-grabbing"
+                      style={{
+                        scrollbarWidth: 'thin',
+                        scrollBehavior: isActorsDragging ? 'auto' : 'smooth'
+                      }}
+                    >
+                      <div className="flex gap-4 pb-2">
+                        {detailData.actors.map((actor, index) => (
+                          <div
+                            key={index}
+                            className="flex flex-col items-center flex-shrink-0"
+                            style={{ pointerEvents: isActorsDragging ? 'none' : 'auto' }}
+                          >
+                            {actor.profile_path ? (
+                              <div
+                                className="relative w-20 h-20 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 mb-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={() => handleImageClick(processImageUrl(getTMDBImageUrl(actor.profile_path || null, 'w185')))}
+                              >
+                                <Image
+                                  src={processImageUrl(getTMDBImageUrl(actor.profile_path || null, 'w185'))}
+                                  alt={actor.name}
+                                  fill
+                                  className="object-cover"
+                                  draggable={false}
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-700 mb-2 flex items-center justify-center">
+                                <Users size={28} className="text-gray-400" />
+                              </div>
+                            )}
+                            <a
+                              href={`https://baike.baidu.com/item/${encodeURIComponent(actor.name)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-medium text-gray-900 dark:text-gray-100 text-center w-20 line-clamp-2 hover:text-green-600 dark:hover:text-green-400 transition-colors cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {actor.name}
+                            </a>
+                            {actor.character && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 text-center w-20 line-clamp-2">
+                                {actor.character}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-gray-700 dark:text-gray-300">
+                      {detailData.actors.slice(0, 10).map((a) => a.name).join(', ')}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -788,7 +1164,13 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                                 }`}
                               >
                                 {season.poster_path && (
-                                  <div className="relative w-12 h-16 rounded overflow-hidden bg-gray-200 dark:bg-gray-700 flex-shrink-0">
+                                  <div
+                                    className="relative w-12 h-16 rounded overflow-hidden bg-gray-200 dark:bg-gray-700 flex-shrink-0 hover:opacity-80 transition-opacity"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleImageClick(processImageUrl(getTMDBImageUrl(season.poster_path, 'w500')));
+                                    }}
+                                  >
                                     <Image
                                       src={processImageUrl(getTMDBImageUrl(season.poster_path, 'w92'))}
                                       alt={season.name}
@@ -840,7 +1222,10 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                                     style={{ pointerEvents: isDragging ? 'none' : 'auto' }}
                                   >
                                     {episode.still_path && (
-                                      <div className="relative w-full h-36 rounded overflow-hidden bg-gray-200 dark:bg-gray-700 mb-2">
+                                      <div
+                                        className="relative w-full h-36 rounded overflow-hidden bg-gray-200 dark:bg-gray-700 mb-2 cursor-pointer hover:opacity-90 transition-opacity"
+                                        onClick={() => handleImageClick(processImageUrl(getTMDBImageUrl(episode.still_path, 'w500')))}
+                                      >
                                         <Image
                                           src={processImageUrl(getTMDBImageUrl(episode.still_path, 'w300'))}
                                           alt={episode.name}
@@ -885,10 +1270,53 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                   )}
                 </div>
               )}
+
+              {/* 数据源显示和切换 */}
+              <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">数据来源:</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 uppercase">
+                      {currentSource === 'douban' && 'Douban'}
+                      {currentSource === 'bangumi' && 'Bangumi'}
+                      {currentSource === 'cms' && 'CMS'}
+                      {currentSource === 'tmdb' && 'TMDB'}
+                    </span>
+                  </div>
+                  {currentSource !== 'tmdb' && (
+                    <button
+                      onClick={handleToggleSource}
+                      disabled={loading}
+                      className="px-3 py-1.5 text-sm rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      切换到 TMDB
+                    </button>
+                  )}
+                  {currentSource === 'tmdb' && originalSource !== 'tmdb' && originalDetailData && (
+                    <button
+                      onClick={handleToggleSource}
+                      disabled={loading}
+                      className="px-3 py-1.5 text-sm rounded-lg bg-gray-500 hover:bg-gray-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      切换回 {originalSource === 'douban' ? 'Douban' : originalSource === 'bangumi' ? 'Bangumi' : 'CMS'}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* 图片查看器 */}
+      {showImageViewer && (
+        <ImageViewer
+          isOpen={showImageViewer}
+          onClose={() => setShowImageViewer(false)}
+          imageUrl={selectedImage}
+          alt={detailData?.title || title}
+        />
+      )}
     </div>
   );
 

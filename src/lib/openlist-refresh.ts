@@ -25,19 +25,31 @@ import { getTVSeasonDetails,searchTMDB } from '@/lib/tmdb.search';
 /**
  * 获取根目录列表（兼容新旧配置）
  */
+/**
+ * 清理字符串中的 BOM 和其他不可见字符
+ */
+function cleanPath(path: string): string {
+  // 移除 UTF-8 BOM (U+FEFF) 和其他零宽度字符
+  return path
+    .replace(/^\uFEFF/, '') // 移除开头的 BOM
+    .replace(/\uFEFF/g, '') // 移除所有 BOM
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // 移除零宽度字符
+    .trim(); // 移除首尾空白
+}
+
 function getRootPaths(openListConfig: AdminConfig['OpenListConfig']): string[] {
   if (!openListConfig) {
     return ['/'];
   }
 
-  // 如果有新字段 RootPaths，直接使用
+  // 如果有新字段 RootPaths，直接使用并清理
   if (openListConfig.RootPaths && openListConfig.RootPaths.length > 0) {
-    return openListConfig.RootPaths;
+    return openListConfig.RootPaths.map(cleanPath);
   }
 
-  // 如果只tPath，返回单元素数组
+  // 如果只有 RootPath，返回单元素数组并清理
   if (openListConfig.RootPath) {
-    return [openListConfig.RootPath];
+    return [cleanPath(openListConfig.RootPath)];
   }
 
   // 默认值
@@ -155,8 +167,8 @@ async function performMultiRootScan(
 ): Promise<void> {
   for (let i = 0; i < rootPaths.length; i++) {
     const rootPath = rootPaths[i];
-    console.log(`[OpenList Refresh] 扫描根目录 (${i + 1}/${rootPaths.length}): ${rootPath}`);
 
+    console.log(`[OpenList Refresh] 扫描根目录 (${i + 1}/${rootPaths.length}): ${rootPath}`);
     try {
       await performScan(
         taskId,
@@ -233,16 +245,17 @@ async function performScan(
 
     while (true) {
       const listResponse = await client.listDirectory(rootPath, currentPage, pageSize, true);
-
+	  console.log(listResponse);
       if (listResponse.code !== 200) {
-        throw new Error('OpenList 列表获取失败');
+        throw new Error('OpenList 列表获取失败5');
       }
 
       total = listResponse.data.total;
       const pageFolders = listResponse.data.content.filter((item) => item.is_dir);
       folders.push(...pageFolders);
 
-      if (folders.length >= total) {
+      // 判断是否还有更多数据：当前页为 null 或数据量小于 pageSize 说明已经是最后一页
+      if (!listResponse.data.content || listResponse.data.content.length < pageSize) {
         break;
       }
 

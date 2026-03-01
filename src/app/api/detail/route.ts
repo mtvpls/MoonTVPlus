@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
         const listResponse = await client.listDirectory(folderPath, currentPage, pageSize);
 
         if (listResponse.code !== 200) {
-          throw new Error('OpenList 列表获取失败');
+          throw new Error('OpenList 列表获取失败1');
         }
 
         total = listResponse.data.total;

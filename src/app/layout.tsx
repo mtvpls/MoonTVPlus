@@ -70,6 +70,9 @@ export default async function RootLayout({
   let xiaoyaEnabled = false;
   let loginBackgroundImage = '';
   let registerBackgroundImage = '';
+  let progressThumbType = 'default';
+  let progressThumbPresetId = '';
+  let progressThumbCustomUrl = '';
   let enableRegistration = false;
   let loginRequireTurnstile = false;
   let registrationRequireTurnstile = false;
@@ -86,6 +89,7 @@ export default async function RootLayout({
   let enableMovieRequest = true;
   let webLiveEnabled = false;
   let customAdFilterVersion = 0;
+  let tuneHubEnabled = false;
   let customCategories = [] as {
     name: string;
     type: 'movie' | 'tv';
@@ -114,6 +118,9 @@ export default async function RootLayout({
     tmdbApiKey = config.SiteConfig.TMDBApiKey || '';
     loginBackgroundImage = config.ThemeConfig?.loginBackgroundImage || '';
     registerBackgroundImage = config.ThemeConfig?.registerBackgroundImage || '';
+    progressThumbType = config.ThemeConfig?.progressThumbType || 'default';
+    progressThumbPresetId = config.ThemeConfig?.progressThumbPresetId || '';
+    progressThumbCustomUrl = config.ThemeConfig?.progressThumbCustomUrl || '';
     enableRegistration = config.SiteConfig.EnableRegistration || false;
     loginRequireTurnstile = config.SiteConfig.LoginRequireTurnstile || false;
     registrationRequireTurnstile = config.SiteConfig.RegistrationRequireTurnstile || false;
@@ -134,6 +141,8 @@ export default async function RootLayout({
     webLiveEnabled = config.WebLiveEnabled ?? false;
     // 自定义去广告代码版本号
     customAdFilterVersion = config.SiteConfig?.CustomAdFilterVersion || 0;
+    // TuneHub音乐功能配置
+    tuneHubEnabled = config.MusicConfig?.TuneHubEnabled || false;
     // 检查是否启用了 OpenList 功能
     openListEnabled = !!(
       config.OpenListConfig?.Enabled &&
@@ -175,6 +184,9 @@ export default async function RootLayout({
     PRIVATE_LIBRARY_ENABLED: openListEnabled || embyEnabled || xiaoyaEnabled,
     LOGIN_BACKGROUND_IMAGE: loginBackgroundImage,
     REGISTER_BACKGROUND_IMAGE: registerBackgroundImage,
+    PROGRESS_THUMB_TYPE: progressThumbType,
+    PROGRESS_THUMB_PRESET_ID: progressThumbPresetId,
+    PROGRESS_THUMB_CUSTOM_URL: progressThumbCustomUrl,
     ENABLE_REGISTRATION: enableRegistration,
     LOGIN_REQUIRE_TURNSTILE: loginRequireTurnstile,
     REGISTRATION_REQUIRE_TURNSTILE: registrationRequireTurnstile,
@@ -191,6 +203,7 @@ export default async function RootLayout({
     ENABLE_MOVIE_REQUEST: enableMovieRequest,
     WEB_LIVE_ENABLED: webLiveEnabled,
     CUSTOM_AD_FILTER_VERSION: customAdFilterVersion,
+    TUNEHUB_ENABLED: tuneHubEnabled,
     FESTIVE_EFFECT_ENABLED:
       process.env.FESTIVE_EFFECT_ENABLED === 'true',
   };

@@ -279,7 +279,7 @@ async function handleDetail(
     if (listResponse.code !== 200) {
       return NextResponse.json({
         code: 0,
-        msg: 'OpenList 列表获取失败',
+        msg: 'OpenList 列表获取失败2',
         page: 1,
         pagecount: 0,
         limit: 0,

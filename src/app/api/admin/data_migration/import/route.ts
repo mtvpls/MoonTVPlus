@@ -151,6 +151,28 @@ export async function POST(req: NextRequest) {
           } catch (err) {
             console.error(`导入用户 ${username} 失败:`, err);
           }
+        } else if (storageType === 'postgres') {
+          // Postgres 存储：使用 createUserWithHashedPassword 方法
+          try {
+            if (typeof storage.createUserWithHashedPassword === 'function') {
+              await storage.createUserWithHashedPassword(
+                username,
+                user.passwordV2, // 已经是hash过的密码
+                role,
+                createdAt,
+                userV2?.tags,
+                userV2?.oidcSub,
+                userV2?.enabledApis,
+                userV2?.banned
+              );
+              importedCount++;
+              console.log(`用户 ${username} 导入成功 (Postgres)`);
+            } else {
+              console.error(`Postgres storage 缺少 createUserWithHashedPassword 方法`);
+            }
+          } catch (err) {
+            console.error(`导入用户 ${username} 失败:`, err);
+          }
         } else {
           // Redis 存储：直接设置用户信息
           const userInfoKey = `user:${username}:info`;
@@ -222,6 +244,44 @@ export async function POST(req: NextRequest) {
           const [source, id] = key.split('+');
           if (source && id) {
             await db.setSkipConfig(username, source, id, skipConfig as any);
+          }
+        }
+      }
+
+      // 导入音乐播放记录
+      if (user.musicPlayRecords) {
+        for (const [key, record] of Object.entries(user.musicPlayRecords)) {
+          const [platform, id] = key.split('+');
+          if (platform && id) {
+            await db.saveMusicPlayRecord(username, platform, id, record as any);
+          }
+        }
+      }
+
+      // 导入音乐歌单
+      if (user.musicPlaylists && Array.isArray(user.musicPlaylists)) {
+        for (const playlist of user.musicPlaylists) {
+          // 创建歌单
+          await db.createMusicPlaylist(username, {
+            id: playlist.id,
+            name: playlist.name,
+            description: playlist.description,
+            cover: playlist.cover,
+          });
+
+          // 导入歌单中的歌曲
+          if (playlist.songs && Array.isArray(playlist.songs)) {
+            for (const song of playlist.songs) {
+              await db.addSongToPlaylist(playlist.id, {
+                platform: song.platform,
+                id: song.id,
+                name: song.name,
+                artist: song.artist,
+                album: song.album,
+                pic: song.pic,
+                duration: song.duration || 0,
+              });
+            }
           }
         }
       }

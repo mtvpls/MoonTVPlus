@@ -45,8 +45,6 @@ const FireworksCanvas = () => {
     const context = canvas.getContext('2d');
     if (!context) return;
 
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
     let width = 0;
     let height = 0;
     let dpr = window.devicePixelRatio || 1;

@@ -2,7 +2,7 @@
 'use client';
 
 import { Bot, Loader2, Send, Sparkles, Trash2,X } from 'lucide-react';
-import React, { useEffect,useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,6 +19,7 @@ interface AIChatPanelProps {
   onClose: () => void;
   context?: VideoContext;
   welcomeMessage?: string;
+  onStreamingChange?: (isStreaming: boolean) => void;
 }
 
 export default function AIChatPanel({
@@ -26,14 +27,15 @@ export default function AIChatPanel({
   onClose,
   context,
   welcomeMessage = '你好！我是MoonTVPlus的AI影视助手，有什么可以帮你的吗？',
+  onStreamingChange,
 }: AIChatPanelProps) {
-  // 生成sessionStorage的key，基于视频上下文
-  const getStorageKey = () => {
+  // 使用 useMemo 稳定 storage key，只在实际内容变化时才改变
+  const storageKey = useMemo(() => {
     if (context?.title) {
       return `ai-chat-${context.title}-${context.year || ''}-${context.type || ''}`;
     }
     return 'ai-chat-general';
-  };
+  }, [context?.title, context?.year, context?.type]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: welcomeMessage },
@@ -43,7 +45,9 @@ export default function AIChatPanel({
   const [isMobile, setIsMobile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const contextKeyRef = useRef<string>(getStorageKey());
+  const prevStorageKeyRef = useRef<string>(storageKey);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const hasLoadedRef = useRef(false);
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -58,7 +62,9 @@ export default function AIChatPanel({
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const storageKey = getStorageKey();
+    // 如果已经加载过当前 storageKey，跳过
+    if (hasLoadedRef.current) return;
+
     const savedMessages = sessionStorage.getItem(storageKey);
 
     if (savedMessages) {
@@ -71,32 +77,50 @@ export default function AIChatPanel({
         console.error('加载聊天记录失败:', error);
       }
     }
-  }, []); // 只在组件挂载时加载一次
+
+    // 标记为已加载
+    hasLoadedRef.current = true;
+  }, [storageKey]); // 当 storageKey 变化时重新加载
 
   // 保存消息记录到sessionStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const storageKey = getStorageKey();
     try {
       sessionStorage.setItem(storageKey, JSON.stringify(messages));
     } catch (error) {
       console.error('保存聊天记录失败:', error);
     }
-  }, [messages, context]); // 消息变化时保存
+  }, [messages, storageKey]); // 消息变化时保存
 
   // 检测VideoContext变化，清除旧的聊天记录
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const newKey = getStorageKey();
-    if (contextKeyRef.current !== newKey) {
-      // 上下文变化了，清除消息并重置为欢迎消息
+    if (prevStorageKeyRef.current !== storageKey) {
+      // 上下文变化了，取消正在进行的请求
+      if (abortControllerRef.current) {
+        console.log('视频上下文变化，取消正在进行的AI请求');
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        setIsStreaming(false);
+      }
+
+      // 清除消息并重置为欢迎消息
       console.log('视频上下文变化，清除聊天记录');
       setMessages([{ role: 'assistant', content: welcomeMessage }]);
-      contextKeyRef.current = newKey;
+
+      // 重置加载标记，允许加载新视频的聊天记录
+      hasLoadedRef.current = false;
+
+      prevStorageKeyRef.current = storageKey;
     }
-  }, [context, welcomeMessage]); // 监听context变化
+  }, [storageKey, welcomeMessage]); // 监听 storageKey 变化
+
+  // 通知父组件 streaming 状态变化
+  useEffect(() => {
+    onStreamingChange?.(isStreaming);
+  }, [isStreaming, onStreamingChange]);
 
   // 自动聚焦输入框和防止背景滚动
   useEffect(() => {
@@ -144,6 +168,10 @@ export default function AIChatPanel({
     // 先添加一个空的助手消息用于流式更新或显示错误
     setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
+    // 创建新的 AbortController
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -155,6 +183,7 @@ export default function AIChatPanel({
           context,
     history: messages.filter((m) => m.role !== 'assistant' || m.content !== welcomeMessage),
         }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -231,6 +260,12 @@ export default function AIChatPanel({
         });
       }
     } catch (error) {
+      // 如果是主动取消的请求（切换视频或其他原因），不显示错误
+      if ((error as Error).name === 'AbortError') {
+        console.log('请求已取消');
+        return;
+      }
+
       console.error('发送消息失败:', error);
 
       // 更新最后一条空消息为错误消息
@@ -244,6 +279,7 @@ export default function AIChatPanel({
       });
     } finally {
       setIsStreaming(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -259,7 +295,6 @@ export default function AIChatPanel({
     if (typeof window === 'undefined') return;
 
     // 清除sessionStorage
-    const storageKey = getStorageKey();
     sessionStorage.removeItem(storageKey);
 
     // 重置消息为欢迎消息
@@ -268,14 +303,14 @@ export default function AIChatPanel({
     console.log('已清空聊天上下文');
   };
 
-  if (!isOpen) return null;
-
   const modalContent = (
     <div
-      className='fixed inset-0 z-[1002] flex items-center justify-center bg-black/50 backdrop-blur-sm overflow-hidden'
+      className={`fixed inset-0 z-[1002] flex items-center justify-center bg-black/50 backdrop-blur-sm overflow-hidden transition-opacity duration-200 ${
+        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
       onClick={(e) => {
         // 点击遮罩层关闭弹窗
-        if (e.target === e.currentTarget) {
+        if (e.target === e.currentTarget && isOpen) {
           onClose();
         }
       }}

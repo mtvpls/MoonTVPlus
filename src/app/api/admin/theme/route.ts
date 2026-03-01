@@ -36,6 +36,9 @@ export async function POST(request: NextRequest) {
       cacheMinutes,
       loginBackgroundImage,
       registerBackgroundImage,
+      progressThumbType,
+      progressThumbPresetId,
+      progressThumbCustomUrl,
     } = body as {
       enableBuiltInTheme: boolean;
       builtInTheme: string;
@@ -44,6 +47,9 @@ export async function POST(request: NextRequest) {
       cacheMinutes: number;
       loginBackgroundImage?: string;
       registerBackgroundImage?: string;
+      progressThumbType?: 'default' | 'preset' | 'custom';
+      progressThumbPresetId?: string;
+      progressThumbCustomUrl?: string;
     };
 
     // 参数校验
@@ -118,6 +124,9 @@ export async function POST(request: NextRequest) {
       cacheVersion: cssChanged ? currentVersion + 1 : currentVersion,
       loginBackgroundImage: loginBackgroundImage?.trim() || undefined,
       registerBackgroundImage: registerBackgroundImage?.trim() || undefined,
+      progressThumbType: progressThumbType || 'default',
+      progressThumbPresetId: progressThumbPresetId?.trim() || undefined,
+      progressThumbCustomUrl: progressThumbCustomUrl?.trim() || undefined,
     };
 
     // 写入数据库

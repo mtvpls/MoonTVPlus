@@ -55,6 +55,7 @@ import { usePlaySync } from '@/hooks/usePlaySync';
 import AIChatPanel from '@/components/AIChatPanel';
 import CorrectDialog from '@/components/CorrectDialog';
 import DanmakuFilterSettings from '@/components/DanmakuFilterSettings';
+import DetailPanel from '@/components/DetailPanel';
 import DoubanComments from '@/components/DoubanComments';
 import DownloadEpisodeSelector from '@/components/DownloadEpisodeSelector';
 import EpisodeSelector from '@/components/EpisodeSelector';
@@ -127,6 +128,9 @@ function PlayPageClient() {
 
   // 纠错弹窗状态
   const [showCorrectDialog, setShowCorrectDialog] = useState(false);
+
+  // 详情面板状态
+  const [showDetailPanel, setShowDetailPanel] = useState(false);
 
   // 检查AI功能是否启用
   useEffect(() => {
@@ -327,6 +331,39 @@ function PlayPageClient() {
       }
 
       try {
+        // 修复anime4k-webgpu库的buffer size限制问题
+        // 在全局层面patch requestAdapter，确保所有adapter都有正确的limits
+        const originalRequestAdapter = (navigator as any).gpu.requestAdapter.bind((navigator as any).gpu);
+
+        (navigator as any).gpu.requestAdapter = async (options?: any) => {
+          const adapter = await originalRequestAdapter(options);
+          if (!adapter) return adapter;
+
+          // 保存原始的requestDevice方法
+          const originalRequestDevice = adapter.requestDevice.bind(adapter);
+
+          // 重写requestDevice方法，添加必要的buffer size限制
+          adapter.requestDevice = async (descriptor?: any) => {
+            const adapterLimits = adapter.limits;
+
+            // 合并用户提供的descriptor和我们需要的limits
+            const enhancedDescriptor = {
+              ...descriptor,
+              requiredLimits: {
+                ...descriptor?.requiredLimits,
+                // 使用adapter支持的最大值，但不超过2GB
+                maxBufferSize: Math.min(adapterLimits.maxBufferSize || 2147483648, 2147483648),
+                maxStorageBufferBindingSize: Math.min(adapterLimits.maxStorageBufferBindingSize || 1073741824, 1073741824),
+              }
+            };
+
+            console.log('WebGPU设备请求配置:', enhancedDescriptor.requiredLimits);
+            return originalRequestDevice(enhancedDescriptor);
+          };
+
+          return adapter;
+        };
+
         const adapter = await (navigator as any).gpu.requestAdapter();
         if (!adapter) {
           setWebGPUSupported(false);
@@ -336,6 +373,10 @@ function PlayPageClient() {
 
         setWebGPUSupported(true);
         console.log('WebGPU支持检测：✅ 支持');
+        console.log('Adapter limits:', {
+          maxBufferSize: adapter.limits.maxBufferSize,
+          maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize
+        });
       } catch (err) {
         setWebGPUSupported(false);
         console.log('WebGPU不支持：', err);
@@ -1805,19 +1846,13 @@ function PlayPageClient() {
     clearRefreshTimer(); // 清除旧的定时器
     isInitialLoadRef.current = true; // 重置为首次加载
 
-    // 动态设置 referrer policy：只在小雅源时不发送 Referer
+    // 动态设置 referrer policy：不发送 Referer
     const existingMeta = document.querySelector('meta[name="referrer"]');
-    if (detailData?.source === 'xiaoya') {
-      if (!existingMeta) {
-        const meta = document.createElement('meta');
-        meta.name = 'referrer';
-        meta.content = 'no-referrer';
-        document.head.appendChild(meta);
-      }
-    } else {
-      if (existingMeta) {
-        existingMeta.remove();
-      }
+    if (!existingMeta) {
+      const meta = document.createElement('meta');
+      meta.name = 'referrer';
+      meta.content = 'no-referrer';
+      document.head.appendChild(meta);
     }
 
     if (
@@ -4847,7 +4882,7 @@ function PlayPageClient() {
         moreVideoAttr: {
           playsInline: true,
           'webkit-playsinline': 'true',
-          ...(detail?.source === 'xiaoya' ? { referrerpolicy: 'no-referrer' } : {}),
+          referrerpolicy: 'no-referrer',
         } as any,
         // HLS 支持配置
         customType: {
@@ -5777,6 +5812,85 @@ function PlayPageClient() {
         setPlayerReady(true);
         console.log('[PlayPage] Player ready, triggering sync setup');
 
+        // 应用进度条图标配置 - 尽早执行
+        const applyProgressThumbConfig = () => {
+          try {
+            const config = (window as any).RUNTIME_CONFIG;
+
+            if (!config || config.PROGRESS_THUMB_TYPE === 'default') {
+              // 使用默认样式，移除自定义样式
+              const oldStyle = document.getElementById('custom-progress-thumb-style');
+              if (oldStyle) oldStyle.remove();
+              return;
+            }
+
+            let thumbUrl = '';
+            let thumbColor = '#22c55e'; // 默认绿色
+
+            if (config.PROGRESS_THUMB_TYPE === 'preset' && config.PROGRESS_THUMB_PRESET_ID) {
+              const presetConfig: Record<string, { url: string; color: string }> = {
+                renako: { url: '/icons/q/renako.png', color: '#ec4899' }, // 粉色
+                irena: { url: '/icons/q/irena.png', color: '#f8fafc' }, // 雪白色
+                emilia: { url: '/icons/q/emilia.png', color: '#f8fafc' }, // 雪白色
+              };
+              const preset = presetConfig[config.PROGRESS_THUMB_PRESET_ID];
+              if (preset) {
+                thumbUrl = preset.url;
+                thumbColor = preset.color;
+              }
+            } else if (config.PROGRESS_THUMB_TYPE === 'custom' && config.PROGRESS_THUMB_CUSTOM_URL) {
+              thumbUrl = config.PROGRESS_THUMB_CUSTOM_URL;
+            }
+
+            // 修改 ArtPlayer 的主题色
+            if (artPlayerRef.current) {
+              artPlayerRef.current.theme = thumbColor;
+            }
+
+            if (thumbUrl) {
+              // 根据预设ID确定尺寸
+              let width = '30px';
+              let height = '30px';
+              let marginLeft = '-15px';
+
+              // renako 图标特殊处理（288x404比例，放大1.25倍）
+              if (config.PROGRESS_THUMB_TYPE === 'preset' && config.PROGRESS_THUMB_PRESET_ID === 'renako') {
+                width = '26.875px'; // 21.5 * 1.25
+                height = '37.5px'; // 30 * 1.25
+                marginLeft = '-13.4375px'; // 10.75 * 1.25
+              }
+
+              // 动态设置背景图片
+              const style = document.createElement('style');
+              style.id = 'custom-progress-thumb-style';
+              style.textContent = `
+                /* 替换默认的进度条圆点为自定义图标 */
+                .art-video-player .art-progress-indicator {
+                  width: ${width} !important;
+                  height: ${height} !important;
+                  background-image: url('${thumbUrl}') !important;
+                  background-size: contain !important;
+                  background-repeat: no-repeat !important;
+                  background-position: center !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  margin-left: ${marginLeft} !important;
+                }
+              `;
+
+              // 移除旧样式
+              const oldStyle = document.getElementById('custom-progress-thumb-style');
+              if (oldStyle) oldStyle.remove();
+
+              document.head.appendChild(style);
+            }
+          } catch (error) {
+            console.error('[进度条图标] 应用配置失败:', error);
+          }
+        };
+
+        applyProgressThumbConfig();
+
         // 添加字幕切换功能
         const currentSubtitles = detailRef.current?.subtitles?.[currentEpisodeIndex] || [];
         if (currentSubtitles.length > 0 && artPlayerRef.current) {
@@ -5996,7 +6110,7 @@ function PlayPageClient() {
               saveDanmakuDisplayState(false);
             });
           }
-         
+
         }
 
         // 播放器就绪后，如果正在播放则请求 Wake Lock
@@ -6774,7 +6888,7 @@ function PlayPageClient() {
 
     // 调用异步初始化函数
     initPlayer();
-  }, [videoUrl, loading, blockAdEnabled, currentEpisodeIndex]);
+  }, [videoUrl, loading, blockAdEnabled]);
 
   // 当组件卸载时清理定时器、Wake Lock 和播放器资源
   useEffect(() => {
@@ -7773,6 +7887,19 @@ function PlayPageClient() {
                         <Sparkles className='h-6 w-6 text-gray-700 dark:text-gray-300' />
                       </button>
                     )}
+                    {/* 详情按钮 */}
+                    {detail && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowDetailPanel(true);
+                        }}
+                        className='flex-shrink-0 hover:opacity-80 transition-opacity px-2 py-1 text-base font-medium text-gray-700 dark:text-gray-300'
+                        title='详情'
+                      >
+                        详
+                      </button>
+                    )}
                     {/* 纠错按钮 - 仅小雅源显示 */}
                     {detail && detail.source === 'xiaoya' && (
                       <button
@@ -8049,7 +8176,7 @@ function PlayPageClient() {
       )}
 
       {/* AI问片面板 */}
-      {aiEnabled && showAIChat && detail && (
+      {aiEnabled && detail && (
         <AIChatPanel
           isOpen={showAIChat}
           onClose={() => setShowAIChat(false)}
@@ -8084,6 +8211,52 @@ function PlayPageClient() {
             // 纠错成功后的回调
             handleCorrectSuccess();
           }}
+        />
+      )}
+
+      {/* 详情面板 */}
+      {detail && (
+        <DetailPanel
+          isOpen={showDetailPanel}
+          onClose={() => setShowDetailPanel(false)}
+          title={detail.title}
+          poster={detail.poster}
+          doubanId={
+            // 特殊源使用 tmdb，其他使用 cms（通过 doubanId）
+            // 如果有豆瓣ID且不为0，传入doubanId
+            detail.source === 'openlist' ||
+            detail.source?.startsWith('emby') ||
+            detail.source === 'xiaoya'
+              ? undefined
+              : detail.douban_id && detail.douban_id !== 0
+              ? detail.douban_id
+              : undefined
+          }
+          tmdbId={
+            // 特殊源使用 tmdb
+            detail.source === 'openlist' ||
+            detail.source?.startsWith('emby') ||
+            detail.source === 'xiaoya'
+              ? detail.tmdb_id
+              : undefined
+          }
+          type={detail.type_name === '电影' ? 'movie' : 'tv'}
+          cmsData={
+            // 非特殊源使用 cms 数据
+            // 但如果有豆瓣ID且不为0，则不传入cmsData，优先使用豆瓣数据
+            detail.source !== 'openlist' &&
+            !detail.source?.startsWith('emby') &&
+            detail.source !== 'xiaoya' &&
+            !(detail.douban_id && detail.douban_id !== 0)
+              ? {
+                  desc: detail.desc,
+                  episodes: detail.episodes,
+                  episodes_titles: detail.episodes_titles,
+                }
+              : undefined
+          }
+          sourceId={detail.id}
+          source={detail.source}
         />
       )}
     </PageLayout>

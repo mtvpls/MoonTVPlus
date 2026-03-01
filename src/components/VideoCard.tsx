@@ -27,6 +27,7 @@ import { useLongPress } from '@/hooks/useLongPress';
 import AIChatPanel from '@/components/AIChatPanel';
 import DetailPanel from '@/components/DetailPanel';
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
+import ImageViewer from '@/components/ImageViewer';
 import MobileActionSheet from '@/components/MobileActionSheet';
 
 export interface VideoCardProps {
@@ -109,9 +110,12 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [searchFavorited, setSearchFavorited] = useState<boolean | null>(null); // 搜索结果的收藏状态
   const [showAIChat, setShowAIChat] = useState(false);
+  const [isAIStreaming, setIsAIStreaming] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiDefaultMessageWithVideo, setAiDefaultMessageWithVideo] = useState('');
   const [showDetailPanel, setShowDetailPanel] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [showUpcomingInfo, setShowUpcomingInfo] = useState(false); // 控制即将上映倒计时的显示
 
   // 检查AI功能是否启用
   useEffect(() => {
@@ -274,8 +278,13 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
   );
 
   const handleClick = useCallback(() => {
-    // 即将上映的电影不跳转
+    // 即将上映的电影：单击显示上映倒计时提示，不跳转
     if (isUpcoming) {
+      setShowUpcomingInfo(true);
+      // 2秒后自动隐藏
+      setTimeout(() => {
+        setShowUpcomingInfo(false);
+      }, 2000);
       return;
     }
 
@@ -380,11 +389,6 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
 
   // 长按操作
   const handleLongPress = useCallback(() => {
-    // 即将上映的电影不显示操作菜单
-    if (isUpcoming) {
-      return;
-    }
-
     if (!showMobileActions) { // 防止重复触发
       // 立即显示菜单，避免等待数据加载导致动画卡顿
       setShowMobileActions(true);
@@ -394,7 +398,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
         checkSearchFavoriteStatus();
       }
     }
-  }, [isUpcoming, showMobileActions, from, isAggregate, actualSource, actualId, searchFavorited, checkSearchFavoriteStatus]);
+  }, [showMobileActions, from, isAggregate, actualSource, actualId, searchFavorited, checkSearchFavoriteStatus]);
 
   // 长按手势hook
   const longPressProps = useLongPress({
@@ -662,7 +666,9 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
   return (
     <>
       <div
-        className={`group relative w-full rounded-lg bg-transparent transition-all duration-300 ease-in-out hover:scale-[1.05] hover:z-[500] ${isUpcoming ? 'cursor-default' : 'cursor-pointer'}`}
+        className={`group relative w-full rounded-lg bg-transparent transition-all duration-300 ease-in-out hover:scale-[1.05] hover:z-[500] ${isUpcoming ? 'cursor-default' : 'cursor-pointer'} ${
+          showUpcomingInfo ? 'scale-[1.05] z-[500]' : ''
+        }`}
         onClick={handleClick}
         {...longPressProps}
         style={{
@@ -679,11 +685,6 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
           // 阻止默认右键菜单
           e.preventDefault();
           e.stopPropagation();
-
-          // 即将上映的电影不显示操作菜单
-          if (isUpcoming) {
-            return false;
-          }
 
           // 右键弹出操作菜单
           setShowMobileActions(true);
@@ -734,6 +735,10 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
               referrerPolicy='no-referrer'
               loading='lazy'
               onLoadingComplete={() => setIsLoading(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowImageViewer(true);
+              }}
               onError={(e) => {
                 // 图片加载失败时的重试机制
                 const img = e.target as HTMLImageElement;
@@ -749,7 +754,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
                 WebkitUserSelect: 'none',
                 userSelect: 'none',
                 WebkitTouchCallout: 'none',
-                pointerEvents: 'none', // 图片不响应任何指针事件
+                pointerEvents: 'auto', // 改为auto以响应点击事件
+                cursor: 'pointer', // 添加指针样式
               } as React.CSSProperties}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -780,7 +786,9 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
           {isUpcoming && daysUntilRelease !== null ? (
             <div
               data-button="true"
-              className='absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 ease-in-out delay-75 group-hover:opacity-100'
+              className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ease-in-out ${
+                showUpcomingInfo ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+              }`}
               style={{
                 WebkitUserSelect: 'none',
                 userSelect: 'none',
@@ -1478,13 +1486,17 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
         currentEpisode={currentEpisode}
         totalEpisodes={actualEpisodes}
         origin={origin}
+        onPosterClick={() => {
+          setShowImageViewer(true);
+        }}
       />
 
-      {/* AI问片面板 */}
-      {aiEnabled && showAIChat && (
+      {/* AI问片面板 - 只在打开或正在流式响应时渲染 */}
+      {aiEnabled && (showAIChat || isAIStreaming) && (
         <AIChatPanel
           isOpen={showAIChat}
           onClose={() => setShowAIChat(false)}
+          onStreamingChange={setIsAIStreaming}
           context={{
             title: actualTitle,
             year: actualYear,
@@ -1513,6 +1525,16 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
           cmsData={cmsData}
           sourceId={id}
           source={source}
+        />
+      )}
+
+      {/* 图片查看器 */}
+      {showImageViewer && (
+        <ImageViewer
+          isOpen={showImageViewer}
+          onClose={() => setShowImageViewer(false)}
+          imageUrl={processImageUrl(actualPoster)}
+          alt={actualTitle}
         />
       )}
     </>

@@ -45,6 +45,11 @@ function getDeviceInfo(userAgent: string): string {
     return 'MoonTVPlus APP';
   }
 
+  // 检查是否为 OrionTV
+  if (ua.includes('oriontv')) {
+    return 'OrionTV';
+  }
+
   if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
     if (ua.includes('android')) return 'Android Mobile';
     if (ua.includes('iphone')) return 'iPhone';

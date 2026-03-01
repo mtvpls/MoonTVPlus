@@ -178,7 +178,7 @@ export async function getOpenListDetail(
     );
 
     if (listResponse.code !== 200) {
-      throw new Error('OpenList 列表获取失败');
+      throw new Error('OpenList 列表获取失败6');
     }
 
     total = listResponse.data.total;

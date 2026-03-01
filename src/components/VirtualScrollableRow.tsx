@@ -6,11 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 interface VirtualScrollableRowProps {
   children: React.ReactNode[];
   maxVisible?: number; // 最大可见数量
+  className?: string; // 额外的 CSS 类名
 }
 
 export default function VirtualScrollableRow({
   children,
   maxVisible = 30, // 默认最多显示 30 个项目
+  className = '',
 }: VirtualScrollableRowProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [showLeftScroll, setShowLeftScroll] = useState(false);
@@ -94,8 +96,8 @@ export default function VirtualScrollableRow({
       {/* 滚动容器 */}
       <div
         ref={containerRef}
-        className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth"
-        style={{ scrollBehavior: 'smooth' }}
+        className={`flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth ${className}`}
+        style={{ scrollBehavior: 'smooth', paddingTop: '20px', paddingBottom: '20px', marginTop: '-20px', marginBottom: '-20px' }}
       >
         {/* 左侧占位符（用于保持滚动位置） */}
         {visibleRange.start > 0 && (

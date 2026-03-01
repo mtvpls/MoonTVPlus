@@ -154,7 +154,6 @@ export default function WatchRoomPage() {
     if (!currentRoom || isOwner) return;
 
     const handlePlayChange = (state: any) => {
-      console.log('[WatchRoom] Member following owner - play:change event');
       if (state.type === 'play') {
         const params = new URLSearchParams({
           id: state.videoId,
@@ -171,9 +170,17 @@ export default function WatchRoomPage() {
     };
 
     const handleLiveChange = (state: any) => {
-      console.log('[WatchRoom] Member following owner - live:change event');
       if (state.type === 'live') {
-        router.push(`/live?id=${state.channelId}`);
+        // 判断是否为 weblive 格式（channelUrl 包含 platform:roomId）
+        if (state.channelUrl && state.channelUrl.includes(':')) {
+          // weblive 格式，导航到 web-live 页面
+          // channelId 是 sourceKey，channelUrl 是 platform:roomId
+          const [platform, roomId] = state.channelUrl.split(':');
+          router.push(`/web-live?platform=${platform}&roomId=${roomId}`);
+        } else {
+          // 普通 live 格式，导航到 live 页面
+          router.push(`/live?id=${state.channelId}`);
+        }
       }
     };
 
@@ -264,7 +271,15 @@ export default function WatchRoomPage() {
                       if (state.searchTitle) params.set('stitle', state.searchTitle);
                       router.push(`/play?${params.toString()}`);
                     } else if (state.type === 'live') {
-                      router.push(`/live?id=${state.channelId}`);
+                      // 判断是否为 weblive 格式（channelUrl 包含 platform:roomId）
+                      if (state.channelUrl && state.channelUrl.includes(':')) {
+                        // weblive 格式，导航到 web-live 页面
+                        const [platform, roomId] = state.channelUrl.split(':');
+                        router.push(`/web-live?platform=${platform}&roomId=${roomId}`);
+                      } else {
+                        // 普通 live 格式，导航到 live 页面
+                        router.push(`/live?id=${state.channelId}`);
+                      }
                     }
                   }}
                   className="px-6 py-2 bg-white text-blue-600 font-medium rounded-lg hover:bg-white/90 transition-colors whitespace-nowrap"

@@ -12,7 +12,9 @@ export const runtime = 'nodejs';
 
 /**
  * POST /api/admin/emby
- * 保存 Emby 配置
+ * Emby 配置管理接口
+ * - test: 测试 Emby 连接
+ * - clearCache: 清除 Emby 缓存
  */
 export async function POST(request: NextRequest) {
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action, Enabled, ServerURL, ApiKey, Username, Password, UserId, Libraries } = body;
+    const { action, ServerURL, ApiKey, Username, Password } = body;
 
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
@@ -42,90 +44,6 @@ export async function POST(request: NextRequest) {
       if (!userInfo || userInfo.role !== 'admin' || userInfo.banned) {
         return NextResponse.json({ error: '权限不足' }, { status: 401 });
       }
-    }
-
-    if (action === 'save') {
-      // 如果功能未启用，允许保存空配置
-      if (!Enabled) {
-        adminConfig.EmbyConfig = {
-          Enabled: false,
-          ServerURL: ServerURL || '',
-          ApiKey: ApiKey || '',
-          Username: Username || '',
-          Password: Password || '',
-          Libraries: Libraries || [],
-        };
-        await db.saveAdminConfig(adminConfig);
-        return NextResponse.json({ success: true, message: 'Emby 配置已保存（未启用）' });
-      }
-
-      // 验证必填字段
-      if (!ServerURL) {
-        return NextResponse.json({ error: '请填写 Emby 服务器地址' }, { status: 400 });
-      }
-
-      if (!ApiKey && (!Username || !Password)) {
-        return NextResponse.json(
-          { error: '请填写 API Key 或用户名密码' },
-          { status: 400 }
-        );
-      }
-
-      // 测试连接
-      const testConfig = {
-        ServerURL,
-        ApiKey,
-        Username,
-        Password,
-        UserId,
-      };
-
-      const client = new EmbyClient(testConfig);
-
-      // 如果使用用户名密码，先认证
-      let finalUserId: string | undefined = UserId; // 使用用户提供的 UserId
-      let authToken: string | undefined;
-      if (!ApiKey && Username && Password) {
-        try {
-          const authResult = await client.authenticate(Username, Password);
-          finalUserId = authResult.User.Id;
-          authToken = authResult.AccessToken;
-        } catch (error) {
-          return NextResponse.json(
-            { error: 'Emby 认证失败: ' + (error as Error).message },
-            { status: 400 }
-          );
-        }
-      }
-
-      // ��试连接
-      const isConnected = await client.checkConnectivity();
-      if (!isConnected) {
-        return NextResponse.json(
-          { error: 'Emby 连接失败，请检查服务器地址和认证信息' },
-          { status: 400 }
-        );
-      }
-
-      // 保存配置
-      adminConfig.EmbyConfig = {
-        Enabled: true,
-        ServerURL,
-        ApiKey: ApiKey || undefined,
-        Username: Username || undefined,
-        Password: Password || undefined,
-        UserId: finalUserId,
-        AuthToken: authToken,
-        Libraries: Libraries || [],
-        LastSyncTime: Date.now(),
-      };
-
-      await db.saveAdminConfig(adminConfig);
-
-      return NextResponse.json({
-        success: true,
-        message: 'Emby 配置已保存并测试成功',
-      });
     }
 
     if (action === 'test') {

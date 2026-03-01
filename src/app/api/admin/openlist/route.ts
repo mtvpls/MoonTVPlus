@@ -10,6 +10,25 @@ import { OpenListClient } from '@/lib/openlist.client';
 export const runtime = 'nodejs';
 
 /**
+ * 清理字符串中的 BOM 和其他不可见字符
+ */
+function cleanPath(path: string): string {
+  // 移除 UTF-8 BOM (U+FEFF) 和其他零宽度字符
+  let cleaned = path
+    .replace(/^\uFEFF/, '') // 移除开头的 BOM
+    .replace(/\uFEFF/g, '') // 移除所有 BOM
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // 移除零宽度字符
+    .trim(); // 移除首尾空白
+
+  // 移除末尾的 /（除非路径就是 /）
+  if (cleaned.length > 1 && cleaned.endsWith('/')) {
+    cleaned = cleaned.slice(0, -1);
+  }
+
+  return cleaned;
+}
+
+/**
  * POST /api/admin/openlist
  * 保存 OpenList 配置
  */
@@ -86,6 +105,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // 清理 RootPaths 中的 BOM 和不可见字符
+      const cleanedRootPaths = RootPaths.map(cleanPath);
+
       // 验证扫描间隔
       const scanInterval = parseInt(ScanInterval) || 0;
       if (scanInterval > 0 && scanInterval < 60) {
@@ -113,7 +135,7 @@ export async function POST(request: NextRequest) {
         URL,
         Username,
         Password,
-        RootPaths,
+        RootPaths: cleanedRootPaths,
         OfflineDownloadPath: OfflineDownloadPath || '/',
         LastRefreshTime: adminConfig.OpenListConfig?.LastRefreshTime,
         ResourceCount: adminConfig.OpenListConfig?.ResourceCount,

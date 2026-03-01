@@ -24,6 +24,7 @@ interface MobileActionSheetProps {
   currentEpisode?: number; // 当前集数
   totalEpisodes?: number; // 总集数
   origin?: 'vod' | 'live';
+  onPosterClick?: () => void; // 海报点击回调
 }
 
 const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
@@ -38,6 +39,7 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
   currentEpisode,
   totalEpisodes,
   origin = 'vod',
+  onPosterClick,
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -221,7 +223,13 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
         <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {poster && (
-              <div className="relative w-12 h-16 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0">
+              <div
+                className="relative w-12 h-16 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPosterClick?.();
+                }}
+              >
                 <Image
                   src={poster}
                   alt={title}

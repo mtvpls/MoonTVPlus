@@ -35,13 +35,22 @@ export async function GET(request: Request) {
     }
 
     // 获取当前请求的 origin
-    const requestUrl = new URL(request.url);
-    const origin = `${requestUrl.protocol}//${requestUrl.host}`;
+    // 优先级：SITE_BASE 环境变量 > 从请求头构建
+    let origin = process.env.SITE_BASE;
+    if (!origin) {
+      const requestUrl = new URL(request.url);
+      origin = `${requestUrl.protocol}//${requestUrl.host}`;
+    }
 
     // 获取原始 m3u8 内容
+    const m3u8UrlObj = new URL(m3u8Url);
     const response = await fetch(m3u8Url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': `${m3u8UrlObj.protocol}//${m3u8UrlObj.host}/`,
       },
     });
 

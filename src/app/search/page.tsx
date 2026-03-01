@@ -62,6 +62,8 @@ function SearchPageClient() {
   const [forceRefresh, setForceRefresh] = useState(false);
   // 是否使用了缓存结果
   const [isFromCache, setIsFromCache] = useState(false);
+  // 精确搜索开关
+  const [exactSearch, setExactSearch] = useState(true);
 
   // 生成缓存键
   const getCacheKey = (query: string) => {
@@ -257,12 +259,28 @@ function SearchPageClient() {
     // 2.4 兜底：使用 episodes.length（最不可靠）
     return item.episodes.length === 1 ? 'movie' : 'tv';
   };
+
+  // 辅助函数：检查标题是否包含搜索词（用于精确搜索）
+  const titleContainsQuery = (title: string, query: string): boolean => {
+    if (!exactSearch) return true; // 如果未开启精确搜索，不过滤
+    if (!query || !title) return true; // 如果没有搜索词或标题，不过滤
+
+    const normalizedTitle = title.toLowerCase();
+    const normalizedQuery = query.toLowerCase();
+
+    return normalizedTitle.includes(normalizedQuery);
+  };
   // 聚合后的结果（按标题和年份分组）
   const aggregatedResults = useMemo(() => {
+    // 首先应用精确搜索过滤
+    const filteredResults = exactSearch
+      ? searchResults.filter(item => titleContainsQuery(item.title, currentQueryRef.current))
+      : searchResults;
+
     //===== 阶段1：按 normalizedTitle-type 初步分组 =====
     const preliminaryMap = new Map<string, SearchResult[]>();
 
-    searchResults.forEach((item) => {
+    filteredResults.forEach((item) => {
       const normalizedTitle = normalizeTitle(item.title);
       const type = getType(item);
       const preliminaryKey = `${normalizedTitle}-${type}`;
@@ -316,7 +334,7 @@ function SearchPageClient() {
 
     // 按出现顺序返回聚合结果
     return keyOrder.map(key => [key, finalMap.get(key)!] as [string, SearchResult[]]);
-  }, [searchResults]);
+  }, [searchResults, exactSearch]);
 
   // 当聚合结果变化时，如果某个聚合已存在，则调用其卡片 ref 的 set 方法增量更新
   useEffect(() => {
@@ -422,7 +440,13 @@ function SearchPageClient() {
   // 非聚合：应用筛选与排序
   const filteredAllResults = useMemo(() => {
     const { source, title, year, yearOrder } = filterAll;
-    const filtered = searchResults.filter((item) => {
+
+    // 首先应用精确搜索过滤
+    const exactSearchFiltered = exactSearch
+      ? searchResults.filter(item => titleContainsQuery(item.title, currentQueryRef.current))
+      : searchResults;
+
+    const filtered = exactSearchFiltered.filter((item) => {
       if (source !== 'all' && item.source !== source) return false;
       if (title !== 'all' && item.title !== title) return false;
       if (year !== 'all' && item.year !== year) return false;
@@ -451,7 +475,7 @@ function SearchPageClient() {
         a.title.localeCompare(b.title) :
         b.title.localeCompare(a.title);
     });
-  }, [searchResults, filterAll, searchQuery]);
+  }, [searchResults, filterAll, searchQuery, exactSearch]);
 
   // 聚合：应用筛选与排序
   const filteredAggResults = useMemo(() => {
@@ -574,6 +598,12 @@ function SearchPageClient() {
         setUseFluidSearch(JSON.parse(savedFluidSearch));
       } else if (defaultFluidSearch !== undefined) {
         setUseFluidSearch(defaultFluidSearch);
+      }
+
+      // 读取精确搜索设置
+      const savedExactSearch = localStorage.getItem('exactSearch');
+      if (savedExactSearch !== null) {
+        setExactSearch(savedExactSearch === 'true');
       }
     }
 

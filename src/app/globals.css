@@ -211,3 +211,37 @@ div[data-media-provider] video {
     display: none !important;
   }
 }
+
+/* 水波纹缩放动画 - 第一层 (快速扩散) */
+@keyframes ping-scale {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* 水波纹缩放动画 - 第二层 (慢速脉冲) */
+@keyframes pulse-scale {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.2;
+  }
+}
+
+/* 主体徽章缩放动画 */
+@keyframes badge-scale {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}

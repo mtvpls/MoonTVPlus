@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 
       if (listResponse.code !== 200) {
         return NextResponse.json(
-          { error: 'OpenList 列表获取失败' },
+          { error: 'OpenList 列表获取失败3' },
           { status: 500 }
         );
       }

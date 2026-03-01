@@ -12,6 +12,7 @@ export interface PlayRecord {
   total_time: number; // 总进度（秒）
   save_time: number; // 记录保存时间（时间戳）
   search_title: string; // 搜索时使用的标题
+  new_episodes?: number; // 新增的剧集数量（用于显示更新提示）
 }
 
 // 收藏数据结构
@@ -51,6 +52,14 @@ export interface IStorage {
   deleteFavorite(userName: string, key: string): Promise<void>;
   // 迁移收藏
   migrateFavorites(userName: string): Promise<void>;
+
+  // 音乐播放记录相关
+  getMusicPlayRecord(userName: string, key: string): Promise<any | null>;
+  setMusicPlayRecord(userName: string, key: string, record: any): Promise<void>;
+  batchSetMusicPlayRecords(userName: string, records: { key: string; record: any }[]): Promise<void>;
+  getAllMusicPlayRecords(userName: string): Promise<{ [key: string]: any }>;
+  deleteMusicPlayRecord(userName: string, key: string): Promise<void>;
+  clearAllMusicPlayRecords(userName: string): Promise<void>;
 
   // 用户相关
   verifyUser(userName: string, password: string): Promise<boolean>;
@@ -232,7 +241,8 @@ export type NotificationType =
   | 'system' // 系统通知
   | 'announcement' // 公告
   | 'movie_request' // 新求片通知（给管理员）
-  | 'request_fulfilled'; // 求片已上架通知（给求片用户）
+  | 'request_fulfilled' // 求片已上架通知（给求片用户）
+  | 'anime_subscription_update'; // 追番订阅更新
 
 // 通知数据结构
 export interface Notification {

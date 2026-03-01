@@ -6,6 +6,7 @@ import { Bell, Check, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { Notification } from '@/lib/types';
 
 interface NotificationPanelProps {
@@ -55,6 +56,8 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
             n.id === notificationId ? { ...n, read: true } : n
           )
         );
+        // 触发事件通知 UserMenu 更新未读计数
+        window.dispatchEvent(new Event('notificationsUpdated'));
       }
     } catch (error) {
       console.error('标记已读失败:', error);
@@ -74,7 +77,12 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
       });
 
       if (response.ok) {
+        const deletedNotification = notifications.find((n) => n.id === notificationId);
         setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+        // 如果删除的是未读通知，触发事件更新 UserMenu
+        if (deletedNotification && !deletedNotification.read) {
+          window.dispatchEvent(new Event('notificationsUpdated'));
+        }
       }
     } catch (error) {
       console.error('删除通知失败:', error);
@@ -94,6 +102,8 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
 
       if (response.ok) {
         setNotifications([]);
+        // 触发事件通知 UserMenu 更新未读计数
+        window.dispatchEvent(new Event('notificationsUpdated'));
       }
     } catch (error) {
       console.error('清空通知失败:', error);
@@ -109,8 +119,16 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
 
     // 根据通知类型跳转
     if (notification.type === 'favorite_update' && notification.metadata) {
-      const { source, id } = notification.metadata;
-      router.push(`/play?source=${source}&id=${id}`);
+      const { source, id, title } = notification.metadata;
+      router.push(`/play?source=${source}&id=${id}&title=${encodeURIComponent(title)}`);
+      onClose();
+    } else if (notification.type === 'movie_request') {
+      // 获取用户角色
+      const authInfo = getAuthInfoFromBrowserCookie();
+      const isAdmin = authInfo?.role === 'owner' || authInfo?.role === 'admin';
+
+      // 管理员跳转到管理面板，普通用户跳转到我的求片
+      router.push(isAdmin ? '/admin' : '/movie-request');
       onClose();
     }
   };

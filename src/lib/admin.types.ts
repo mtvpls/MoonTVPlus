@@ -115,6 +115,10 @@ export interface AdminConfig {
     cacheVersion: number; // CSS版本号（用于缓存控制）
     loginBackgroundImage?: string; // 登录界面背景图
     registerBackgroundImage?: string; // 注册界面背景图
+    // 进度条图标配置
+    progressThumbType?: 'default' | 'preset' | 'custom'; // 图标类型
+    progressThumbPresetId?: string; // 预制图标ID
+    progressThumbCustomUrl?: string; // 自定义图标URL
   };
   OpenListConfig?: {
     Enabled: boolean; // 是否启用私人影库功能
@@ -235,6 +239,34 @@ export interface AdminConfig {
       apiKey: string; // Resend API Key
       from: string; // 发件人邮箱
     };
+  };
+  MusicConfig?: {
+    // TuneHub音乐配置
+    TuneHubEnabled?: boolean; // 启用音乐功能
+    TuneHubBaseUrl?: string; // TuneHub API地址
+    TuneHubApiKey?: string; // TuneHub API Key
+    // OpenList缓存配置
+    OpenListCacheEnabled?: boolean; // 启用OpenList缓存
+    OpenListCacheURL?: string; // OpenList服务器地址
+    OpenListCacheUsername?: string; // OpenList用户名
+    OpenListCachePassword?: string; // OpenList密码
+    OpenListCachePath?: string; // OpenList缓存目录路径
+    OpenListCacheProxyEnabled?: boolean; // 启用缓存代理返回（默认开启）
+  };
+  AnimeSubscriptionConfig?: {
+    Enabled: boolean; // 是否启用追番功能
+    Subscriptions: Array<{
+      id: string;
+      title: string;
+      filterText: string;
+      source: 'acgrip' | 'mikan' | 'dmhy';
+      enabled: boolean;
+      lastCheckTime: number;
+      lastEpisode: number;
+      createdAt: number;
+      updatedAt: number;
+      createdBy: string;
+    }>;
   };
 }
 

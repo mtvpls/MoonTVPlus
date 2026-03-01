@@ -158,7 +158,6 @@ export class OpenListClient {
         console.warn('[OpenListClient] 解析响应 JSON 失败:', error);
       }
     }
-
     return response;
   }
 
@@ -166,7 +165,7 @@ export class OpenListClient {
     const token = await this.getToken();
     return {
       Authorization: token, // 不带 bearer
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json'
     };
   }
 

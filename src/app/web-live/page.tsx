@@ -1,15 +1,21 @@
 'use client';
 
 import { AlertTriangle,Radio } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
+import { useWebLiveSync } from '@/hooks/useWebLiveSync';
+
 import PageLayout from '@/components/PageLayout';
+import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
 
 let Artplayer: any = null;
 let Hls: any = null;
 let flvjs: any = null;
 
 export default function WebLivePage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const artRef = useRef<HTMLDivElement | null>(null);
   const artPlayerRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
@@ -26,6 +32,24 @@ export default function WebLivePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [isWebLiveEnabled, setIsWebLiveEnabled] = useState<boolean | null>(null);
+  const [librariesLoaded, setLibrariesLoaded] = useState(false);
+  const hasAutoLoadedRef = useRef(false); // 防止重复自动加载
+
+  // 观影室同步功能
+  const webLiveSync = useWebLiveSync({
+    currentSourceKey: currentSource?.key || '',
+    currentSourceName: currentSource?.name || '',
+    currentSourcePlatform: currentSource?.platform || '',
+    currentSourceRoomId: currentSource?.roomId || '',
+    onSourceChange: (sourceKey, platform, roomId) => {
+      // 房员接收到直播源切换指令
+      if (!sources || !Array.isArray(sources)) return;
+      const source = sources.find(s => s.key === sourceKey);
+      if (source) {
+        handleSourceClick(source);
+      }
+    },
+  });
 
   useEffect(() => {
     const meta = document.createElement('meta');
@@ -34,9 +58,14 @@ export default function WebLivePage() {
     document.head.appendChild(meta);
 
     if (typeof window !== 'undefined') {
-      import('artplayer').then(mod => { Artplayer = mod.default; });
-      import('hls.js').then(mod => { Hls = mod.default; });
-      import('flv.js').then(mod => { flvjs = mod.default; });
+      // 异步加载所有必需的库
+      Promise.all([
+        import('artplayer').then(mod => { Artplayer = mod.default; }),
+        import('hls.js').then(mod => { Hls = mod.default; }),
+        import('flv.js').then(mod => { flvjs = mod.default; })
+      ]).then(() => {
+        setLibrariesLoaded(true);
+      });
 
       // 检查网络直播功能是否启用
       const runtimeConfig = (window as any).RUNTIME_CONFIG;
@@ -74,6 +103,41 @@ export default function WebLivePage() {
       setLoading(false);
     }
   };
+
+  // 当 sources 加载完成后，检查 URL 参数并自动加载对应的频道
+  useEffect(() => {
+    if (!sources || sources.length === 0) return;
+    if (!librariesLoaded) return; // 等待库加载完成
+
+    // 直接从 searchParams 读取，而不是从 useState
+    const needLoadPlatform = searchParams.get('platform');
+    const needLoadRoomId = searchParams.get('roomId');
+
+    if (!needLoadPlatform || !needLoadRoomId) {
+      hasAutoLoadedRef.current = false; // 重置标志
+      return;
+    }
+
+    // 检查是否已经加载了这个频道
+    if (currentSource?.platform === needLoadPlatform && currentSource?.roomId === needLoadRoomId) {
+      return;
+    }
+
+    // 防止重复加载
+    if (hasAutoLoadedRef.current) {
+      return;
+    }
+
+    hasAutoLoadedRef.current = true;
+
+    // 查找匹配的 source
+    const foundSource = sources.find(s => s.platform === needLoadPlatform && s.roomId === needLoadRoomId);
+    if (foundSource) {
+      handleSourceClick(foundSource);
+    } else {
+      hasAutoLoadedRef.current = false; // 重置标志以便重试
+    }
+  }, [sources, librariesLoaded, searchParams]);
 
   function m3u8Loader(video: HTMLVideoElement, url: string) {
     if (!Hls) return;
@@ -194,12 +258,31 @@ export default function WebLivePage() {
     setIsVideoLoading(true);
     setErrorMessage(null);
     setStreamInfo(null);
+
+    // 更新 URL 参数
+    const newSearchParams = new URLSearchParams(searchParams.toString());
+    newSearchParams.set('platform', source.platform);
+    newSearchParams.set('roomId', source.roomId);
+    router.replace(`/web-live?${newSearchParams.toString()}`);
+
     try {
       const res = await fetch(`/api/web-live/stream?platform=${source.platform}&roomId=${source.roomId}`);
       if (res.ok) {
         const data = await res.json();
-        setVideoUrl(data.url);
-        setOriginalVideoUrl(data.originalUrl || data.url);
+
+        // 等待 DOM 渲染完成后再设置 videoUrl
+        const waitForDom = () => {
+          if (artRef.current) {
+            setVideoUrl(data.url);
+            setOriginalVideoUrl(data.originalUrl || data.url);
+          } else {
+            requestAnimationFrame(waitForDom);
+          }
+        };
+
+        // 使用 requestAnimationFrame 等待下一帧
+        requestAnimationFrame(waitForDom);
+
         // 保存主播信息
         if (data.name || data.title) {
           setStreamInfo({
@@ -419,7 +502,7 @@ export default function WebLivePage() {
               </div>
 
               {/* 外部播放器按钮 */}
-              {currentSource && (
+              {currentSource && !webLiveSync.isInRoom && (
                 <div className='mt-3 px-2 lg:flex-shrink-0 flex justify-end'>
                   <div className='bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-lg p-2 border border-gray-200/50 dark:border-gray-700/50 w-full lg:w-auto overflow-x-auto'>
                     <div className='flex gap-1.5 justify-end lg:flex-wrap items-center'>
@@ -653,7 +736,8 @@ export default function WebLivePage() {
                           <button
                             key={source.key}
                             onClick={() => handleSourceClick(source)}
-                            className={`w-full p-3 rounded-lg text-left transition-all duration-200 ${isActive ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                            disabled={webLiveSync.shouldDisableControls}
+                            className={`w-full p-3 rounded-lg text-left transition-all duration-200 ${isActive ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} ${webLiveSync.shouldDisableControls ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             <div className='flex items-center gap-3'>
                               <div className='w-10 h-10 bg-gray-300 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0'>
@@ -688,7 +772,8 @@ export default function WebLivePage() {
                           <button
                             key={platform}
                             onClick={() => handlePlatformClick(platform)}
-                            className='w-full flex items-start gap-3 px-2 py-3 rounded-lg bg-gray-200/50 dark:bg-white/10 hover:bg-gray-300/50 dark:hover:bg-white/20 transition-all duration-200 cursor-pointer'
+                            disabled={webLiveSync.shouldDisableControls}
+                            className={`w-full flex items-start gap-3 px-2 py-3 rounded-lg bg-gray-200/50 dark:bg-white/10 hover:bg-gray-300/50 dark:hover:bg-white/20 transition-all duration-200 cursor-pointer ${webLiveSync.shouldDisableControls ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             <div className='w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden'>
                               {platform === 'huya' ? (

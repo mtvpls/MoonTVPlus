@@ -659,3 +659,47 @@ export async function getTMDBTVDetails(
     return { code: 500, details: null };
   }
 }
+
+/**
+ * 获取 TMDB 演职人员信息
+ * @param apiKey - TMDB API Key
+ * @param mediaId - 媒体ID
+ * @param mediaType - 媒体类型 (movie 或 tv)
+ * @param proxy - 代理服务器地址
+ * @param reverseProxyBaseUrl - 反代 Base URL
+ * @returns 演职人员信息
+ */
+export async function getTMDBCredits(
+  apiKey: string,
+  mediaId: number,
+  mediaType: 'movie' | 'tv',
+  proxy?: string,
+  reverseProxyBaseUrl?: string
+): Promise<{ code: number; credits: any }> {
+  try {
+    const actualKey = getNextApiKey(apiKey);
+    if (!actualKey) {
+      return { code: 400, credits: null };
+    }
+
+    const baseUrl = reverseProxyBaseUrl || DEFAULT_TMDB_BASE_URL;
+    const url = `${baseUrl}/3/${mediaType}/${mediaId}/credits?api_key=${actualKey}&language=zh-CN`;
+
+    const response = await universalFetch(url, proxy);
+
+    if (!response.ok) {
+      console.error('TMDB Credits API 请求失败:', response.status, response.statusText);
+      return { code: response.status, credits: null };
+    }
+
+    const data: any = await response.json();
+
+    return {
+      code: 200,
+      credits: data,
+    };
+  } catch (error) {
+    console.error('获取 TMDB 演职人员信息失败:', error);
+    return { code: 500, credits: null };
+  }
+}

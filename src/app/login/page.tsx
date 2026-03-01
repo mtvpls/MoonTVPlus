@@ -67,6 +67,32 @@ function VersionDisplay() {
   );
 }
 
+// 根据按钮文本识别OIDC提供商并返回对应的图标
+function getOIDCProviderIcon(buttonText: string) {
+  const text = buttonText.toLowerCase();
+
+  const providers = [
+    { keywords: ['linuxdo'], icon: '/icons/linuxdo.png', alt: 'LinuxDo' },
+    { keywords: ['github'], icon: '/icons/github.png', alt: 'GitHub' },
+    { keywords: ['google'], icon: '/icons/google.png', alt: 'Google' },
+    { keywords: ['microsoft', 'azure', 'entra'], icon: '/icons/microsoft.png', alt: 'Microsoft' },
+    { keywords: ['gitlab'], icon: '/icons/gitlab.png', alt: 'GitLab' },
+  ];
+
+  for (const provider of providers) {
+    if (provider.keywords.some(keyword => text.includes(keyword))) {
+      return <img src={provider.icon} alt={provider.alt} className='w-5 h-5 mr-2' />;
+    }
+  }
+
+  // 默认图标
+  return (
+    <svg className='w-5 h-5 mr-2' fill='currentColor' viewBox='0 0 20 20'>
+      <path fillRule='evenodd' d='M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z' clipRule='evenodd' />
+    </svg>
+  );
+}
+
 function LoginPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -84,6 +110,14 @@ function LoginPageClient() {
   const [backgroundImage, setBackgroundImage] = useState<string>('');
 
   const { siteName } = useSite();
+
+  // 处理URL中的error参数
+  useEffect(() => {
+    const errorParam = searchParams.get('error');
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam));
+    }
+  }, [searchParams]);
 
   // 在客户端挂载后设置配置
   useEffect(() => {
@@ -384,9 +418,7 @@ function LoginPageClient() {
               onClick={() => window.location.href = '/api/auth/oidc/login'}
               className='mt-4 w-full inline-flex justify-center items-center rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white/60 dark:bg-zinc-800/60 py-3 text-base font-semibold text-gray-700 dark:text-gray-200 shadow-sm transition-all duration-200 hover:bg-gray-50 dark:hover:bg-zinc-700/60'
             >
-              <svg className='w-5 h-5 mr-2' fill='currentColor' viewBox='0 0 20 20'>
-                <path fillRule='evenodd' d='M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z' clipRule='evenodd' />
-              </svg>
+              {getOIDCProviderIcon(siteConfig?.OIDCButtonText || '')}
               {siteConfig?.OIDCButtonText || '使用OIDC登录'}
             </button>
           </div>

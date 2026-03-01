@@ -1,12 +1,13 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
 import { AdminConfig } from './admin.types';
+import { MusicPlayRecord } from './db.client';
 import { KvrocksStorage } from './kvrocks.db';
 import { RedisStorage } from './redis.db';
 import { DanmakuFilterConfig,Favorite, IStorage, PlayRecord, SkipConfig } from './types';
 import { UpstashRedisStorage } from './upstash.db';
 
-// storage type 常量: 'localstorage' | 'redis' | 'upstash' | 'kvrocks' | 'd1'，默认 'localstorage'
+// storage type 常量: 'localstorage' | 'redis' | 'upstash' | 'kvrocks' | 'd1' | 'postgres'，默认 'localstorage'
 const STORAGE_TYPE =
   (process.env.NEXT_PUBLIC_STORAGE_TYPE as
     | 'localstorage'
@@ -14,6 +15,7 @@ const STORAGE_TYPE =
     | 'upstash'
     | 'kvrocks'
     | 'd1'
+    | 'postgres'
     | undefined) || 'localstorage';
 
 // 创建存储实例
@@ -30,14 +32,36 @@ function createStorage(): IStorage {
       if (typeof window !== 'undefined') {
         throw new Error('D1Storage can only be used on the server side');
       }
-      const adapter = getD1Adapter();
+      const d1Adapter = getD1Adapter();
       // 动态导入 D1Storage 以避免客户端打包
       const { D1Storage } = require('./d1.db');
-      return new D1Storage(adapter);
+      return new D1Storage(d1Adapter);
+    case 'postgres':
+      // PostgresStorage 只能在服务端使用，客户端会报错
+      if (typeof window !== 'undefined') {
+        throw new Error('PostgresStorage can only be used on the server side');
+      }
+      const postgresAdapter = getPostgresAdapter();
+      // 动态导入 PostgresStorage 以避免客户端打包
+      const { PostgresStorage } = require('./postgres.db');
+      return new PostgresStorage(postgresAdapter);
     case 'localstorage':
     default:
       return null as unknown as IStorage;
   }
+}
+
+/**
+ * 获取 Postgres 适配器
+ * 使用 Vercel Postgres (@vercel/postgres)
+ */
+function getPostgresAdapter(): any {
+  // 动态导入适配器以避免客户端打包
+  const { PostgresAdapter } = require('./postgres-adapter');
+
+  console.log('Using Vercel Postgres database');
+
+  return new PostgresAdapter();
 }
 
 /**
@@ -199,7 +223,140 @@ export class DbManager {
     return favorite !== null;
   }
 
- 
+  // 音乐播放记录相关方法
+  async saveMusicPlayRecord(
+    userName: string,
+    platform: string,
+    id: string,
+    record: MusicPlayRecord
+  ): Promise<void> {
+    const key = generateStorageKey(platform, id);
+    await this.storage.setMusicPlayRecord(userName, key, record);
+  }
+
+  async batchSaveMusicPlayRecords(
+    userName: string,
+    records: Array<{ platform: string; id: string; record: MusicPlayRecord }>
+  ): Promise<void> {
+    const batchRecords = records.map(({ platform, id, record }) => ({
+      key: generateStorageKey(platform, id),
+      record,
+    }));
+    await this.storage.batchSetMusicPlayRecords(userName, batchRecords);
+  }
+
+  async getAllMusicPlayRecords(userName: string): Promise<{
+    [key: string]: MusicPlayRecord;
+  }> {
+    return this.storage.getAllMusicPlayRecords(userName);
+  }
+
+  async deleteMusicPlayRecord(
+    userName: string,
+    platform: string,
+    id: string
+  ): Promise<void> {
+    const key = generateStorageKey(platform, id);
+    await this.storage.deleteMusicPlayRecord(userName, key);
+  }
+
+  async clearAllMusicPlayRecords(userName: string): Promise<void> {
+    await this.storage.clearAllMusicPlayRecords(userName);
+  }
+
+  // 音乐歌单相关方法
+  async createMusicPlaylist(
+    userName: string,
+    playlist: {
+      id: string;
+      name: string;
+      description?: string;
+      cover?: string;
+    }
+  ): Promise<void> {
+    if (typeof (this.storage as any).createMusicPlaylist === 'function') {
+      await (this.storage as any).createMusicPlaylist(userName, playlist);
+    }
+  }
+
+  async getMusicPlaylist(playlistId: string): Promise<any | null> {
+    if (typeof (this.storage as any).getMusicPlaylist === 'function') {
+      return (this.storage as any).getMusicPlaylist(playlistId);
+    }
+    return null;
+  }
+
+  async getUserMusicPlaylists(userName: string): Promise<any[]> {
+    if (typeof (this.storage as any).getUserMusicPlaylists === 'function') {
+      return (this.storage as any).getUserMusicPlaylists(userName);
+    }
+    return [];
+  }
+
+  async updateMusicPlaylist(
+    playlistId: string,
+    updates: {
+      name?: string;
+      description?: string;
+      cover?: string;
+    }
+  ): Promise<void> {
+    if (typeof (this.storage as any).updateMusicPlaylist === 'function') {
+      await (this.storage as any).updateMusicPlaylist(playlistId, updates);
+    }
+  }
+
+  async deleteMusicPlaylist(playlistId: string): Promise<void> {
+    if (typeof (this.storage as any).deleteMusicPlaylist === 'function') {
+      await (this.storage as any).deleteMusicPlaylist(playlistId);
+    }
+  }
+
+  async addSongToPlaylist(
+    playlistId: string,
+    song: {
+      platform: string;
+      id: string;
+      name: string;
+      artist: string;
+      album?: string;
+      pic?: string;
+      duration: number;
+    }
+  ): Promise<void> {
+    if (typeof (this.storage as any).addSongToPlaylist === 'function') {
+      await (this.storage as any).addSongToPlaylist(playlistId, song);
+    }
+  }
+
+  async removeSongFromPlaylist(
+    playlistId: string,
+    platform: string,
+    songId: string
+  ): Promise<void> {
+    if (typeof (this.storage as any).removeSongFromPlaylist === 'function') {
+      await (this.storage as any).removeSongFromPlaylist(playlistId, platform, songId);
+    }
+  }
+
+  async getPlaylistSongs(playlistId: string): Promise<any[]> {
+    if (typeof (this.storage as any).getPlaylistSongs === 'function') {
+      return (this.storage as any).getPlaylistSongs(playlistId);
+    }
+    return [];
+  }
+
+  async isSongInPlaylist(
+    playlistId: string,
+    platform: string,
+    songId: string
+  ): Promise<boolean> {
+    if (typeof (this.storage as any).isSongInPlaylist === 'function') {
+      return (this.storage as any).isSongInPlaylist(playlistId, platform, songId);
+    }
+    return false;
+  }
+
   async verifyUser(userName: string, password: string): Promise<boolean> {
     return this.storage.verifyUser(userName, password);
   }

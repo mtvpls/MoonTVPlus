@@ -1,12 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, no-console */
 
-import { HttpsProxyAgent } from 'https-proxy-agent';
 import { NextRequest, NextResponse } from 'next/server';
-import nodeFetch from 'node-fetch';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
-import { getNextApiKey } from '@/lib/tmdb.client';
+import { searchTMDBMulti } from '@/lib/tmdb.client';
 
 export const runtime = 'nodejs';
 
@@ -33,46 +31,29 @@ export async function GET(request: NextRequest) {
     const tmdbProxy = config.SiteConfig.TMDBProxy;
     const tmdbReverseProxy = config.SiteConfig.TMDBReverseProxy;
 
-    const actualKey = getNextApiKey(tmdbApiKey || '');
-    if (!actualKey) {
+    if (!tmdbApiKey) {
       return NextResponse.json(
         { error: 'TMDB API Key 未配置' },
         { status: 400 }
       );
     }
 
-    // 使用反代代理或默认 Base URL
-    const baseUrl = tmdbReverseProxy || 'https://api.themoviedb.org';
-    // 使用 multi search 同时搜索电影和电视剧
-    const url = `${baseUrl}/3/search/multi?api_key=${actualKey}&language=zh-CN&query=${encodeURIComponent(query)}&page=1`;
+    const response = await searchTMDBMulti(
+      tmdbApiKey,
+      query,
+      tmdbProxy,
+      tmdbReverseProxy
+    );
 
-    const fetchOptions: any = tmdbProxy
-      ? {
-          agent: new HttpsProxyAgent(tmdbProxy, {
-            timeout: 30000,
-            keepAlive: false,
-          }),
-          signal: AbortSignal.timeout(30000),
-        }
-      : {
-          signal: AbortSignal.timeout(15000),
-        };
-
-    // 使用 node-fetch 而不是原生 fetch
-    const response = await nodeFetch(url, fetchOptions);
-
-    if (!response.ok) {
-      console.error('TMDB 搜索失败:', response.status, response.statusText);
+    if (response.code !== 200) {
       return NextResponse.json(
-        { error: 'TMDB 搜索失败', code: response.status },
-        { status: response.status }
+        { error: 'TMDB 搜索失败', code: response.code },
+        { status: response.code }
       );
     }
 
-    const data: any = await response.json();
-
     // 过滤出电影和电视剧
-    const validResults = data.results.filter(
+    const validResults = response.results.filter(
       (item: any) => item.media_type === 'movie' || item.media_type === 'tv'
     );
 

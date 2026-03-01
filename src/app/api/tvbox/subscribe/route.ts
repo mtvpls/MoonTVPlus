@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     // 构建TVBOX订阅数据
     const tvboxSubscription = {
       // 站点配置
-      spider: '',
+      spider: `${baseUrl}/tvbox/custom_spider.jar`,
       wallpaper: '',
 
       // 视频源站点 - 根据 adFilter 参数决定是否使用代理

@@ -542,6 +542,21 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     }
   }
 
+  // 确保音乐配置存在
+  if (!adminConfig.MusicConfig) {
+    adminConfig.MusicConfig = {
+      TuneHubEnabled: false,
+      TuneHubBaseUrl: 'https://tunehub.sayqz.com/api',
+      TuneHubApiKey: '',
+      OpenListCacheEnabled: false,
+      OpenListCacheURL: '',
+      OpenListCacheUsername: '',
+      OpenListCachePassword: '',
+      OpenListCachePath: '/music-cache',
+      OpenListCacheProxyEnabled: true,
+    };
+  }
+
   return adminConfig;
 }
 
