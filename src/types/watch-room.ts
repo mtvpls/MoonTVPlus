@@ -66,7 +66,7 @@ export interface ServerToClientEvents {
   'room:list': (rooms: Room[]) => void;
   'room:member-joined': (member: Member) => void;
   'room:member-left': (userId: string) => void;
-  'room:deleted': () => void;
+  'room:deleted': (data?: { reason?: 'owner_left' }) => void;
   'play:update': (state: PlayState) => void;
   'play:seek': (currentTime: number) => void;
   'play:play': () => void;

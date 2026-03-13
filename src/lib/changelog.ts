@@ -1,4 +1,4 @@
-// 此文件由 scripts/convert-changelog.js 自动生成
+// 此文件由 scripts/convert-changelog.ts 自动生成
 // 请勿手动编辑
 
 export interface ChangelogEntry {

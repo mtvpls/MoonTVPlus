@@ -1,34 +1,25 @@
-/**
- * Vercel Postgres 数据库初始化脚本
- *
- * 创建数据库表结构并初始化默认管理员用户
- */
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const { sql } = require('@vercel/postgres');
-const crypto = require('crypto');
+import { sql } from '@vercel/postgres';
 
-// SHA-256 加密密码
-function hashPassword(password) {
+function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
 console.log('📦 Initializing Vercel Postgres database...');
 
-// 读取迁移脚本
-const fs = require('fs');
-const path = require('path');
-
-// 获取所有迁移文件
-const migrationsDir = path.join(__dirname, '../migrations/postgres');
+const migrationsDir = path.join(process.cwd(), 'migrations/postgres');
 if (!fs.existsSync(migrationsDir)) {
   console.error('❌ Migrations directory not found:', migrationsDir);
   process.exit(1);
 }
 
-// 读取并排序所有 .sql 文件
-const migrationFiles = fs.readdirSync(migrationsDir)
-  .filter(file => file.endsWith('.sql'))
-  .sort(); // 按文件名排序，确保按顺序执行
+const migrationFiles = fs
+  .readdirSync(migrationsDir)
+  .filter((fileName) => fileName.endsWith('.sql'))
+  .sort();
 
 if (migrationFiles.length === 0) {
   console.error('❌ No migration files found in:', migrationsDir);
@@ -37,9 +28,8 @@ if (migrationFiles.length === 0) {
 
 console.log(`📄 Found ${migrationFiles.length} migration file(s):`, migrationFiles.join(', '));
 
-async function init() {
+async function main(): Promise<void> {
   try {
-    // 执行所有迁移脚本
     console.log('🔧 Running database migrations...');
 
     for (const migrationFile of migrationFiles) {
@@ -47,12 +37,10 @@ async function init() {
       console.log(`  ⏳ Executing ${migrationFile}...`);
 
       const schemaSql = fs.readFileSync(sqlPath, 'utf8');
-
-      // 将 SQL 脚本按语句分割并逐个执行
       const statements = schemaSql
         .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
+        .map((statement) => statement.trim())
+        .filter((statement) => statement.length > 0);
 
       for (const statement of statements) {
         await sql.query(statement);
@@ -63,7 +51,6 @@ async function init() {
 
     console.log('✅ All migrations completed successfully!');
 
-    // 创建默认管理员用户
     const username = process.env.USERNAME || 'admin';
     const password = process.env.PASSWORD || '123456789';
     const passwordHash = hashPassword(password);
@@ -83,10 +70,10 @@ async function init() {
     console.log('1. Set NEXT_PUBLIC_STORAGE_TYPE=postgres in .env');
     console.log('2. Set POSTGRES_URL environment variable');
     console.log('3. Run: npm run dev');
-  } catch (err) {
-    console.error('❌ Initialization failed:', err);
+  } catch (error) {
+    console.error('❌ Initialization failed:', error);
     process.exit(1);
   }
 }
 
-init();
+void main();

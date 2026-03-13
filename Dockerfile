@@ -50,10 +50,10 @@ ENV DOCKER_ENV=true
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # 从构建器中复制 scripts 目录
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
-# 从构建器中复制 start.js
-COPY --from=builder --chown=nextjs:nodejs /app/start.js ./start.js
-# 从构建器中复制自定义 server.js（包含 Socket.IO 支持）
-COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
+# 从构建器中复制 TypeScript 启动入口
+COPY --from=builder --chown=nextjs:nodejs /app/start.ts ./start.ts
+# 从构建器中复制自定义 server.ts（包含 Socket.IO 支持）
+COPY --from=builder --chown=nextjs:nodejs /app/server.ts ./server.ts
 # 从构建器中复制 public 和 .next/static 目录
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -66,5 +66,5 @@ USER nextjs
 
 EXPOSE 3000
 
-# 使用自定义启动脚本，先预加载配置再启动服务器
-CMD ["node", "start.js"] 
+# 使用自定义 TypeScript 启动脚本，先预加载配置再启动服务器
+CMD ["./node_modules/.bin/tsx", "start.ts"] 

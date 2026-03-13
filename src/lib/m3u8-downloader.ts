@@ -705,7 +705,9 @@ export class M3U8Downloader {
     }
 
     try {
-      return task.aesConf.decryption.decrypt(data, 0, iv.buffer, true);
+      const ivBuffer = new ArrayBuffer(iv.byteLength);
+      new Uint8Array(ivBuffer).set(iv);
+      return task.aesConf.decryption.decrypt(data, 0, ivBuffer, true);
     } catch (error) {
       console.error('AES 解密失败:', error);
       return data;
