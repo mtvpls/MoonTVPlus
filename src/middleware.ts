@@ -18,7 +18,9 @@ export async function middleware(request: NextRequest) {
   if (!process.env.PASSWORD) {
     // 如果未配置密码，重定向到警告页面
     const warningUrl = new URL('/warning', request.url);
-    return warningUrl.pathname === pathname ? NextResponse.next() : NextResponse.redirect(warningUrl);
+    return warningUrl.pathname === pathname
+      ? NextResponse.next()
+      : NextResponse.redirect(warningUrl);
   }
 
   // 从cookie获取认证信息
@@ -38,13 +40,20 @@ export async function middleware(request: NextRequest) {
 
   // 其他模式：验证签名和时间戳，支持自动续期
   // 检查是否有用户名（非localStorage模式下密码不存储在cookie中）
-  if (!authInfo.username || !authInfo.role || !authInfo.signature || !authInfo.timestamp) {
+  if (
+    !authInfo.username ||
+    !authInfo.role ||
+    !authInfo.signature ||
+    !authInfo.timestamp
+  ) {
     return handleAuthFailure(request, pathname);
   }
 
   // 强制要求新版 Cookie（必须包含 tokenId 和 refreshToken）
   if (!authInfo.tokenId || !authInfo.refreshToken || !authInfo.refreshExpires) {
-    console.log(`Old cookie format detected for ${authInfo.username}, forcing re-login`);
+    console.log(
+      `Old cookie format detected for ${authInfo.username}, forcing re-login`,
+    );
     return handleAuthFailure(request, pathname);
   }
 
@@ -55,7 +64,9 @@ export async function middleware(request: NextRequest) {
 
   // 先检查 Refresh Token 是否过期
   if (now >= authInfo.refreshExpires) {
-    console.log(`Refresh token expired for ${authInfo.username}, redirecting to login`);
+    console.log(
+      `Refresh token expired for ${authInfo.username}, redirecting to login`,
+    );
     return handleAuthFailure(request, pathname);
   }
 
@@ -77,7 +88,7 @@ export async function middleware(request: NextRequest) {
     authInfo.role,
     authInfo.timestamp,
     authInfo.signature,
-    process.env.PASSWORD || ''
+    process.env.PASSWORD || '',
   );
 
   if (!isValidSignature) {
@@ -95,7 +106,7 @@ async function verifySignature(
   role: string,
   timestamp: number,
   signature: string,
-  secret: string
+  secret: string,
 ): Promise<boolean> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
@@ -104,7 +115,7 @@ async function verifySignature(
   const dataToSign = JSON.stringify({
     username,
     role,
-    timestamp
+    timestamp,
   });
   const messageData = encoder.encode(dataToSign);
 
@@ -115,12 +126,12 @@ async function verifySignature(
       keyData,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
-      ['verify']
+      ['verify'],
     );
 
     // 将十六进制字符串转换为Uint8Array
     const signatureBuffer = new Uint8Array(
-      signature.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
+      signature.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || [],
     );
 
     // 验证签名
@@ -128,7 +139,7 @@ async function verifySignature(
       'HMAC',
       key,
       signatureBuffer,
-      messageData
+      messageData,
     );
   } catch (error) {
     console.error('签名验证失败:', error);
@@ -139,7 +150,7 @@ async function verifySignature(
 // 处理认证失败的情况
 function handleAuthFailure(
   request: NextRequest,
-  pathname: string
+  pathname: string,
 ): NextResponse {
   // 如果是 API 路由，返回 401 状态码
   if (pathname.startsWith('/api')) {

@@ -33,7 +33,10 @@ export async function GET(request: NextRequest) {
     const tmdbReverseProxy = config.SiteConfig.TMDBReverseProxy;
 
     if (!tmdbApiKey) {
-      return NextResponse.json({ error: 'TMDB API Key 未配置' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'TMDB API Key 未配置' },
+        { status: 400 },
+      );
     }
 
     const response = await getTVSeasonDetails(
@@ -41,13 +44,13 @@ export async function GET(request: NextRequest) {
       parseInt(id),
       parseInt(season),
       tmdbProxy,
-      tmdbReverseProxy
+      tmdbReverseProxy,
     );
 
     if (response.code !== 200 || !response.season) {
       return NextResponse.json(
         { error: '获取失败', code: response.code },
-        { status: response.code }
+        { status: response.code },
       );
     }
 
@@ -56,7 +59,7 @@ export async function GET(request: NextRequest) {
     console.error('获取集数详情失败:', error);
     return NextResponse.json(
       { error: '获取失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -8,16 +8,17 @@
 
 ### 必需的环境变量
 
-| 变量名 | 说明 | 示例值 |
-|--------|------|--------|
-| `NEXT_PUBLIC_STORAGE_TYPE` | 存储类型 | `postgres` |
-| `POSTGRES_URL` | Vercel Postgres 连接字符串 | `postgres://...` |
-| `USERNAME` | 管理员用户名 | `admin` |
-| `PASSWORD` | 管理员密码 | `your_password` |
+| 变量名                     | 说明                       | 示例值           |
+| -------------------------- | -------------------------- | ---------------- |
+| `NEXT_PUBLIC_STORAGE_TYPE` | 存储类型                   | `postgres`       |
+| `POSTGRES_URL`             | Vercel Postgres 连接字符串 | `postgres://...` |
+| `USERNAME`                 | 管理员用户名               | `admin`          |
+| `PASSWORD`                 | 管理员密码                 | `your_password`  |
 
 ### Vercel Postgres 连接字符串
 
 Vercel Postgres 会自动提供以下环境变量：
+
 - `POSTGRES_URL` - 完整连接字符串
 - `POSTGRES_PRISMA_URL` - Prisma 兼容连接字符串
 - `POSTGRES_URL_NON_POOLING` - 无连接池连接字符串
@@ -68,14 +69,14 @@ vercel --prod
 
 ## 存储类型对比
 
-| 存储类型 | 部署平台 | 数据持久化 | 说明 |
-|---------|---------|-----------|------|
-| `localstorage` | 任意 | ❌ 浏览器本地 | 仅用于测试 |
-| `d1` | Cloudflare | ✅ | Cloudflare D1 数据库 |
-| `postgres` | Vercel | ✅ | Vercel Postgres 数据库 |
-| `redis` | 自建服务器 | ✅ | Redis 数据库 |
-| `upstash` | Vercel | ✅ | Upstash Redis |
-| `kvrocks` | 自建服务器 | ✅ | Kvrocks 数据库 |
+| 存储类型       | 部署平台   | 数据持久化    | 说明                   |
+| -------------- | ---------- | ------------- | ---------------------- |
+| `localstorage` | 任意       | ❌ 浏览器本地 | 仅用于测试             |
+| `d1`           | Cloudflare | ✅            | Cloudflare D1 数据库   |
+| `postgres`     | Vercel     | ✅            | Vercel Postgres 数据库 |
+| `redis`        | 自建服务器 | ✅            | Redis 数据库           |
+| `upstash`      | Vercel     | ✅            | Upstash Redis          |
+| `kvrocks`      | 自建服务器 | ✅            | Kvrocks 数据库         |
 
 ## 数据迁移
 

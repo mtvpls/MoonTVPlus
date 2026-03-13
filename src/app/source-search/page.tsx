@@ -71,7 +71,7 @@ function SourceSearchPageClient() {
       setHasMore(true);
       try {
         const response = await fetch(
-          `/api/source-search/categories?source=${encodeURIComponent(selectedSource)}`
+          `/api/source-search/categories?source=${encodeURIComponent(selectedSource)}`,
         );
         const data = await response.json();
         if (data.categories && Array.isArray(data.categories)) {
@@ -99,7 +99,7 @@ function SourceSearchPageClient() {
       setIsLoadingVideos(true);
       try {
         const response = await fetch(
-          `/api/source-search/videos?source=${encodeURIComponent(selectedSource)}&categoryId=${encodeURIComponent(selectedCategory)}&page=${currentPage}`
+          `/api/source-search/videos?source=${encodeURIComponent(selectedSource)}&categoryId=${encodeURIComponent(selectedCategory)}&page=${currentPage}`,
         );
         const data = await response.json();
         if (data.results && Array.isArray(data.results)) {
@@ -128,7 +128,7 @@ function SourceSearchPageClient() {
       setIsLoadingVideos(true);
       try {
         const response = await fetch(
-          `/api/source-search/search?source=${encodeURIComponent(selectedSource)}&keyword=${encodeURIComponent(searchKeyword)}&page=${currentPage}`
+          `/api/source-search/search?source=${encodeURIComponent(selectedSource)}&keyword=${encodeURIComponent(searchKeyword)}&page=${currentPage}`,
         );
         const data = await response.json();
         if (data.results && Array.isArray(data.results)) {
@@ -189,7 +189,7 @@ function SourceSearchPageClient() {
           setCurrentPage((prev) => prev + 1);
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
 
     observer.observe(loadMoreRef.current);
@@ -323,66 +323,67 @@ function SourceSearchPageClient() {
         </div>
 
         {/* 视频列表 */}
-        {selectedSource && (viewMode === 'search' ? searchKeyword : selectedCategory) && (
-          <div className='max-w-[95%] mx-auto mt-8'>
-            <div className='mb-4'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-                视频列表
-              </h2>
+        {selectedSource &&
+          (viewMode === 'search' ? searchKeyword : selectedCategory) && (
+            <div className='max-w-[95%] mx-auto mt-8'>
+              <div className='mb-4'>
+                <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+                  视频列表
+                </h2>
+              </div>
+
+              {isLoadingVideos && currentPage === 1 ? (
+                <div className='flex justify-center items-center h-40'>
+                  <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500'></div>
+                </div>
+              ) : videos.length === 0 ? (
+                <div className='text-center text-gray-500 py-8 dark:text-gray-400'>
+                  暂无视频
+                </div>
+              ) : (
+                <>
+                  <div className='grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'>
+                    {videos.map((item) => (
+                      <div key={`${item.source}-${item.id}`} className='w-full'>
+                        <VideoCard
+                          id={item.id}
+                          title={item.title}
+                          poster={item.poster}
+                          episodes={item.episodes.length}
+                          source={item.source}
+                          source_name={item.source_name}
+                          douban_id={item.douban_id}
+                          year={item.year}
+                          from='source-search'
+                          type={item.episodes.length > 1 ? 'tv' : 'movie'}
+                          cmsData={{
+                            desc: item.desc,
+                            episodes: item.episodes,
+                            episodes_titles: item.episodes_titles,
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Infinite scroll trigger */}
+                  <div
+                    ref={loadMoreRef}
+                    className='flex justify-center items-center py-8'
+                  >
+                    {isLoadingVideos && (
+                      <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500'></div>
+                    )}
+                    {!hasMore && videos.length > 0 && (
+                      <span className='text-sm text-gray-500 dark:text-gray-400'>
+                        没有更多了
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
-
-            {isLoadingVideos && currentPage === 1 ? (
-              <div className='flex justify-center items-center h-40'>
-                <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500'></div>
-              </div>
-            ) : videos.length === 0 ? (
-              <div className='text-center text-gray-500 py-8 dark:text-gray-400'>
-                暂无视频
-              </div>
-            ) : (
-              <>
-                <div className='grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'>
-                  {videos.map((item) => (
-                    <div
-                      key={`${item.source}-${item.id}`}
-                      className='w-full'
-                    >
-                      <VideoCard
-                        id={item.id}
-                        title={item.title}
-                        poster={item.poster}
-                        episodes={item.episodes.length}
-                        source={item.source}
-                        source_name={item.source_name}
-                        douban_id={item.douban_id}
-                        year={item.year}
-                        from='source-search'
-                        type={item.episodes.length > 1 ? 'tv' : 'movie'}
-                        cmsData={{
-                          desc: item.desc,
-                          episodes: item.episodes,
-                          episodes_titles: item.episodes_titles,
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                {/* Infinite scroll trigger */}
-                <div ref={loadMoreRef} className='flex justify-center items-center py-8'>
-                  {isLoadingVideos && (
-                    <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500'></div>
-                  )}
-                  {!hasMore && videos.length > 0 && (
-                    <span className='text-sm text-gray-500 dark:text-gray-400'>
-                      没有更多了
-                    </span>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+          )}
       </div>
     </PageLayout>
   );

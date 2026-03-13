@@ -17,7 +17,7 @@ export const runtime = 'nodejs';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: { token: string } },
 ) {
   try {
     const { searchParams } = new URL(request.url);
@@ -70,7 +70,10 @@ export async function GET(
       !openListConfig.Username ||
       !openListConfig.Password
     ) {
-      return NextResponse.json({ error: 'OpenList 未配置或未启用' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'OpenList 未配置或未启用' },
+        { status: 400 },
+      );
     }
 
     const rootPath = openListConfig.RootPath || '/';
@@ -80,7 +83,7 @@ export async function GET(
     const client = new OpenListClient(
       openListConfig.URL,
       openListConfig.Username,
-      openListConfig.Password
+      openListConfig.Password,
     );
 
     // 获取文件的播放链接
@@ -92,10 +95,7 @@ export async function GET(
         code: fileResponse.code,
         message: fileResponse.message,
       });
-      return NextResponse.json(
-        { error: '获取播放链接失败' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: '获取播放链接失败' }, { status: 500 });
     }
 
     // 返回重定向到真实播放 URL
@@ -104,7 +104,7 @@ export async function GET(
     console.error('获取播放链接失败:', error);
     return NextResponse.json(
       { error: '获取失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

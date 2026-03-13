@@ -17,7 +17,7 @@ export function getFavoriteUpdateEmailTemplate(
   userName: string,
   updates: FavoriteUpdate[],
   siteUrl: string,
-  siteName?: string
+  siteName?: string,
 ): string {
   const updatesList = updates
     .map(
@@ -34,7 +34,7 @@ export function getFavoriteUpdateEmailTemplate(
       </div>
       <a href="${u.url}" style="display: inline-block; padding: 8px 16px; background: #4F46E5; color: white; text-decoration: none; border-radius: 5px; font-size: 14px;">立即观看</a>
     </div>
-  `
+  `,
     )
     .join('');
 
@@ -128,13 +128,13 @@ export function getSingleFavoriteUpdateEmailTemplate(
   newEpisodes: number,
   url: string,
   cover?: string,
-  siteName?: string
+  siteName?: string,
 ): string {
   return getFavoriteUpdateEmailTemplate(
     userName,
     [{ title, oldEpisodes, newEpisodes, url, cover }],
     url.split('/play')[0] || 'http://localhost:3000',
-    siteName
+    siteName,
   );
 }
 
@@ -145,12 +145,12 @@ export function getBatchFavoriteUpdateEmailTemplate(
   userName: string,
   updates: FavoriteUpdate[],
   siteUrl: string,
-  siteName?: string
+  siteName?: string,
 ): string {
   const totalUpdates = updates.length;
   const totalNewEpisodes = updates.reduce(
     (sum, u) => sum + (u.newEpisodes - u.oldEpisodes),
-    0
+    0,
   );
 
   const updatesList = updates
@@ -173,7 +173,7 @@ export function getBatchFavoriteUpdateEmailTemplate(
         </div>
       </div>
     </div>
-  `
+  `,
     )
     .join('');
 

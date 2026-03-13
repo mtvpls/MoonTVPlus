@@ -13,10 +13,7 @@ export async function POST(request: NextRequest) {
     const { keyword } = body;
 
     if (!keyword) {
-      return NextResponse.json(
-        { error: '关键词不能为空' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '关键词不能为空' }, { status: 400 });
     }
 
     // 从系统配置中获取 Pansou 配置
@@ -34,7 +31,7 @@ export async function POST(request: NextRequest) {
     if (!apiUrl) {
       return NextResponse.json(
         { error: '未配置 Pansou API 地址，请在管理面板配置' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -58,9 +55,10 @@ export async function POST(request: NextRequest) {
       let total = 0;
 
       const shouldBlock = (link: PansouLink) => {
-        const content = `${link.note || ''} ${link.url || ''} ${link.source || ''}`.toLowerCase();
+        const content =
+          `${link.note || ''} ${link.url || ''} ${link.source || ''}`.toLowerCase();
         return blockedKeywords.some((item) =>
-          content.includes(item.toLowerCase())
+          content.includes(item.toLowerCase()),
         );
       };
 
@@ -92,7 +90,7 @@ export async function POST(request: NextRequest) {
     console.error('Pansou 搜索失败:', error);
     return NextResponse.json(
       { error: error.message || '搜索失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

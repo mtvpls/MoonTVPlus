@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       {
         error: '不支持本地存储进行数据迁移',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -34,13 +34,13 @@ export async function POST(request: NextRequest) {
 
     // 检查是否有需要迁移的用户（排除站长）
     const usersToMigrate = adminConfig.UserConfig.Users.filter(
-      u => u.role !== 'owner'
+      (u) => u.role !== 'owner',
     );
 
     if (!usersToMigrate || usersToMigrate.length === 0) {
       return NextResponse.json(
         { error: '没有需要迁移的用户' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store',
         },
-      }
+      },
     );
   } catch (error) {
     console.error('用户数据迁移失败:', error);
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         error: '用户数据迁移失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

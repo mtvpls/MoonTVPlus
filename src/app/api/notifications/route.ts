@@ -15,7 +15,9 @@ export async function GET(request: NextRequest) {
   try {
     const storage = getStorage();
     const notifications = await storage.getNotifications(authInfo.username);
-    const unreadCount = await storage.getUnreadNotificationCount(authInfo.username);
+    const unreadCount = await storage.getUnreadNotificationCount(
+      authInfo.username,
+    );
 
     return NextResponse.json({
       notifications,
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
     console.error('获取通知失败:', error);
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
     console.error('操作通知失败:', error);
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

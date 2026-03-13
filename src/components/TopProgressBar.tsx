@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter,useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import NProgress from 'nprogress';
 import { useEffect, useRef } from 'react';
 
@@ -39,7 +39,11 @@ export default function TopProgressBar() {
 
       // /play 和 /live 页面：参数变化也显示进度条
       // 其他页面：仅路径变化时显示进度条
-      if (currentPathname === '/play' || currentPathname === '/live' || targetPathname !== previousPathnameRef.current) {
+      if (
+        currentPathname === '/play' ||
+        currentPathname === '/live' ||
+        targetPathname !== previousPathnameRef.current
+      ) {
         isNavigatingRef.current = true;
         NProgress.start();
       }
@@ -54,7 +58,11 @@ export default function TopProgressBar() {
 
       // /play 和 /live 页面：参数变化也显示进度条
       // 其他页面：仅路径变化时显示进度条
-      if (currentPathname === '/play' || currentPathname === '/live' || targetPathname !== previousPathnameRef.current) {
+      if (
+        currentPathname === '/play' ||
+        currentPathname === '/live' ||
+        targetPathname !== previousPathnameRef.current
+      ) {
         isNavigatingRef.current = true;
         NProgress.start();
       }
@@ -89,7 +97,10 @@ export default function TopProgressBar() {
           try {
             const targetOrigin = new URL(targetUrl, currentOrigin).origin;
             const targetPathname = new URL(targetUrl, currentOrigin).pathname;
-            if (currentOrigin === targetOrigin && targetPathname !== previousPathnameRef.current) {
+            if (
+              currentOrigin === targetOrigin &&
+              targetPathname !== previousPathnameRef.current
+            ) {
               isNavigatingRef.current = true;
               NProgress.start();
             }

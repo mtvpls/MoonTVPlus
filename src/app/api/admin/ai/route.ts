@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       {
         error: '不支持本地存储进行管理员配置',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -105,7 +105,8 @@ export async function POST(request: NextRequest) {
     // 参数校验
     if (
       typeof Enabled !== 'boolean' ||
-      (Provider !== undefined && !['openai', 'claude', 'custom'].includes(Provider)) ||
+      (Provider !== undefined &&
+        !['openai', 'claude', 'custom'].includes(Provider)) ||
       (OpenAIApiKey !== undefined && typeof OpenAIApiKey !== 'string') ||
       (OpenAIBaseURL !== undefined && typeof OpenAIBaseURL !== 'string') ||
       (OpenAIModel !== undefined && typeof OpenAIModel !== 'string') ||
@@ -115,17 +116,27 @@ export async function POST(request: NextRequest) {
       (CustomBaseURL !== undefined && typeof CustomBaseURL !== 'string') ||
       (CustomModel !== undefined && typeof CustomModel !== 'string') ||
       typeof EnableDecisionModel !== 'boolean' ||
-      (DecisionProvider !== undefined && !['openai', 'claude', 'custom'].includes(DecisionProvider)) ||
-      (DecisionOpenAIApiKey !== undefined && typeof DecisionOpenAIApiKey !== 'string') ||
-      (DecisionOpenAIBaseURL !== undefined && typeof DecisionOpenAIBaseURL !== 'string') ||
-      (DecisionOpenAIModel !== undefined && typeof DecisionOpenAIModel !== 'string') ||
-      (DecisionClaudeApiKey !== undefined && typeof DecisionClaudeApiKey !== 'string') ||
-      (DecisionClaudeModel !== undefined && typeof DecisionClaudeModel !== 'string') ||
-      (DecisionCustomApiKey !== undefined && typeof DecisionCustomApiKey !== 'string') ||
-      (DecisionCustomBaseURL !== undefined && typeof DecisionCustomBaseURL !== 'string') ||
-      (DecisionCustomModel !== undefined && typeof DecisionCustomModel !== 'string') ||
+      (DecisionProvider !== undefined &&
+        !['openai', 'claude', 'custom'].includes(DecisionProvider)) ||
+      (DecisionOpenAIApiKey !== undefined &&
+        typeof DecisionOpenAIApiKey !== 'string') ||
+      (DecisionOpenAIBaseURL !== undefined &&
+        typeof DecisionOpenAIBaseURL !== 'string') ||
+      (DecisionOpenAIModel !== undefined &&
+        typeof DecisionOpenAIModel !== 'string') ||
+      (DecisionClaudeApiKey !== undefined &&
+        typeof DecisionClaudeApiKey !== 'string') ||
+      (DecisionClaudeModel !== undefined &&
+        typeof DecisionClaudeModel !== 'string') ||
+      (DecisionCustomApiKey !== undefined &&
+        typeof DecisionCustomApiKey !== 'string') ||
+      (DecisionCustomBaseURL !== undefined &&
+        typeof DecisionCustomBaseURL !== 'string') ||
+      (DecisionCustomModel !== undefined &&
+        typeof DecisionCustomModel !== 'string') ||
       typeof EnableWebSearch !== 'boolean' ||
-      (WebSearchProvider !== undefined && !['tavily', 'serper', 'serpapi'].includes(WebSearchProvider)) ||
+      (WebSearchProvider !== undefined &&
+        !['tavily', 'serper', 'serpapi'].includes(WebSearchProvider)) ||
       (TavilyApiKey !== undefined && typeof TavilyApiKey !== 'string') ||
       (SerperApiKey !== undefined && typeof SerperApiKey !== 'string') ||
       (SerpApiKey !== undefined && typeof SerpApiKey !== 'string') ||
@@ -199,7 +210,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store', // 不缓存结果
         },
-      }
+      },
     );
   } catch (error) {
     console.error('更新AI配置失败:', error);
@@ -208,7 +219,7 @@ export async function POST(request: NextRequest) {
         error: '更新AI配置失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

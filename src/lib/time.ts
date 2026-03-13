@@ -10,7 +10,9 @@ export function parseCustomTimeFormat(timeStr: string): Date {
 
   // 处理 "20250824000000 +0800" 格式
   // 格式说明：YYYYMMDDHHMMSS +ZZZZ
-  const match = timeStr.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\s*([+-]\d{4})$/);
+  const match = timeStr.match(
+    /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\s*([+-]\d{4})$/,
+  );
 
   if (match) {
     const [, year, month, day, hour, minute, second, timezone] = match;

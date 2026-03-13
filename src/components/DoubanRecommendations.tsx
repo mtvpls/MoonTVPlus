@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback,useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useEnableComments } from '@/hooks/useEnableComments';
 
@@ -18,8 +18,12 @@ interface DoubanRecommendationsProps {
   doubanId: number;
 }
 
-export default function DoubanRecommendations({ doubanId }: DoubanRecommendationsProps) {
-  const [recommendations, setRecommendations] = useState<DoubanRecommendation[]>([]);
+export default function DoubanRecommendations({
+  doubanId,
+}: DoubanRecommendationsProps) {
+  const [recommendations, setRecommendations] = useState<
+    DoubanRecommendation[]
+  >([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,7 +57,7 @@ export default function DoubanRecommendations({ doubanId }: DoubanRecommendation
       }
 
       const response = await fetch(
-        `/api/douban-recommendations?id=${doubanId}`
+        `/api/douban-recommendations?id=${doubanId}`,
       );
 
       if (!response.ok) {
@@ -68,10 +72,13 @@ export default function DoubanRecommendations({ doubanId }: DoubanRecommendation
 
       // 保存到localStorage
       try {
-        localStorage.setItem(cacheKey, JSON.stringify({
-          data: recommendationsData,
-          timestamp: Date.now()
-        }));
+        localStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            data: recommendationsData,
+            timestamp: Date.now(),
+          }),
+        );
       } catch (e) {
         console.error('保存缓存失败:', e);
       }

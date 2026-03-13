@@ -65,9 +65,12 @@ const intervalId = setInterval(() => {
       executeCronJob();
     }, 3000);
 
-    setInterval(() => {
-      executeCronJob();
-    }, 60 * 60 * 1000);
+    setInterval(
+      () => {
+        executeCronJob();
+      },
+      60 * 60 * 1000,
+    );
   });
 
   req.setTimeout(2000, () => {

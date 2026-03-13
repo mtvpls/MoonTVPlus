@@ -2,7 +2,7 @@
 
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect,useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { getTMDBImageUrl } from '@/lib/tmdb.client';
@@ -40,7 +40,9 @@ export default function MovieRequestPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [showSeasonDialog, setShowSeasonDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState<TMDBResult | null>(null);
-  const [seasons, setSeasons] = useState<Array<{ season_number: number; name: string; poster_path?: string | null }>>([]);
+  const [seasons, setSeasons] = useState<
+    Array<{ season_number: number; name: string; poster_path?: string | null }>
+  >([]);
   const [loadingSeasons, setLoadingSeasons] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [alertModal, setAlertModal] = useState<{
@@ -68,7 +70,9 @@ export default function MovieRequestPage() {
 
     setIsSearching(true);
     try {
-      const response = await fetch(`/api/tmdb/search?query=${encodeURIComponent(searchKeyword)}`);
+      const response = await fetch(
+        `/api/tmdb/search?query=${encodeURIComponent(searchKeyword)}`,
+      );
       const data = await response.json();
 
       if (data.results) {
@@ -78,7 +82,12 @@ export default function MovieRequestPage() {
       }
     } catch (err) {
       console.error('搜索失败:', err);
-      setAlertModal({ isOpen: true, type: 'error', title: '搜索失败', message: '请稍后重试' });
+      setAlertModal({
+        isOpen: true,
+        type: 'error',
+        title: '搜索失败',
+        message: '请稍后重试',
+      });
     } finally {
       setIsSearching(false);
     }
@@ -95,7 +104,9 @@ export default function MovieRequestPage() {
         const response = await fetch(`/api/tmdb/seasons?tvId=${item.id}`);
         const data = await response.json();
         if (data.seasons) {
-          const validSeasons = data.seasons.filter((s: any) => s.season_number > 0);
+          const validSeasons = data.seasons.filter(
+            (s: any) => s.season_number > 0,
+          );
           setSeasons(validSeasons);
 
           if (validSeasons.length === 1) {
@@ -119,15 +130,19 @@ export default function MovieRequestPage() {
   const submitRequest = async (item: TMDBResult, season?: number) => {
     setSubmitting(true);
     try {
-      let poster = item.poster_path ? processImageUrl(getTMDBImageUrl(item.poster_path, 'w500')) : undefined;
+      let poster = item.poster_path
+        ? processImageUrl(getTMDBImageUrl(item.poster_path, 'w500'))
+        : undefined;
       let title = item.title || item.name || '';
 
       if (season && seasons.length > 0) {
-        const seasonData = seasons.find(s => s.season_number === season);
+        const seasonData = seasons.find((s) => s.season_number === season);
         if (seasonData) {
           title = `${title} ${seasonData.name}`;
           if (seasonData.poster_path) {
-            poster = processImageUrl(getTMDBImageUrl(seasonData.poster_path, 'w500'));
+            poster = processImageUrl(
+              getTMDBImageUrl(seasonData.poster_path, 'w500'),
+            );
           }
         }
       }
@@ -150,14 +165,29 @@ export default function MovieRequestPage() {
 
       if (response.ok) {
         setShowSeasonDialog(false);
-        setAlertModal({ isOpen: true, type: 'success', title: '求片成功', message: data.message });
+        setAlertModal({
+          isOpen: true,
+          type: 'success',
+          title: '求片成功',
+          message: data.message,
+        });
         refreshMyRequests();
       } else {
-        setAlertModal({ isOpen: true, type: 'error', title: '求片失败', message: data.error || '请稍后重试' });
+        setAlertModal({
+          isOpen: true,
+          type: 'error',
+          title: '求片失败',
+          message: data.error || '请稍后重试',
+        });
       }
     } catch (err) {
       console.error('求片失败:', err);
-      setAlertModal({ isOpen: true, type: 'error', title: '求片失败', message: '请稍后重试' });
+      setAlertModal({
+        isOpen: true,
+        type: 'error',
+        title: '求片失败',
+        message: '请稍后重试',
+      });
     } finally {
       setSubmitting(false);
     }
@@ -211,7 +241,9 @@ export default function MovieRequestPage() {
             求片
           </h1>
           <p className='text-sm text-gray-500 dark:text-gray-400 mt-1'>
-            {isFeatureEnabled ? '搜索并提交您想看的影片' : '求片功能已关闭，仅可查看已求片列表'}
+            {isFeatureEnabled
+              ? '搜索并提交您想看的影片'
+              : '求片功能已关闭，仅可查看已求片列表'}
           </p>
         </div>
 
@@ -288,11 +320,13 @@ export default function MovieRequestPage() {
                       <p className='text-xs text-gray-500 dark:text-gray-400 mb-2'>
                         {request.year || '未知'} · {request.requestCount}人求片
                       </p>
-                      <div className={`text-xs px-2 py-1 rounded text-center ${
-                        request.status === 'fulfilled'
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                          : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
-                      }`}>
+                      <div
+                        className={`text-xs px-2 py-1 rounded text-center ${
+                          request.status === 'fulfilled'
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                            : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                        }`}
+                      >
                         {request.status === 'fulfilled' ? '已上架' : '待处理'}
                       </div>
                     </div>
@@ -313,7 +347,9 @@ export default function MovieRequestPage() {
               >
                 {item.poster_path ? (
                   <img
-                    src={processImageUrl(getTMDBImageUrl(item.poster_path, 'w500'))}
+                    src={processImageUrl(
+                      getTMDBImageUrl(item.poster_path, 'w500'),
+                    )}
                     alt={item.title || item.name}
                     className='w-full aspect-[2/3] object-cover'
                   />
@@ -327,14 +363,20 @@ export default function MovieRequestPage() {
                     {item.title || item.name}
                   </h3>
                   <p className='text-xs text-gray-500 dark:text-gray-400 mb-2'>
-                    {(item.release_date || item.first_air_date)?.split('-')[0] || '未知'}
+                    {(item.release_date || item.first_air_date)?.split(
+                      '-',
+                    )[0] || '未知'}
                   </p>
                   <button
                     onClick={() => handleRequest(item)}
                     disabled={submitting || !isFeatureEnabled}
                     className='w-full px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                   >
-                    {submitting ? '处理中...' : !isFeatureEnabled ? '功能已关闭' : '求片'}
+                    {submitting
+                      ? '处理中...'
+                      : !isFeatureEnabled
+                        ? '功能已关闭'
+                        : '求片'}
                   </button>
                 </div>
               </div>
@@ -348,86 +390,90 @@ export default function MovieRequestPage() {
       </div>
 
       {/* 提示弹窗 */}
-      {alertModal.isOpen && typeof window !== 'undefined' && createPortal(
-        <div className='fixed inset-0 bg-black/50 z-[1002] flex items-center justify-center p-4'>
-          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6'>
-            <div className='flex justify-center mb-4'>
-              {alertModal.type === 'success' ? (
-                <CheckCircle className='w-12 h-12 text-green-500' />
-              ) : (
-                <AlertCircle className='w-12 h-12 text-red-500' />
-              )}
+      {alertModal.isOpen &&
+        typeof window !== 'undefined' &&
+        createPortal(
+          <div className='fixed inset-0 bg-black/50 z-[1002] flex items-center justify-center p-4'>
+            <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6'>
+              <div className='flex justify-center mb-4'>
+                {alertModal.type === 'success' ? (
+                  <CheckCircle className='w-12 h-12 text-green-500' />
+                ) : (
+                  <AlertCircle className='w-12 h-12 text-red-500' />
+                )}
+              </div>
+              <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100 text-center mb-2'>
+                {alertModal.title}
+              </h3>
+              <p className='text-gray-600 dark:text-gray-400 text-center mb-4'>
+                {alertModal.message}
+              </p>
+              <button
+                onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
+                className='w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg'
+              >
+                确定
+              </button>
             </div>
-            <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100 text-center mb-2'>
-              {alertModal.title}
-            </h3>
-            <p className='text-gray-600 dark:text-gray-400 text-center mb-4'>
-              {alertModal.message}
-            </p>
-            <button
-              onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
-              className='w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg'
-            >
-              确定
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* 季度选择弹窗 */}
-      {showSeasonDialog && typeof window !== 'undefined' && createPortal(
-        <>
-          <div
-            className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000]'
-            onClick={() => setShowSeasonDialog(false)}
-          />
-          <div className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-gray-900 rounded-xl shadow-xl z-[1001] p-6'>
-            <h3 className='text-lg font-bold text-gray-800 dark:text-gray-200 mb-4'>
-              选择季度
-            </h3>
-            <p className='text-sm text-gray-600 dark:text-gray-400 mb-4'>
-              {selectedItem?.title || selectedItem?.name}
-            </p>
-            {loadingSeasons ? (
-              <div className='flex justify-center py-8'>
-                <div className='w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin' />
+      {showSeasonDialog &&
+        typeof window !== 'undefined' &&
+        createPortal(
+          <>
+            <div
+              className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000]'
+              onClick={() => setShowSeasonDialog(false)}
+            />
+            <div className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-gray-900 rounded-xl shadow-xl z-[1001] p-6'>
+              <h3 className='text-lg font-bold text-gray-800 dark:text-gray-200 mb-4'>
+                选择季度
+              </h3>
+              <p className='text-sm text-gray-600 dark:text-gray-400 mb-4'>
+                {selectedItem?.title || selectedItem?.name}
+              </p>
+              {loadingSeasons ? (
+                <div className='flex justify-center py-8'>
+                  <div className='w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin' />
+                </div>
+              ) : (
+                <div className='space-y-2 mb-4 max-h-60 overflow-y-auto'>
+                  {seasons.map((season) => (
+                    <button
+                      key={season.season_number}
+                      onClick={() => setSelectedSeason(season.season_number)}
+                      className={`w-full p-3 rounded-lg text-left transition-colors ${
+                        selectedSeason === season.season_number
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {season.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className='flex gap-2'>
+                <button
+                  onClick={() => setShowSeasonDialog(false)}
+                  className='flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600'
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSeasonConfirm}
+                  className='flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg'
+                >
+                  确认
+                </button>
               </div>
-            ) : (
-              <div className='space-y-2 mb-4 max-h-60 overflow-y-auto'>
-                {seasons.map((season) => (
-                  <button
-                    key={season.season_number}
-                    onClick={() => setSelectedSeason(season.season_number)}
-                    className={`w-full p-3 rounded-lg text-left transition-colors ${
-                      selectedSeason === season.season_number
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    {season.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className='flex gap-2'>
-              <button
-                onClick={() => setShowSeasonDialog(false)}
-                className='flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600'
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSeasonConfirm}
-                className='flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg'
-              >
-                确认
-              </button>
             </div>
-          </div>
-        </>,
-        document.body
-      )}
+          </>,
+          document.body,
+        )}
     </PageLayout>
   );
 }

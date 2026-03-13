@@ -11,7 +11,8 @@ interface VideoInfoCacheEntry {
 }
 
 const METAINFO_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7天
-const VIDEOINFO_CACHE_TTL_MS = (parseInt(process.env.VIDEOINFO_CACHE_MINUTES || '1440', 10)) * 60 * 1000; // 默认1天
+const VIDEOINFO_CACHE_TTL_MS =
+  parseInt(process.env.VIDEOINFO_CACHE_MINUTES || '1440', 10) * 60 * 1000; // 默认1天
 
 const METAINFO_CACHE: Map<string, MetaInfoCacheEntry> = new Map();
 const VIDEOINFO_CACHE: Map<string, VideoInfoCacheEntry> = new Map();
@@ -88,10 +89,7 @@ export function getCachedVideoInfo(folderPath: string): VideoInfo | null {
   return entry.data;
 }
 
-export function setCachedVideoInfo(
-  folderPath: string,
-  data: VideoInfo
-): void {
+export function setCachedVideoInfo(folderPath: string, data: VideoInfo): void {
   VIDEOINFO_CACHE.set(folderPath, {
     expiresAt: Date.now() + VIDEOINFO_CACHE_TTL_MS,
     data,

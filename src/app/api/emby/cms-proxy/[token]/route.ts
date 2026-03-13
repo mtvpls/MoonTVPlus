@@ -14,7 +14,7 @@ export const runtime = 'nodejs';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: { token: string } },
 ) {
   const { searchParams } = new URL(request.url);
   const ac = searchParams.get('ac');
@@ -25,7 +25,7 @@ export async function GET(
   if (ac !== 'videolist' && ac !== 'list' && ac !== 'detail') {
     return NextResponse.json(
       { code: 400, msg: '不支持的操作' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -90,7 +90,13 @@ export async function GET(
     if (wd) {
       // 搜索模式
       if (ac === 'detail') {
-        return await handleDetailBySearch(client, wd, requestToken, embyKey, request);
+        return await handleDetailBySearch(
+          client,
+          wd,
+          requestToken,
+          embyKey,
+          request,
+        );
       }
       return await handleSearch(client, wd, requestToken);
     } else if (ids || ac === 'detail') {
@@ -166,7 +172,7 @@ async function handleDetailBySearch(
   query: string,
   token: string,
   embyKey: string | undefined,
-  request: NextRequest
+  request: NextRequest,
 ) {
   const result = await client.getItems({
     searchTerm: query,
@@ -188,7 +194,13 @@ async function handleDetailBySearch(
     });
   }
 
-  return await handleDetail(client, result.Items[0].Id, token, embyKey, request);
+  return await handleDetail(
+    client,
+    result.Items[0].Id,
+    token,
+    embyKey,
+    request,
+  );
 }
 
 /**
@@ -199,14 +211,18 @@ async function handleDetail(
   itemId: string,
   token: string,
   embyKey: string | undefined,
-  request: NextRequest
+  request: NextRequest,
 ) {
   const item = await client.getItem(itemId);
 
   // 获取当前请求的 baseUrl
-  const host = request.headers.get('host') || request.headers.get('x-forwarded-host');
-  const proto = request.headers.get('x-forwarded-proto') ||
-    (host?.includes('localhost') || host?.includes('127.0.0.1') ? 'http' : 'https');
+  const host =
+    request.headers.get('host') || request.headers.get('x-forwarded-host');
+  const proto =
+    request.headers.get('x-forwarded-proto') ||
+    (host?.includes('localhost') || host?.includes('127.0.0.1')
+      ? 'http'
+      : 'https');
   const baseUrl = process.env.SITE_BASE || `${proto}://${host}`;
 
   const embyKeyParam = embyKey ? `&embyKey=${embyKey}` : '';

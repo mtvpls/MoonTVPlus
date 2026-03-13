@@ -26,10 +26,7 @@ export async function GET(request: NextRequest) {
   const sourceKey = searchParams.get('source');
 
   if (!sourceKey) {
-    return NextResponse.json(
-      { error: '缺少参数: source' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: '缺少参数: source' }, { status: 400 });
   }
 
   try {
@@ -40,7 +37,7 @@ export async function GET(request: NextRequest) {
     if (!targetSite) {
       return NextResponse.json(
         { error: `未找到指定的视频源: ${sourceKey}` },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -80,9 +77,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to get categories:', error);
-    return NextResponse.json(
-      { error: '获取分类列表失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '获取分类列表失败' }, { status: 500 });
   }
 }

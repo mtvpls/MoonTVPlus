@@ -2,7 +2,14 @@
 
 'use client';
 
-import { AlertCircle, CheckCircle, Eye, EyeOff, User, Lock } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle,
+  Eye,
+  EyeOff,
+  Lock,
+  User,
+} from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
@@ -42,12 +49,13 @@ function VersionDisplay() {
       <span className='font-mono'>v{CURRENT_VERSION}</span>
       {!isChecking && updateStatus !== UpdateStatus.FETCH_FAILED && (
         <div
-          className={`flex items-center gap-1.5 ${updateStatus === UpdateStatus.HAS_UPDATE
-            ? 'text-yellow-600 dark:text-yellow-400'
-            : updateStatus === UpdateStatus.NO_UPDATE
-              ? 'text-green-600 dark:text-green-400'
-              : ''
-            }`}
+          className={`flex items-center gap-1.5 ${
+            updateStatus === UpdateStatus.HAS_UPDATE
+              ? 'text-yellow-600 dark:text-yellow-400'
+              : updateStatus === UpdateStatus.NO_UPDATE
+                ? 'text-green-600 dark:text-green-400'
+                : ''
+          }`}
         >
           {updateStatus === UpdateStatus.HAS_UPDATE && (
             <>
@@ -80,7 +88,9 @@ function RegisterPageClient() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileLoaded, setTurnstileLoaded] = useState(false);
   const [siteConfig, setSiteConfig] = useState<any>(null);
-  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
+  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(
+    null,
+  );
   const [backgroundImage, setBackgroundImage] = useState<string>('');
 
   const { siteName } = useSite();
@@ -108,7 +118,8 @@ function RegisterPageClient() {
       // 设置站点配置
       const config = {
         EnableRegistration: runtimeConfig?.ENABLE_REGISTRATION || false,
-        RegistrationRequireTurnstile: runtimeConfig?.REGISTRATION_REQUIRE_TURNSTILE || false,
+        RegistrationRequireTurnstile:
+          runtimeConfig?.REGISTRATION_REQUIRE_TURNSTILE || false,
         TurnstileSiteKey: runtimeConfig?.TURNSTILE_SITE_KEY || '',
       };
       setSiteConfig(config);
@@ -122,7 +133,10 @@ function RegisterPageClient() {
 
   // 加载Cloudflare Turnstile脚本
   useEffect(() => {
-    if (!siteConfig?.RegistrationRequireTurnstile || !siteConfig?.TurnstileSiteKey) {
+    if (
+      !siteConfig?.RegistrationRequireTurnstile ||
+      !siteConfig?.TurnstileSiteKey
+    ) {
       return;
     }
 
@@ -148,12 +162,15 @@ function RegisterPageClient() {
 
     const container = document.getElementById('turnstile-container');
     if (container && (window as any).turnstile) {
-      const widgetId = (window as any).turnstile.render('#turnstile-container', {
-        sitekey: siteConfig.TurnstileSiteKey,
-        callback: (token: string) => {
-          setTurnstileToken(token);
+      const widgetId = (window as any).turnstile.render(
+        '#turnstile-container',
+        {
+          sitekey: siteConfig.TurnstileSiteKey,
+          callback: (token: string) => {
+            setTurnstileToken(token);
+          },
         },
-      });
+      );
       setTurnstileWidgetId(widgetId);
     }
   }, [turnstileLoaded, siteConfig]);
@@ -191,7 +208,9 @@ function RegisterPageClient() {
         body: JSON.stringify({
           username,
           password,
-          turnstileToken: siteConfig?.RegistrationRequireTurnstile ? turnstileToken : undefined,
+          turnstileToken: siteConfig?.RegistrationRequireTurnstile
+            ? turnstileToken
+            : undefined,
         }),
       });
 
@@ -201,7 +220,11 @@ function RegisterPageClient() {
         router.replace(redirect);
       } else {
         // 注册失败，重置Turnstile
-        if (siteConfig?.RegistrationRequireTurnstile && turnstileWidgetId !== null && (window as any).turnstile) {
+        if (
+          siteConfig?.RegistrationRequireTurnstile &&
+          turnstileWidgetId !== null &&
+          (window as any).turnstile
+        ) {
           (window as any).turnstile.reset(turnstileWidgetId);
           setTurnstileToken(null);
         }
@@ -218,7 +241,11 @@ function RegisterPageClient() {
       }
     } catch (error) {
       // 网络错误，重置Turnstile
-      if (siteConfig?.RegistrationRequireTurnstile && turnstileWidgetId !== null && (window as any).turnstile) {
+      if (
+        siteConfig?.RegistrationRequireTurnstile &&
+        turnstileWidgetId !== null &&
+        (window as any).turnstile
+      ) {
         (window as any).turnstile.reset(turnstileWidgetId);
         setTurnstileToken(null);
       }
@@ -240,12 +267,16 @@ function RegisterPageClient() {
   return (
     <div
       className='relative min-h-screen flex items-center justify-center px-4 overflow-hidden'
-      style={backgroundImage ? {
-        backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
-      } : undefined}
+      style={
+        backgroundImage
+          ? {
+              backgroundImage: `url(${backgroundImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+            }
+          : undefined
+      }
     >
       <div className='absolute top-4 right-4'>
         <ThemeToggle />
@@ -341,9 +372,13 @@ function RegisterPageClient() {
           </div>
 
           {/* Cloudflare Turnstile */}
-          {siteConfig?.RegistrationRequireTurnstile && siteConfig?.TurnstileSiteKey && (
-            <div id='turnstile-container' className='flex justify-center'></div>
-          )}
+          {siteConfig?.RegistrationRequireTurnstile &&
+            siteConfig?.TurnstileSiteKey && (
+              <div
+                id='turnstile-container'
+                className='flex justify-center'
+              ></div>
+            )}
 
           {error && (
             <p className='text-sm text-red-600 dark:text-red-400'>{error}</p>
@@ -353,7 +388,10 @@ function RegisterPageClient() {
           <button
             type='submit'
             disabled={
-              !username || !password || !confirmPassword || loading ||
+              !username ||
+              !password ||
+              !confirmPassword ||
+              loading ||
               (siteConfig?.RegistrationRequireTurnstile && !turnstileToken)
             }
             className='inline-flex w-full justify-center rounded-lg bg-green-600 py-3 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:from-green-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-50'

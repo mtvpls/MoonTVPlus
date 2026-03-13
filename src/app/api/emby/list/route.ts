@@ -33,7 +33,9 @@ export async function GET(request: NextRequest) {
     const client = await embyManager.getClient(embyKey);
 
     // 获取代理 token（如果启用了代理）
-    const proxyToken = client.isProxyEnabled() ? await getProxyToken(request) : null;
+    const proxyToken = client.isProxyEnabled()
+      ? await getProxyToken(request)
+      : null;
 
     // 获取媒体列表
     const result = await client.getItems({
@@ -50,7 +52,12 @@ export async function GET(request: NextRequest) {
     const list = result.Items.map((item) => ({
       id: item.Id,
       title: item.Name,
-      poster: client.getImageUrl(item.Id, 'Primary', undefined, proxyToken || undefined),
+      poster: client.getImageUrl(
+        item.Id,
+        'Primary',
+        undefined,
+        proxyToken || undefined,
+      ),
       year: item.ProductionYear?.toString() || '',
       rating: item.CommunityRating || 0,
       mediaType: item.Type === 'Movie' ? 'movie' : 'tv',

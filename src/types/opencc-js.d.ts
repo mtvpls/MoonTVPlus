@@ -4,5 +4,7 @@ declare module 'opencc-js' {
     to: string;
   }
 
-  export function Converter(options: ConverterOptions): (text: string) => string;
+  export function Converter(
+    options: ConverterOptions,
+  ): (text: string) => string;
 }

@@ -25,39 +25,49 @@ export async function GET(request: NextRequest) {
     const config = await getConfig();
     const xiaoyaConfig = config.XiaoyaConfig;
 
-    if (
-      !xiaoyaConfig ||
-      !xiaoyaConfig.Enabled ||
-      !xiaoyaConfig.ServerURL
-    ) {
-      return NextResponse.json({ error: '小雅未配置或未启用' }, { status: 400 });
+    if (!xiaoyaConfig || !xiaoyaConfig.Enabled || !xiaoyaConfig.ServerURL) {
+      return NextResponse.json(
+        { error: '小雅未配置或未启用' },
+        { status: 400 },
+      );
     }
 
     const client = new XiaoyaClient(
       xiaoyaConfig.ServerURL,
       xiaoyaConfig.Username,
       xiaoyaConfig.Password,
-      xiaoyaConfig.Token
+      xiaoyaConfig.Token,
     );
 
     const result = await client.listDirectory(path);
 
     // 过滤出文件夹和视频文件
-    const videoExtensions = ['.mp4', '.mkv', '.avi', '.m3u8', '.flv', '.ts', '.mov', '.wmv', '.webm'];
+    const videoExtensions = [
+      '.mp4',
+      '.mkv',
+      '.avi',
+      '.m3u8',
+      '.flv',
+      '.ts',
+      '.mov',
+      '.wmv',
+      '.webm',
+    ];
 
     const folders = result.content
-      .filter(item => item.is_dir)
-      .map(item => ({
+      .filter((item) => item.is_dir)
+      .map((item) => ({
         name: item.name,
         path: `${path}${path.endsWith('/') ? '' : '/'}${item.name}`,
       }));
 
     const files = result.content
-      .filter(item =>
-        !item.is_dir &&
-        videoExtensions.some(ext => item.name.toLowerCase().endsWith(ext))
+      .filter(
+        (item) =>
+          !item.is_dir &&
+          videoExtensions.some((ext) => item.name.toLowerCase().endsWith(ext)),
       )
-      .map(item => ({
+      .map((item) => ({
         name: item.name,
         path: `${path}${path.endsWith('/') ? '' : '/'}${item.name}`,
       }));
@@ -70,7 +80,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

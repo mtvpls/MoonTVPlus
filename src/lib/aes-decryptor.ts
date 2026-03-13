@@ -5,7 +5,8 @@
 
 function removePadding(buffer: ArrayBuffer): ArrayBuffer {
   const outputBytes = buffer.byteLength;
-  const paddingBytes = outputBytes && new DataView(buffer).getUint8(outputBytes - 1);
+  const paddingBytes =
+    outputBytes && new DataView(buffer).getUint8(outputBytes - 1);
   if (paddingBytes) {
     return buffer.slice(0, outputBytes - paddingBytes);
   } else {
@@ -27,8 +28,18 @@ export class AESDecryptor {
 
   constructor() {
     this.rcon = [0x0, 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36];
-    this.subMix = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
-    this.invSubMix = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+    this.subMix = [
+      new Uint32Array(256),
+      new Uint32Array(256),
+      new Uint32Array(256),
+      new Uint32Array(256),
+    ];
+    this.invSubMix = [
+      new Uint32Array(256),
+      new Uint32Array(256),
+      new Uint32Array(256),
+      new Uint32Array(256),
+    ];
     this.sBox = new Uint32Array(256);
     this.invSBox = new Uint32Array(256);
     this.key = new Uint32Array(0);
@@ -151,10 +162,18 @@ export class AESDecryptor {
 
       if (ksRow % keySize === 0) {
         t = (t << 8) | (t >>> 24);
-        t = (sbox[t >>> 24] << 24) | (sbox[(t >>> 16) & 0xff] << 16) | (sbox[(t >>> 8) & 0xff] << 8) | sbox[t & 0xff];
+        t =
+          (sbox[t >>> 24] << 24) |
+          (sbox[(t >>> 16) & 0xff] << 16) |
+          (sbox[(t >>> 8) & 0xff] << 8) |
+          sbox[t & 0xff];
         t ^= rcon[(ksRow / keySize) | 0] << 24;
       } else if (keySize > 6 && ksRow % keySize === 4) {
-        t = (sbox[t >>> 24] << 24) | (sbox[(t >>> 16) & 0xff] << 16) | (sbox[(t >>> 8) & 0xff] << 8) | sbox[t & 0xff];
+        t =
+          (sbox[t >>> 24] << 24) |
+          (sbox[(t >>> 16) & 0xff] << 16) |
+          (sbox[(t >>> 8) & 0xff] << 8) |
+          sbox[t & 0xff];
       }
 
       keySchedule[ksRow] = prev = (keySchedule[ksRow - keySize] ^ t) >>> 0;
@@ -187,11 +206,26 @@ export class AESDecryptor {
   }
 
   private networkToHostOrderSwap(word: number): number {
-    return (word << 24) | ((word & 0xff00) << 8) | ((word & 0xff0000) >> 8) | (word >>> 24);
+    return (
+      (word << 24) |
+      ((word & 0xff00) << 8) |
+      ((word & 0xff0000) >> 8) |
+      (word >>> 24)
+    );
   }
 
-  decrypt(inputArrayBuffer: ArrayBuffer, offset: number, aesIV: ArrayBuffer, removePKCS7Padding: boolean): ArrayBuffer {
-    if (!this.keySize || !this.ksRows || !this.keySchedule || !this.invKeySchedule) {
+  decrypt(
+    inputArrayBuffer: ArrayBuffer,
+    offset: number,
+    aesIV: ArrayBuffer,
+    removePKCS7Padding: boolean,
+  ): ArrayBuffer {
+    if (
+      !this.keySize ||
+      !this.ksRows ||
+      !this.keySchedule ||
+      !this.invKeySchedule
+    ) {
       throw new Error('AES key not expanded');
     }
 
@@ -269,28 +303,28 @@ export class AESDecryptor {
       }
 
       t0 =
-        ((invSBOX[s0 >>> 24] << 24) ^
-          (invSBOX[(s1 >> 16) & 0xff] << 16) ^
-          (invSBOX[(s2 >> 8) & 0xff] << 8) ^
-          invSBOX[s3 & 0xff]) ^
+        (invSBOX[s0 >>> 24] << 24) ^
+        (invSBOX[(s1 >> 16) & 0xff] << 16) ^
+        (invSBOX[(s2 >> 8) & 0xff] << 8) ^
+        invSBOX[s3 & 0xff] ^
         invKeySchedule[ksRow];
       t1 =
-        ((invSBOX[s1 >>> 24] << 24) ^
-          (invSBOX[(s2 >> 16) & 0xff] << 16) ^
-          (invSBOX[(s3 >> 8) & 0xff] << 8) ^
-          invSBOX[s0 & 0xff]) ^
+        (invSBOX[s1 >>> 24] << 24) ^
+        (invSBOX[(s2 >> 16) & 0xff] << 16) ^
+        (invSBOX[(s3 >> 8) & 0xff] << 8) ^
+        invSBOX[s0 & 0xff] ^
         invKeySchedule[ksRow + 1];
       t2 =
-        ((invSBOX[s2 >>> 24] << 24) ^
-          (invSBOX[(s3 >> 16) & 0xff] << 16) ^
-          (invSBOX[(s0 >> 8) & 0xff] << 8) ^
-          invSBOX[s1 & 0xff]) ^
+        (invSBOX[s2 >>> 24] << 24) ^
+        (invSBOX[(s3 >> 16) & 0xff] << 16) ^
+        (invSBOX[(s0 >> 8) & 0xff] << 8) ^
+        invSBOX[s1 & 0xff] ^
         invKeySchedule[ksRow + 2];
       t3 =
-        ((invSBOX[s3 >>> 24] << 24) ^
-          (invSBOX[(s0 >> 16) & 0xff] << 16) ^
-          (invSBOX[(s1 >> 8) & 0xff] << 8) ^
-          invSBOX[s2 & 0xff]) ^
+        (invSBOX[s3 >>> 24] << 24) ^
+        (invSBOX[(s0 >> 16) & 0xff] << 16) ^
+        (invSBOX[(s1 >> 8) & 0xff] << 8) ^
+        invSBOX[s2 & 0xff] ^
         invKeySchedule[ksRow + 3];
 
       outputInt32[offset] = swapWord(t0 ^ initVector0);
@@ -306,7 +340,9 @@ export class AESDecryptor {
       offset = offset + 4;
     }
 
-    return removePKCS7Padding ? removePadding(outputInt32.buffer) : outputInt32.buffer;
+    return removePKCS7Padding
+      ? removePadding(outputInt32.buffer)
+      : outputInt32.buffer;
   }
 
   destroy(): void {

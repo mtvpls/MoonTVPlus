@@ -28,21 +28,25 @@ interface TokenData {
 export function generateTokenId(): string {
   const array = new Uint8Array(16);
   crypto.getRandomValues(array);
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join(
+    '',
+  );
 }
 
 // 生成随机 Refresh Token
 export function generateRefreshToken(): string {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join(
+    '',
+  );
 }
 
 // 存储 Refresh Token（使用 Redis Hash）
 export async function storeRefreshToken(
   username: string,
   tokenId: string,
-  tokenData: TokenData
+  tokenData: TokenData,
 ): Promise<void> {
   const hashKey = `user_tokens:${username}`;
   const storage = await loadStorage();
@@ -56,7 +60,7 @@ export async function storeRefreshToken(
     await (storage as any).adapter.hSet(
       hashKey,
       tokenId,
-      JSON.stringify(tokenData)
+      JSON.stringify(tokenData),
     );
     console.log(`Stored refresh token for ${username}:${tokenId}`);
   } catch (error) {
@@ -69,7 +73,7 @@ export async function storeRefreshToken(
 export async function verifyRefreshToken(
   username: string,
   tokenId: string,
-  refreshToken: string
+  refreshToken: string,
 ): Promise<boolean> {
   const hashKey = `user_tokens:${username}`;
   const storage = await loadStorage();
@@ -105,7 +109,7 @@ export async function verifyRefreshToken(
     await (storage as any).adapter.hSet(
       hashKey,
       tokenId,
-      JSON.stringify(tokenData)
+      JSON.stringify(tokenData),
     );
 
     return true;
@@ -118,7 +122,7 @@ export async function verifyRefreshToken(
 // 撤销单个 Token
 export async function revokeRefreshToken(
   username: string,
-  tokenId: string
+  tokenId: string,
 ): Promise<void> {
   const hashKey = `user_tokens:${username}`;
   const storage = await loadStorage();
@@ -137,13 +141,15 @@ export async function revokeRefreshToken(
 }
 
 // 获取用户的所有设备
-export async function getUserDevices(username: string): Promise<Array<{
-  tokenId: string;
-  deviceInfo: string;
-  createdAt: number;
-  lastUsed: number;
-  expiresAt: number;
-}>> {
+export async function getUserDevices(username: string): Promise<
+  Array<{
+    tokenId: string;
+    deviceInfo: string;
+    createdAt: number;
+    lastUsed: number;
+    expiresAt: number;
+  }>
+> {
   const hashKey = `user_tokens:${username}`;
   const storage = await loadStorage();
 

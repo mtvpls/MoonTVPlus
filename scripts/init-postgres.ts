@@ -26,7 +26,10 @@ if (migrationFiles.length === 0) {
   process.exit(1);
 }
 
-console.log(`📄 Found ${migrationFiles.length} migration file(s):`, migrationFiles.join(', '));
+console.log(
+  `📄 Found ${migrationFiles.length} migration file(s):`,
+  migrationFiles.join(', '),
+);
 
 async function main(): Promise<void> {
   try {

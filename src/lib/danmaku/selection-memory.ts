@@ -10,7 +10,10 @@ const STORAGE_KEY_PREFIX = 'danmaku_selection_';
  * @param title 视频标题
  * @param selectedIndex 用户选择的弹幕源在搜索结果中的下标
  */
-export function saveDanmakuSourceIndex(title: string, selectedIndex: number): void {
+export function saveDanmakuSourceIndex(
+  title: string,
+  selectedIndex: number,
+): void {
   if (typeof window === 'undefined') return;
 
   try {
@@ -57,14 +60,16 @@ export function getDanmakuSourceIndex(title: string): number | null {
 export function saveManualDanmakuSelection(
   title: string,
   episodeIndex: number,
-  episodeId: number
+  episodeId: number,
 ): void {
   if (typeof window === 'undefined') return;
 
   try {
     const key = `${STORAGE_KEY_PREFIX}manual_${title}_${episodeIndex}`;
     sessionStorage.setItem(key, episodeId.toString());
-    console.log(`[弹幕记忆] 保存手动选择: ${title} 第${episodeIndex}集 -> ${episodeId}`);
+    console.log(
+      `[弹幕记忆] 保存手动选择: ${title} 第${episodeIndex}集 -> ${episodeId}`,
+    );
   } catch (error) {
     console.error('[弹幕记忆] 保存手动选择失败:', error);
   }
@@ -78,7 +83,7 @@ export function saveManualDanmakuSelection(
  */
 export function getManualDanmakuSelection(
   title: string,
-  episodeIndex: number
+  episodeIndex: number,
 ): number | null {
   if (typeof window === 'undefined') return null;
 
@@ -89,7 +94,9 @@ export function getManualDanmakuSelection(
     if (value !== null) {
       const episodeId = parseInt(value, 10);
       if (!isNaN(episodeId)) {
-        console.log(`[弹幕记忆] 读取手动选择: ${title} 第${episodeIndex}集 -> ${episodeId}`);
+        console.log(
+          `[弹幕记忆] 读取手动选择: ${title} 第${episodeIndex}集 -> ${episodeId}`,
+        );
         return episodeId;
       }
     }
@@ -121,7 +128,7 @@ export function clearDanmakuSelectionMemory(title: string): void {
       }
     }
 
-    keysToRemove.forEach(key => sessionStorage.removeItem(key));
+    keysToRemove.forEach((key) => sessionStorage.removeItem(key));
 
     console.log(`[弹幕记忆] 清除记忆: ${title}`);
   } catch (error) {
@@ -144,7 +151,7 @@ export function clearAllDanmakuSelectionMemory(): void {
       }
     }
 
-    keysToRemove.forEach(key => sessionStorage.removeItem(key));
+    keysToRemove.forEach((key) => sessionStorage.removeItem(key));
 
     console.log('[弹幕记忆] 清除所有记忆');
   } catch (error) {

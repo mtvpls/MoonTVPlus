@@ -18,7 +18,6 @@
 
 </div>
 
-
 ---
 
 ## 🎉 相对原版新增内容
@@ -52,7 +51,6 @@
   <img src="public/screenshot3.png" alt="项目截图" style="max-width:600px">
 </details>
 
-
 ### 请不要在 B站、小红书、微信公众号、抖音、今日头条或其他中国大陆社交平台发布视频或文章宣传本项目，不授权任何“科技周刊/月刊”类项目或站点收录本项目。
 
 ## 🗺 目录
@@ -71,18 +69,16 @@
 - [License](#license)
 - [致谢](#致谢)
 
-
-
 ## 技术栈
 
-| 分类      | 主要依赖                                                     |
-| --------- | ------------------------------------------------------------ |
-| 前端框架  | [Next.js 14](https://nextjs.org/) · App Router               |
-| UI & 样式 | [Tailwind&nbsp;CSS 3](https://tailwindcss.com/)              |
-| 语言      | TypeScript 5                                                 |
+| 分类      | 主要依赖                                                                                              |
+| --------- | ----------------------------------------------------------------------------------------------------- |
+| 前端框架  | [Next.js 14](https://nextjs.org/) · App Router                                                        |
+| UI & 样式 | [Tailwind&nbsp;CSS 3](https://tailwindcss.com/)                                                       |
+| 语言      | TypeScript 5                                                                                          |
 | 播放器    | [ArtPlayer](https://github.com/zhw2590582/ArtPlayer) · [HLS.js](https://github.com/video-dev/hls.js/) |
-| 代码质量  | ESLint · Prettier · Jest                                     |
-| 部署      | Docker                                                       |
+| 代码质量  | ESLint · Prettier · Jest                                                                              |
+| 部署      | Docker                                                                                                |
 
 ## 部署
 
@@ -93,8 +89,6 @@
 **一键部署到zeabur**
 
 [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/SCHCAY/deploy)
-
-
 
 ### Cloudflare Workers 部署（通过 GitHub Actions）
 
@@ -155,7 +149,7 @@ Cloudflare Workers 提供免费的边缘计算服务，通过 GitHub Actions 可
 on:
   push:
     branches:
-      - main  # 或你的主分支名称
+      - main # 或你的主分支名称
   workflow_dispatch:
 ```
 
@@ -334,51 +328,51 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 
 ## 环境变量
 
-| 变量                                     | 说明                                                         | 可选值                      | 默认值                                                       |
-| ---------------------------------------- | ------------------------------------------------------------ | --------------------------- | ------------------------------------------------------------ |
-| USERNAME                                 | 站长账号                                                     | 任意字符串                  | 无默认，必填字段                                             |
-| PASSWORD                                 | 站长密码                                                     | 任意字符串                  | 无默认，必填字段                                             |
-| CRON_PASSWORD                            | 定时任务 API 访问密码（用于保护 /api/cron 端点）             | 任意字符串                  | mtvpls                                                       |
-| CRON_WAIT_FOR_COMPLETION                 | 定时任务接口是否等待任务完全结束后再返回响应（true 时返回 200，false 时立即返回 202） | true/false                  | false                                                        |
-| CRON_USER_BATCH_SIZE                     | 定时任务用户批处理大小（控制并发处理的用户数量，影响播放记录和收藏更新任务的并发性能） | 正整数                      | 3                                                            |
-| SITE_BASE                                | 站点 url                                                     | 形如 https://example.com    | 空                                                           |
-| NEXT_PUBLIC_SITE_NAME                    | 站点名称                                                     | 任意字符串                  | MoonTV                                                       |
-| ANNOUNCEMENT                             | 站点公告                                                     | 任意字符串                  | 本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。 |
-| NEXT_PUBLIC_STORAGE_TYPE                 | 播放记录/收藏的存储方式                                      | redis、kvrocks、upstash、d1 | 无默认，必填字段                                             |
-| KVROCKS_URL                              | kvrocks 连接 url                                             | 连接 url                    | 空                                                           |
-| REDIS_URL                                | redis 连接 url                                               | 连接 url                    | 空                                                           |
-| UPSTASH_URL                              | upstash redis 连接 url                                       | 连接 url                    | 空                                                           |
-| UPSTASH_TOKEN                            | upstash redis 连接 token                                     | 连接 token                  | 空                                                           |
-| NEXT_PUBLIC_SEARCH_MAX_PAGE              | 搜索接口可拉取的最大页数                                     | 1-50                        | 5                                                            |
-| NEXT_PUBLIC_DOUBAN_PROXY_TYPE            | 豆瓣数据源请求方式                                           | 见下方                      | direct                                                       |
-| NEXT_PUBLIC_DOUBAN_PROXY                 | 自定义豆瓣数据代理 URL                                       | url prefix                  | (空)                                                         |
-| NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE      | 豆瓣图片代理类型                                             | 见下方                      | direct                                                       |
-| NEXT_PUBLIC_DOUBAN_IMAGE_PROXY           | 自定义豆瓣图片代理 URL                                       | url prefix                  | (空)                                                         |
-| NEXT_PUBLIC_DISABLE_YELLOW_FILTER        | 关闭色情内容过滤                                             | true/false                  | false                                                        |
-| NEXT_PUBLIC_FLUID_SEARCH                 | 是否开启搜索接口流式输出                                     | true/ false                 | true                                                         |
-| NEXT_PUBLIC_PROXY_M3U8_TOKEN             | M3U8 代理 API 鉴权 Token（外部播放器跳转时的鉴权token，不填为无鉴权） | 任意字符串                  | (空)                                                         |
-| NEXT_PUBLIC_DANMAKU_CACHE_EXPIRE_MINUTES | 弹幕缓存失效时间（分钟数，设为 0 时不缓存）                  | 0 或正整数                  | 4320（3天）                                                  |
-| ENABLE_TVBOX_SUBSCRIBE                   | 是否启用 TVBOX 订阅功能                                      | true/false                  | false                                                        |
-| TVBOX_SUBSCRIBE_TOKEN                    | TVBOX 订阅 API 访问 Token，如启用TVBOX功能必须设置该项       | 任意字符串                  | (空)                                                         |
-| TVBOX_BLOCKED_SOURCES                    | TVBOX 订阅屏蔽源列表（多个源用逗号分隔，匹配视频源的 key）   | 逗号分隔的源 key            | (空)                                                         |
-| WATCH_ROOM_ENABLED                       | 是否启用观影室功能（vercel部署不支持该功能，可使用外部服务器） | true/false                  | false                                                        |
-| WATCH_ROOM_SERVER_TYPE                   | 观影室服务器类型                                             | internal/external           | internal                                                     |
-| WATCH_ROOM_EXTERNAL_SERVER_URL           | 外部观影室服务器地址（当 SERVER_TYPE 为 external 时必填）    | WebSocket URL               | (空)                                                         |
-| WATCH_ROOM_EXTERNAL_SERVER_AUTH          | 外部观影室服务器认证令牌（当 SERVER_TYPE 为 external 时必填） | 任意字符串                  | (空)                                                         |
-| NEXT_PUBLIC_VOICE_CHAT_STRATEGY          | 观影室语音聊天策略                                           | webrtc-fallback/server-only | webrtc-fallback                                              |
-| NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD      | 是否启用服务器离线下载功能（开启后也仅管理员和站长可用）     | true/false                  | false                                                        |
-| OFFLINE_DOWNLOAD_DIR                     | 离线下载文件存储目录                                         | 任意有效路径                | /data                                                        |
-| VIDEOINFO_CACHE_MINUTES                  | 私人影库视频信息在内存中的缓存时长（分钟）                   | 正整数                      | 1440（1天）                                                  |
-| NEXT_PUBLIC_ENABLE_SOURCE_SEARCH         | 是否开启源站寻片功能                                         | true/false                  | true                                                         |
-| MAX_PLAY_RECORDS_PER_USER                | 单个用户播放记录清理阈值（超过此数量将自动清理旧记录）       | 正整数                      | 100                                                          |
-| INIT_CONFIG                              | 初始配置（JSON 格式，包含 api_site、custom_category、lives 等） | JSON 字符串                 | (空)                                                         |
-| CONFIG_SUBSCRIPTION_URL                  | 配置订阅 URL（Base58 编码的配置文件地址，优先级高于 INIT_CONFIG） | URL                         | (空)                                                         |
-| TMDB_API_KEY                             | TMDB API 密钥                                                | 任意字符串                  | (空)                                                         |
-| TMDB_PROXY                               | TMDB 代理地址                                                | URL                         | (空)                                                         |
-| TMDB_REVERSE_PROXY                       | TMDB 反向代理地址                                            | URL                         | (空)                                                         |
-| DANMAKU_API_BASE                         | 弹幕 API 地址                                                | URL                         | http://localhost:9321                                        |
-| DANMAKU_API_TOKEN                        | 弹幕 API Token                                               | 任意字符串                  | 87654321                                                     |
-| DATA_MIGRATION_CHUNK_SIZE                | 数据迁移批处理大小（控制导入导出时每批处理的用户数量和数据条数） | 正整数                      | 10                                                           |
+| 变量                                     | 说明                                                                                   | 可选值                      | 默认值                                                                                                                     |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| USERNAME                                 | 站长账号                                                                               | 任意字符串                  | 无默认，必填字段                                                                                                           |
+| PASSWORD                                 | 站长密码                                                                               | 任意字符串                  | 无默认，必填字段                                                                                                           |
+| CRON_PASSWORD                            | 定时任务 API 访问密码（用于保护 /api/cron 端点）                                       | 任意字符串                  | mtvpls                                                                                                                     |
+| CRON_WAIT_FOR_COMPLETION                 | 定时任务接口是否等待任务完全结束后再返回响应（true 时返回 200，false 时立即返回 202）  | true/false                  | false                                                                                                                      |
+| CRON_USER_BATCH_SIZE                     | 定时任务用户批处理大小（控制并发处理的用户数量，影响播放记录和收藏更新任务的并发性能） | 正整数                      | 3                                                                                                                          |
+| SITE_BASE                                | 站点 url                                                                               | 形如 https://example.com    | 空                                                                                                                         |
+| NEXT_PUBLIC_SITE_NAME                    | 站点名称                                                                               | 任意字符串                  | MoonTV                                                                                                                     |
+| ANNOUNCEMENT                             | 站点公告                                                                               | 任意字符串                  | 本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。 |
+| NEXT_PUBLIC_STORAGE_TYPE                 | 播放记录/收藏的存储方式                                                                | redis、kvrocks、upstash、d1 | 无默认，必填字段                                                                                                           |
+| KVROCKS_URL                              | kvrocks 连接 url                                                                       | 连接 url                    | 空                                                                                                                         |
+| REDIS_URL                                | redis 连接 url                                                                         | 连接 url                    | 空                                                                                                                         |
+| UPSTASH_URL                              | upstash redis 连接 url                                                                 | 连接 url                    | 空                                                                                                                         |
+| UPSTASH_TOKEN                            | upstash redis 连接 token                                                               | 连接 token                  | 空                                                                                                                         |
+| NEXT_PUBLIC_SEARCH_MAX_PAGE              | 搜索接口可拉取的最大页数                                                               | 1-50                        | 5                                                                                                                          |
+| NEXT_PUBLIC_DOUBAN_PROXY_TYPE            | 豆瓣数据源请求方式                                                                     | 见下方                      | direct                                                                                                                     |
+| NEXT_PUBLIC_DOUBAN_PROXY                 | 自定义豆瓣数据代理 URL                                                                 | url prefix                  | (空)                                                                                                                       |
+| NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE      | 豆瓣图片代理类型                                                                       | 见下方                      | direct                                                                                                                     |
+| NEXT_PUBLIC_DOUBAN_IMAGE_PROXY           | 自定义豆瓣图片代理 URL                                                                 | url prefix                  | (空)                                                                                                                       |
+| NEXT_PUBLIC_DISABLE_YELLOW_FILTER        | 关闭色情内容过滤                                                                       | true/false                  | false                                                                                                                      |
+| NEXT_PUBLIC_FLUID_SEARCH                 | 是否开启搜索接口流式输出                                                               | true/ false                 | true                                                                                                                       |
+| NEXT_PUBLIC_PROXY_M3U8_TOKEN             | M3U8 代理 API 鉴权 Token（外部播放器跳转时的鉴权token，不填为无鉴权）                  | 任意字符串                  | (空)                                                                                                                       |
+| NEXT_PUBLIC_DANMAKU_CACHE_EXPIRE_MINUTES | 弹幕缓存失效时间（分钟数，设为 0 时不缓存）                                            | 0 或正整数                  | 4320（3天）                                                                                                                |
+| ENABLE_TVBOX_SUBSCRIBE                   | 是否启用 TVBOX 订阅功能                                                                | true/false                  | false                                                                                                                      |
+| TVBOX_SUBSCRIBE_TOKEN                    | TVBOX 订阅 API 访问 Token，如启用TVBOX功能必须设置该项                                 | 任意字符串                  | (空)                                                                                                                       |
+| TVBOX_BLOCKED_SOURCES                    | TVBOX 订阅屏蔽源列表（多个源用逗号分隔，匹配视频源的 key）                             | 逗号分隔的源 key            | (空)                                                                                                                       |
+| WATCH_ROOM_ENABLED                       | 是否启用观影室功能（vercel部署不支持该功能，可使用外部服务器）                         | true/false                  | false                                                                                                                      |
+| WATCH_ROOM_SERVER_TYPE                   | 观影室服务器类型                                                                       | internal/external           | internal                                                                                                                   |
+| WATCH_ROOM_EXTERNAL_SERVER_URL           | 外部观影室服务器地址（当 SERVER_TYPE 为 external 时必填）                              | WebSocket URL               | (空)                                                                                                                       |
+| WATCH_ROOM_EXTERNAL_SERVER_AUTH          | 外部观影室服务器认证令牌（当 SERVER_TYPE 为 external 时必填）                          | 任意字符串                  | (空)                                                                                                                       |
+| NEXT_PUBLIC_VOICE_CHAT_STRATEGY          | 观影室语音聊天策略                                                                     | webrtc-fallback/server-only | webrtc-fallback                                                                                                            |
+| NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD      | 是否启用服务器离线下载功能（开启后也仅管理员和站长可用）                               | true/false                  | false                                                                                                                      |
+| OFFLINE_DOWNLOAD_DIR                     | 离线下载文件存储目录                                                                   | 任意有效路径                | /data                                                                                                                      |
+| VIDEOINFO_CACHE_MINUTES                  | 私人影库视频信息在内存中的缓存时长（分钟）                                             | 正整数                      | 1440（1天）                                                                                                                |
+| NEXT_PUBLIC_ENABLE_SOURCE_SEARCH         | 是否开启源站寻片功能                                                                   | true/false                  | true                                                                                                                       |
+| MAX_PLAY_RECORDS_PER_USER                | 单个用户播放记录清理阈值（超过此数量将自动清理旧记录）                                 | 正整数                      | 100                                                                                                                        |
+| INIT_CONFIG                              | 初始配置（JSON 格式，包含 api_site、custom_category、lives 等）                        | JSON 字符串                 | (空)                                                                                                                       |
+| CONFIG_SUBSCRIPTION_URL                  | 配置订阅 URL（Base58 编码的配置文件地址，优先级高于 INIT_CONFIG）                      | URL                         | (空)                                                                                                                       |
+| TMDB_API_KEY                             | TMDB API 密钥                                                                          | 任意字符串                  | (空)                                                                                                                       |
+| TMDB_PROXY                               | TMDB 代理地址                                                                          | URL                         | (空)                                                                                                                       |
+| TMDB_REVERSE_PROXY                       | TMDB 反向代理地址                                                                      | URL                         | (空)                                                                                                                       |
+| DANMAKU_API_BASE                         | 弹幕 API 地址                                                                          | URL                         | http://localhost:9321                                                                                                      |
+| DANMAKU_API_TOKEN                        | 弹幕 API Token                                                                         | 任意字符串                  | 87654321                                                                                                                   |
+| DATA_MIGRATION_CHUNK_SIZE                | 数据迁移批处理大小（控制导入导出时每批处理的用户数量和数据条数）                       | 正整数                      | 10                                                                                                                         |
 
 NEXT_PUBLIC_DOUBAN_PROXY_TYPE 选项解释：
 
@@ -423,8 +417,6 @@ NEXT_PUBLIC_VOICE_CHAT_STRATEGY 选项解释：
 
 3. 重启应用即可使用外部观影室服务器
 
-
-
 ## 弹幕后端部署
 
 要使用弹幕功能，需要额外部署弹幕 API 后端服务。
@@ -435,15 +427,9 @@ NEXT_PUBLIC_VOICE_CHAT_STRATEGY 选项解释：
 2. 建议配置SOURCE_ORDER或PLATFORM_ORDER环境变量，默认弹幕源很少
 3. 在管理面板设置后端地址
 
-
-
-
-##  超分功能说明
+## 超分功能说明
 
 超分功能需要浏览器支持webgpu并且你的浏览器环境不能是http（如非要在http中使用，需要在浏览器端设置允许不安全的内容）
-
-
-
 
 ## AndroidTV 使用
 

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { Bot, Loader2, Send, Sparkles, Trash2,X } from 'lucide-react';
+import { Bot, Loader2, Send, Sparkles, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -158,7 +158,8 @@ export default function AIChatPanel({
         const originalPaddingRight = document.body.style.paddingRight;
 
         // 获取滚动条宽度
-        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+        const scrollbarWidth =
+          window.innerWidth - document.documentElement.clientWidth;
 
         document.body.style.overflow = 'hidden';
         document.body.style.paddingRight = `${scrollbarWidth}px`;
@@ -199,14 +200,19 @@ export default function AIChatPanel({
         body: JSON.stringify({
           message: userMessage,
           context,
-    history: messages.filter((m) => m.role !== 'assistant' || m.content !== welcomeMessage),
+          history: messages.filter(
+            (m) => m.role !== 'assistant' || m.content !== welcomeMessage,
+          ),
         }),
         signal: abortController.signal,
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-     const errorMsg = errorData.error || errorData.details || `请求失败 (${response.status})`;
+        const errorMsg =
+          errorData.error ||
+          errorData.details ||
+          `请求失败 (${response.status})`;
         throw new Error(errorMsg);
       }
 
@@ -255,13 +261,13 @@ export default function AIChatPanel({
                 if (text) {
                   assistantMessage += text;
 
-              // 更新最后一条消息
+                  // 更新最后一条消息
                   setMessages((prev) => {
                     const newMessages = [...prev];
                     newMessages[newMessages.length - 1] = {
                       role: 'assistant',
                       content: assistantMessage,
-               };
+                    };
                     return newMessages;
                   });
                 }
@@ -409,9 +415,7 @@ export default function AIChatPanel({
                   {/* 头像 */}
                   <div
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                      message.role === 'user'
-                        ? 'bg-blue-500'
-                        : 'bg-purple-500'
+                      message.role === 'user' ? 'bg-blue-500' : 'bg-purple-500'
                     }`}
                   >
                     {message.role === 'user' ? (
@@ -444,7 +448,10 @@ export default function AIChatPanel({
                               // 如果是内部链接（以 / 开头），使用 Next.js Link
                               if (href?.startsWith('/')) {
                                 // 如果当前在 /play 页面且链接也是 /play，不做处理（返回纯文本）
-                                if (pathname === '/play' && href.startsWith('/play')) {
+                                if (
+                                  pathname === '/play' &&
+                                  href.startsWith('/play')
+                                ) {
                                   return <span>{children}</span>;
                                 }
                                 return (
@@ -454,8 +461,17 @@ export default function AIChatPanel({
                                 );
                               }
                               // 外部链接使用普通 a 标签
-                              return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
-                            }
+                              return (
+                                <a
+                                  href={href}
+                                  target='_blank'
+                                  rel='noopener noreferrer'
+                                  {...props}
+                                >
+                                  {children}
+                                </a>
+                              );
+                            },
                           }}
                         >
                           {convertTitleToLink(message.content)}
@@ -504,7 +520,11 @@ export default function AIChatPanel({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isMobile ? '输入你的问题...' : '输入你的问题... (Shift+Enter换行)'}
+              placeholder={
+                isMobile
+                  ? '输入你的问题...'
+                  : '输入你的问题... (Shift+Enter换行)'
+              }
               disabled={isStreaming}
               rows={1}
               className='flex-1 resize-none rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:focus:border-purple-400'
@@ -548,9 +568,7 @@ export default function AIChatPanel({
               </button>
               {context?.title && (
                 <button
-                  onClick={() =>
-                    setInput(`${context.title}讲的是什么故事？`)
-                  }
+                  onClick={() => setInput(`${context.title}讲的是什么故事？`)}
                   className='rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
                 >
                   剧情介绍
@@ -582,7 +600,7 @@ export default function AIChatPanel({
               <Sparkles size={20} className='text-white' />
             </div>
             <div className='min-w-0 flex-1'>
-        <h2 className='text-lg font-semibold text-gray-900 dark:text-white'>
+              <h2 className='text-lg font-semibold text-gray-900 dark:text-white'>
                 AI影视助手
               </h2>
               {context?.title && (
@@ -597,7 +615,7 @@ export default function AIChatPanel({
             onClick={onClose}
             className='rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 flex-shrink-0'
           >
-         <X size={20} />
+            <X size={20} />
           </button>
         </div>
 
@@ -615,9 +633,7 @@ export default function AIChatPanel({
                   {/* 头像 */}
                   <div
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                      message.role === 'user'
-                        ? 'bg-blue-500'
-                        : 'bg-purple-500'
+                      message.role === 'user' ? 'bg-blue-500' : 'bg-purple-500'
                     }`}
                   >
                     {message.role === 'user' ? (
@@ -650,7 +666,10 @@ export default function AIChatPanel({
                               // 如果是内部链接（以 / 开头），使用 Next.js Link
                               if (href?.startsWith('/')) {
                                 // 如果当前在 /play 页面且链接也是 /play，不做处理（返回纯文本）
-                                if (pathname === '/play' && href.startsWith('/play')) {
+                                if (
+                                  pathname === '/play' &&
+                                  href.startsWith('/play')
+                                ) {
                                   return <span>{children}</span>;
                                 }
                                 return (
@@ -660,8 +679,17 @@ export default function AIChatPanel({
                                 );
                               }
                               // 外部链接使用普通 a 标签
-                              return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
-                            }
+                              return (
+                                <a
+                                  href={href}
+                                  target='_blank'
+                                  rel='noopener noreferrer'
+                                  {...props}
+                                >
+                                  {children}
+                                </a>
+                              );
+                            },
                           }}
                         >
                           {convertTitleToLink(message.content)}
@@ -710,7 +738,11 @@ export default function AIChatPanel({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isMobile ? '输入你的问题...' : '输入你的问题... (Shift+Enter换行)'}
+              placeholder={
+                isMobile
+                  ? '输入你的问题...'
+                  : '输入你的问题... (Shift+Enter换行)'
+              }
               disabled={isStreaming}
               rows={1}
               className='flex-1 resize-none rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:focus:border-purple-400'
@@ -754,9 +786,7 @@ export default function AIChatPanel({
               </button>
               {context?.title && (
                 <button
-                  onClick={() =>
-                    setInput(`${context.title}讲的是什么故事？`)
-                  }
+                  onClick={() => setInput(`${context.title}讲的是什么故事？`)}
                   className='rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
                 >
                   剧情介绍

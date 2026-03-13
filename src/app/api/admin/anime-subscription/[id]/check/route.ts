@@ -14,7 +14,7 @@ export const runtime = 'nodejs';
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
     // 权限检查
@@ -45,7 +45,7 @@ export async function POST(
     console.error('检查追番订阅失败:', error);
     return NextResponse.json(
       { error: error.message || '检查失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

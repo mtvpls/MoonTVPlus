@@ -11,7 +11,7 @@ on:
         type: string
   push:
     # 监听 dev 分支的推送
-    branches: [ dev ]
+    branches: [dev]
   # 取消了 pull_request 触发，因为它通常不应该触发构建和推送镜像的操作
   # 如果确实需要，可以重新加回来
   # pull_request:
@@ -65,10 +65,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       # 这个步骤不再需要，因为我们直接用 github.repository_owner
       # - name: Set lowercase repository owner ...
-      
+
       # 更改：使用动态镜像名和更强大的标签逻辑
       - name: Extract metadata
         id: meta
@@ -161,7 +161,7 @@ jobs:
           # 更改：使用从 meta 生成的所有标签来创建 manifest
           # 将逗号分隔的标签列表转换为 ' -t <tag1> -t <tag2> ...' 的格式
           FORMATTED_TAGS=$(echo "${{ steps.meta.outputs.tags }}" | sed 's/,/ -t /g')
-          
+
           docker buildx imagetools create -t $FORMATTED_TAGS \
             $(printf '${{ env.IMAGE_NAME }}@sha256:%s ' *)
 

@@ -33,7 +33,10 @@ interface OfflineDownloadPanelProps {
   onClose: () => void;
 }
 
-export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelProps) {
+export function OfflineDownloadPanel({
+  isOpen,
+  onClose,
+}: OfflineDownloadPanelProps) {
   const [tasks, setTasks] = useState<OfflineDownloadTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -80,9 +83,12 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
   // 重试任务
   const handleRetryTask = async (taskId: string) => {
     try {
-      const response = await fetch(`/api/offline-download?taskId=${taskId}&action=retry`, {
-        method: 'PUT',
-      });
+      const response = await fetch(
+        `/api/offline-download?taskId=${taskId}&action=retry`,
+        {
+          method: 'PUT',
+        },
+      );
 
       if (response.ok) {
         const data = await response.json();
@@ -96,8 +102,8 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
                   errorMessage: undefined,
                   updatedAt: new Date().toISOString(),
                 }
-              : t
-          )
+              : t,
+          ),
         );
         // 立即刷新以获取最新状态
         fetchTasks();
@@ -161,8 +167,13 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
   // 获取视频库中的视频（按videoId分组，包含已完成和有进度的任务）
   const getLibraryVideos = () => {
     // 筛选已完成或有下载进度的任务
-    const libraryTasks = tasks.filter((t) => t.status === 'completed' || t.progress > 0);
-    const videoMap = new Map<string, { video: OfflineDownloadTask; episodes: OfflineDownloadTask[] }>();
+    const libraryTasks = tasks.filter(
+      (t) => t.status === 'completed' || t.progress > 0,
+    );
+    const videoMap = new Map<
+      string,
+      { video: OfflineDownloadTask; episodes: OfflineDownloadTask[] }
+    >();
 
     libraryTasks.forEach((task) => {
       const key = `${task.source}_${task.videoId}`;
@@ -219,8 +230,18 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
               onClick={onClose}
               className='text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors'
             >
-              <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M6 18L18 6M6 6l12 12' />
+              <svg
+                className='w-6 h-6'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+              >
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth='2'
+                  d='M6 18L18 6M6 6l12 12'
+                />
               </svg>
             </button>
           </div>
@@ -236,7 +257,12 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
             // 视频库视图
             libraryVideos.length === 0 ? (
               <div className='flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400'>
-                <svg className='w-16 h-16 mb-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <svg
+                  className='w-16 h-16 mb-4'
+                  fill='none'
+                  stroke='currentColor'
+                  viewBox='0 0 24 24'
+                >
                   <path
                     strokeLinecap='round'
                     strokeLinejoin='round'
@@ -269,7 +295,9 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
                         {video.metadata?.videoTitle || video.title}
                       </h3>
                       {video.metadata?.year && (
-                        <p className='text-sm text-gray-600 dark:text-gray-400 mb-1'>年份: {video.metadata.year}</p>
+                        <p className='text-sm text-gray-600 dark:text-gray-400 mb-1'>
+                          年份: {video.metadata.year}
+                        </p>
                       )}
                       {video.metadata?.rating && (
                         <p className='text-sm text-gray-600 dark:text-gray-400 mb-1'>
@@ -301,14 +329,23 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
                             <span>第{ep.episodeIndex + 1}集</span>
                             <button
                               onClick={() => {
-                                if (confirm(`确定要删除第${ep.episodeIndex + 1}集吗？`)) {
+                                if (
+                                  confirm(
+                                    `确定要删除第${ep.episodeIndex + 1}集吗？`,
+                                  )
+                                ) {
                                   handleDeleteTask(ep.id);
                                 }
                               }}
                               className='ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300'
                               title='删除此集'
                             >
-                              <svg className='w-3 h-3' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <svg
+                                className='w-3 h-3'
+                                fill='none'
+                                stroke='currentColor'
+                                viewBox='0 0 24 24'
+                              >
                                 <path
                                   strokeLinecap='round'
                                   strokeLinejoin='round'
@@ -323,13 +360,22 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
                       {/* 删除全部按钮 */}
                       <button
                         onClick={() => {
-                          if (confirm(`确定要删除《${video.metadata?.videoTitle || video.title}》的所有已下载集数吗？`)) {
+                          if (
+                            confirm(
+                              `确定要删除《${video.metadata?.videoTitle || video.title}》的所有已下载集数吗？`,
+                            )
+                          ) {
                             episodes.forEach((ep) => handleDeleteTask(ep.id));
                           }
                         }}
                         className='flex items-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded transition-colors'
                       >
-                        <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                        <svg
+                          className='w-4 h-4'
+                          fill='none'
+                          stroke='currentColor'
+                          viewBox='0 0 24 24'
+                        >
                           <path
                             strokeLinecap='round'
                             strokeLinejoin='round'
@@ -347,7 +393,12 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
           ) : tasks.length === 0 ? (
             // 任务列表为空
             <div className='flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400'>
-              <svg className='w-16 h-16 mb-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+              <svg
+                className='w-16 h-16 mb-4'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+              >
                 <path
                   strokeLinecap='round'
                   strokeLinejoin='round'
@@ -371,11 +422,14 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
                       {task.title}
                     </h3>
                     <p className='text-xs text-gray-500 dark:text-gray-400'>
-                      来源: {task.source} | 视频ID: {task.videoId} | 第{task.episodeIndex + 1}集
+                      来源: {task.source} | 视频ID: {task.videoId} | 第
+                      {task.episodeIndex + 1}集
                     </p>
                   </div>
                   <div className='flex items-center gap-2 ml-4'>
-                    <span className={`text-xs font-medium ${getStatusColor(task.status)}`}>
+                    <span
+                      className={`text-xs font-medium ${getStatusColor(task.status)}`}
+                    >
                       {getStatusText(task.status)}
                     </span>
                   </div>
@@ -396,10 +450,10 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
                           task.status === 'downloading'
                             ? 'bg-gradient-to-r from-blue-500 to-purple-600 animate-pulse'
                             : task.status === 'completed'
-                            ? 'bg-green-500'
-                            : task.status === 'error'
-                            ? 'bg-red-500'
-                            : 'bg-gray-400'
+                              ? 'bg-green-500'
+                              : task.status === 'error'
+                                ? 'bg-red-500'
+                                : 'bg-gray-400'
                         }`}
                         style={{ width: `${task.progress}%` }}
                       ></div>
@@ -410,14 +464,20 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
                 {/* 错误信息 */}
                 {task.errorMessage && (
                   <div className='mb-3'>
-                    <div className='text-xs text-red-500 dark:text-red-400'>{task.errorMessage}</div>
+                    <div className='text-xs text-red-500 dark:text-red-400'>
+                      {task.errorMessage}
+                    </div>
                   </div>
                 )}
 
                 {/* 时间信息 */}
                 <div className='flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3'>
-                  <span>创建: {new Date(task.createdAt).toLocaleString('zh-CN')}</span>
-                  <span>更新: {new Date(task.updatedAt).toLocaleString('zh-CN')}</span>
+                  <span>
+                    创建: {new Date(task.createdAt).toLocaleString('zh-CN')}
+                  </span>
+                  <span>
+                    更新: {new Date(task.updatedAt).toLocaleString('zh-CN')}
+                  </span>
                 </div>
 
                 {/* 操作按钮 */}
@@ -428,7 +488,12 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
                       onClick={() => handleRetryTask(task.id)}
                       className='flex items-center gap-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded transition-colors'
                     >
-                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <svg
+                        className='w-4 h-4'
+                        fill='none'
+                        stroke='currentColor'
+                        viewBox='0 0 24 24'
+                      >
                         <path
                           strokeLinecap='round'
                           strokeLinejoin='round'
@@ -443,7 +508,12 @@ export function OfflineDownloadPanel({ isOpen, onClose }: OfflineDownloadPanelPr
                     onClick={() => handleDeleteTask(task.id)}
                     className='flex items-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded transition-colors'
                   >
-                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                    <svg
+                      className='w-4 h-4'
+                      fill='none'
+                      stroke='currentColor'
+                      viewBox='0 0 24 24'
+                    >
                       <path
                         strokeLinecap='round'
                         strokeLinejoin='round'

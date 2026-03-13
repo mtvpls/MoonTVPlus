@@ -38,17 +38,11 @@ export async function GET(request: NextRequest) {
   const page = searchParams.get('page') || '1';
 
   if (!sourceKey) {
-    return NextResponse.json(
-      { error: '缺少参数: source' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: '缺少参数: source' }, { status: 400 });
   }
 
   if (!keyword || keyword.trim() === '') {
-    return NextResponse.json(
-      { error: '缺少参数: keyword' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: '缺少参数: keyword' }, { status: 400 });
   }
 
   try {
@@ -58,7 +52,7 @@ export async function GET(request: NextRequest) {
     if (!targetSite) {
       return NextResponse.json(
         { error: `未找到指定的视频源: ${sourceKey}` },
-        { status: 404 }
+        { status: 404 },
       );
     }
 

@@ -39,13 +39,24 @@ export async function POST(request: NextRequest) {
       {
         error: '不支持本地存储进行管理员配置',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   try {
     const body = await request.json();
-    const { action, Enabled, URL, Username, Password, RootPaths, OfflineDownloadPath, ScanInterval, ScanMode, DisableVideoPreview } = body;
+    const {
+      action,
+      Enabled,
+      URL,
+      Username,
+      Password,
+      RootPaths,
+      OfflineDownloadPath,
+      ScanInterval,
+      ScanMode,
+      DisableVideoPreview,
+    } = body;
 
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
@@ -93,7 +104,7 @@ export async function POST(request: NextRequest) {
       if (!URL || !Username || !Password) {
         return NextResponse.json(
           { error: '请提供 URL、账号和密码' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -101,7 +112,7 @@ export async function POST(request: NextRequest) {
       if (!Array.isArray(RootPaths) || RootPaths.length === 0) {
         return NextResponse.json(
           { error: '请至少提供一个根目录' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -113,7 +124,7 @@ export async function POST(request: NextRequest) {
       if (scanInterval > 0 && scanInterval < 60) {
         return NextResponse.json(
           { error: '定时扫描间隔最低为 60 分钟' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -126,7 +137,7 @@ export async function POST(request: NextRequest) {
         console.error('[OpenList Config] 账号密码验证失败:', error);
         return NextResponse.json(
           { error: '账号密码验证失败: ' + (error as Error).message },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -157,7 +168,7 @@ export async function POST(request: NextRequest) {
     console.error('OpenList 配置操作失败:', error);
     return NextResponse.json(
       { error: '操作失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

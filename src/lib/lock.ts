@@ -2,7 +2,8 @@
 
 // 简单的内存锁管理器
 class LockManager {
-  private locks: Map<string, { locked: boolean; queue: Array<() => void> }> = new Map();
+  private locks: Map<string, { locked: boolean; queue: Array<() => void> }> =
+    new Map();
   private readonly LOCK_TIMEOUT = 10000; // 10秒超时
 
   async acquire(key: string): Promise<() => void> {

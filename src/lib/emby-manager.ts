@@ -45,27 +45,32 @@ class EmbyManager {
     const config = await getConfig();
 
     // 如果是新格式（Sources数组）
-    if (config.EmbyConfig?.Sources && Array.isArray(config.EmbyConfig.Sources)) {
+    if (
+      config.EmbyConfig?.Sources &&
+      Array.isArray(config.EmbyConfig.Sources)
+    ) {
       return config.EmbyConfig.Sources;
     }
 
     // 如果是旧格式（单源配置），转换为数组格式
     if (config.EmbyConfig?.ServerURL) {
-      return [{
-        key: 'default',
-        name: 'Emby',
-        enabled: config.EmbyConfig.Enabled ?? false,
-        ServerURL: config.EmbyConfig.ServerURL,
-        ApiKey: config.EmbyConfig.ApiKey,
-        Username: config.EmbyConfig.Username,
-        Password: config.EmbyConfig.Password,
-        UserId: config.EmbyConfig.UserId,
-        AuthToken: config.EmbyConfig.AuthToken,
-        Libraries: config.EmbyConfig.Libraries,
-        LastSyncTime: config.EmbyConfig.LastSyncTime,
-        ItemCount: config.EmbyConfig.ItemCount,
-        isDefault: true,
-      }];
+      return [
+        {
+          key: 'default',
+          name: 'Emby',
+          enabled: config.EmbyConfig.Enabled ?? false,
+          ServerURL: config.EmbyConfig.ServerURL,
+          ApiKey: config.EmbyConfig.ApiKey,
+          Username: config.EmbyConfig.Username,
+          Password: config.EmbyConfig.Password,
+          UserId: config.EmbyConfig.UserId,
+          AuthToken: config.EmbyConfig.AuthToken,
+          Libraries: config.EmbyConfig.Libraries,
+          LastSyncTime: config.EmbyConfig.LastSyncTime,
+          ItemCount: config.EmbyConfig.ItemCount,
+          isDefault: true,
+        },
+      ];
     }
 
     return [];
@@ -84,13 +89,13 @@ class EmbyManager {
 
     // 如果没有指定key，使用默认源（第一个或标记为default的）
     if (!key) {
-      const defaultSource = sources.find(s => s.isDefault) || sources[0];
+      const defaultSource = sources.find((s) => s.isDefault) || sources[0];
       key = defaultSource.key;
     }
 
     // 从缓存获取或创建新实例
     if (!this.clients.has(key)) {
-      const sourceConfig = sources.find(s => s.key === key);
+      const sourceConfig = sources.find((s) => s.key === key);
       if (!sourceConfig) {
         throw new Error(`未找到 Emby 源: ${key}`);
       }
@@ -108,10 +113,15 @@ class EmbyManager {
   /**
    * 获取所有启用的EmbyClient
    */
-  async getAllClients(): Promise<Map<string, { client: EmbyClient; config: EmbySourceConfig }>> {
+  async getAllClients(): Promise<
+    Map<string, { client: EmbyClient; config: EmbySourceConfig }>
+  > {
     const sources = await this.getSources();
-    const enabledSources = sources.filter(s => s.enabled);
-    const result = new Map<string, { client: EmbyClient; config: EmbySourceConfig }>();
+    const enabledSources = sources.filter((s) => s.enabled);
+    const result = new Map<
+      string,
+      { client: EmbyClient; config: EmbySourceConfig }
+    >();
 
     for (const source of enabledSources) {
       if (!this.clients.has(source.key)) {
@@ -131,7 +141,7 @@ class EmbyManager {
    */
   async getEnabledSources(): Promise<EmbySourceConfig[]> {
     const sources = await this.getSources();
-    return sources.filter(s => s.enabled);
+    return sources.filter((s) => s.enabled);
   }
 
   /**
@@ -139,7 +149,7 @@ class EmbyManager {
    */
   async hasEmby(): Promise<boolean> {
     const sources = await this.getSources();
-    return sources.some(s => s.enabled && s.ServerURL);
+    return sources.some((s) => s.enabled && s.ServerURL);
   }
 
   /**
@@ -165,26 +175,28 @@ export function migrateEmbyConfig(config: AdminConfig): AdminConfig {
   if (config.EmbyConfig && config.EmbyConfig.ServerURL) {
     const oldConfig = config.EmbyConfig;
     config.EmbyConfig = {
-      Sources: [{
-        key: 'default',
-        name: 'Emby',
-        enabled: oldConfig.Enabled ?? false,
-        ServerURL: oldConfig.ServerURL || '',
-        ApiKey: oldConfig.ApiKey,
-        Username: oldConfig.Username,
-        Password: oldConfig.Password,
-        UserId: oldConfig.UserId,
-        AuthToken: oldConfig.AuthToken,
-        Libraries: oldConfig.Libraries,
-        LastSyncTime: oldConfig.LastSyncTime,
-        ItemCount: oldConfig.ItemCount,
-        isDefault: true,
-        // 高级选项默认值
-        removeEmbyPrefix: false,
-        appendMediaSourceId: false,
-        transcodeMp4: false,
-        proxyPlay: false,
-      }],
+      Sources: [
+        {
+          key: 'default',
+          name: 'Emby',
+          enabled: oldConfig.Enabled ?? false,
+          ServerURL: oldConfig.ServerURL || '',
+          ApiKey: oldConfig.ApiKey,
+          Username: oldConfig.Username,
+          Password: oldConfig.Password,
+          UserId: oldConfig.UserId,
+          AuthToken: oldConfig.AuthToken,
+          Libraries: oldConfig.Libraries,
+          LastSyncTime: oldConfig.LastSyncTime,
+          ItemCount: oldConfig.ItemCount,
+          isDefault: true,
+          // 高级选项默认值
+          removeEmbyPrefix: false,
+          appendMediaSourceId: false,
+          transcodeMp4: false,
+          proxyPlay: false,
+        },
+      ],
     };
   }
 

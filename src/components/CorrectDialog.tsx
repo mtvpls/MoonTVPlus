@@ -115,9 +115,13 @@ export default function CorrectDialog({
         posterPath: currentVideo?.poster || '',
         releaseDate: currentVideo?.releaseDate || '',
         overview: currentVideo?.overview || '',
-        voteAverage: currentVideo?.voteAverage ? String(currentVideo.voteAverage) : '',
+        voteAverage: currentVideo?.voteAverage
+          ? String(currentVideo.voteAverage)
+          : '',
         mediaType: currentVideo?.mediaType || 'movie',
-        seasonNumber: currentVideo?.seasonNumber ? String(currentVideo.seasonNumber) : '',
+        seasonNumber: currentVideo?.seasonNumber
+          ? String(currentVideo.seasonNumber)
+          : '',
         seasonName: currentVideo?.seasonName || '',
       };
 
@@ -139,7 +143,7 @@ export default function CorrectDialog({
 
     try {
       const response = await fetch(
-        `/api/tmdb/search?query=${encodeURIComponent(searchQuery)}`
+        `/api/tmdb/search?query=${encodeURIComponent(searchQuery)}`,
       );
 
       if (!response.ok) {
@@ -239,7 +243,8 @@ export default function CorrectDialog({
         tmdbId: finalTmdbId,
         title: finalTitle,
         posterPath: season?.poster_path || result.poster_path,
-        releaseDate: season?.air_date || result.release_date || result.first_air_date,
+        releaseDate:
+          season?.air_date || result.release_date || result.first_air_date,
         overview: season?.overview || result.overview,
         voteAverage: result.vote_average,
         mediaType: result.media_type,
@@ -260,7 +265,11 @@ export default function CorrectDialog({
           correctedAt: Date.now(),
         };
         localStorage.setItem(storageKey, JSON.stringify(correctionInfo));
-        console.log('小雅源纠错信息已存储到 localStorage:', storageKey, correctionInfo);
+        console.log(
+          '小雅源纠错信息已存储到 localStorage:',
+          storageKey,
+          correctionInfo,
+        );
       } else {
         // openlist 等其他源：调用 API
         const body: any = {
@@ -322,12 +331,21 @@ export default function CorrectDialog({
       return;
     }
 
-    if (manualData.voteAverage && (isNaN(Number(manualData.voteAverage)) || Number(manualData.voteAverage) < 0 || Number(manualData.voteAverage) > 10)) {
+    if (
+      manualData.voteAverage &&
+      (isNaN(Number(manualData.voteAverage)) ||
+        Number(manualData.voteAverage) < 0 ||
+        Number(manualData.voteAverage) > 10)
+    ) {
       setError('评分必须是 0-10 之间的数字');
       return;
     }
 
-    if (manualData.mediaType === 'tv' && manualData.seasonNumber && isNaN(Number(manualData.seasonNumber))) {
+    if (
+      manualData.mediaType === 'tv' &&
+      manualData.seasonNumber &&
+      isNaN(Number(manualData.seasonNumber))
+    ) {
       setError('季数必须是数字');
       return;
     }
@@ -341,7 +359,9 @@ export default function CorrectDialog({
         posterPath: manualData.posterPath.trim() || null,
         releaseDate: manualData.releaseDate.trim() || '',
         overview: manualData.overview.trim() || '',
-        voteAverage: manualData.voteAverage ? Number(manualData.voteAverage) : 0,
+        voteAverage: manualData.voteAverage
+          ? Number(manualData.voteAverage)
+          : 0,
         mediaType: manualData.mediaType,
       };
 
@@ -358,7 +378,8 @@ export default function CorrectDialog({
       // 如果是电视剧且有季度信息
       if (manualData.mediaType === 'tv' && manualData.seasonNumber) {
         correctionData.seasonNumber = Number(manualData.seasonNumber);
-        correctionData.seasonName = manualData.seasonName.trim() || `第 ${manualData.seasonNumber} 季`;
+        correctionData.seasonName =
+          manualData.seasonName.trim() || `第 ${manualData.seasonNumber} 季`;
       }
 
       // 根据源类型选择不同的存储方式
@@ -370,7 +391,11 @@ export default function CorrectDialog({
           correctedAt: Date.now(),
         };
         localStorage.setItem(storageKey, JSON.stringify(correctionInfo));
-        console.log('小雅源纠错信息已存储到 localStorage:', storageKey, correctionInfo);
+        console.log(
+          '小雅源纠错信息已存储到 localStorage:',
+          storageKey,
+          correctionInfo,
+        );
       } else {
         // openlist 等其他源：调用 API
         const body: any = {
@@ -416,349 +441,327 @@ export default function CorrectDialog({
         </button>
       </div>
 
-        {/* 搜索框 */}
-        {!showManualInput && (
-          <div className='p-4 border-b border-gray-200 dark:border-gray-700'>
-            <div className='flex gap-2'>
-              <input
-                type='text'
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleSearch();
-                  }
-                }}
-                placeholder='输入搜索关键词'
-                className='flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-              />
+      {/* 搜索框 */}
+      {!showManualInput && (
+        <div className='p-4 border-b border-gray-200 dark:border-gray-700'>
+          <div className='flex gap-2'>
+            <input
+              type='text'
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSearch();
+                }
+              }}
+              placeholder='输入搜索关键词'
+              className='flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+            />
+            <button
+              onClick={handleSearch}
+              disabled={searching}
+              className='px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2'
+            >
+              <Search size={20} />
+              <span className='hidden sm:inline'>
+                {searching ? '搜索中...' : '搜索'}
+              </span>
+            </button>
+          </div>
+          {error && (
+            <p className='mt-2 text-sm text-red-600 dark:text-red-400'>
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 结果列表 */}
+      <div className='flex-1 overflow-y-auto p-4'>
+        {showManualInput ? (
+          // 手动输入界面
+          <div>
+            <div className='mb-4 flex items-center gap-2'>
               <button
-                onClick={handleSearch}
-                disabled={searching}
-                className='px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2'
+                onClick={handleBackToSearch}
+                className='text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1'
               >
-                <Search size={20} />
-                <span className='hidden sm:inline'>{searching ? '搜索中...' : '搜索'}</span>
+                <span>←</span>
+                <span>返回搜索</span>
               </button>
             </div>
-            {error && (
-              <p className='mt-2 text-sm text-red-600 dark:text-red-400'>{error}</p>
-            )}
-          </div>
-        )}
 
-        {/* 结果列表 */}
-        <div className='flex-1 overflow-y-auto p-4'>
-          {showManualInput ? (
-            // 手动输入界面
-            <div>
-              <div className='mb-4 flex items-center gap-2'>
-                <button
-                  onClick={handleBackToSearch}
-                  className='text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1'
-                >
-                  <span>←</span>
-                  <span>返回搜索</span>
-                </button>
+            <div className='space-y-4'>
+              {/* 标题 - 必填 */}
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                  影片标题 <span className='text-red-500'>*</span>
+                </label>
+                <input
+                  type='text'
+                  value={manualData.title}
+                  onChange={(e) =>
+                    setManualData({ ...manualData, title: e.target.value })
+                  }
+                  placeholder='请输入影片标题'
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
               </div>
 
-              <div className='space-y-4'>
-                {/* 标题 - 必填 */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    影片标题 <span className='text-red-500'>*</span>
-                  </label>
-                  <input
-                    type='text'
-                    value={manualData.title}
-                    onChange={(e) => setManualData({ ...manualData, title: e.target.value })}
-                    placeholder='请输入影片标题'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                  />
-                </div>
+              {/* TMDB ID - 可选 */}
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                  TMDB ID（可选）
+                </label>
+                <input
+                  type='text'
+                  value={manualData.tmdbId}
+                  onChange={(e) =>
+                    setManualData({ ...manualData, tmdbId: e.target.value })
+                  }
+                  placeholder='例如：550'
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  可在 TMDB 网站查找影片对应的 ID
+                </p>
+              </div>
 
-                {/* TMDB ID - 可选 */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    TMDB ID（可选）
-                  </label>
-                  <input
-                    type='text'
-                    value={manualData.tmdbId}
-                    onChange={(e) => setManualData({ ...manualData, tmdbId: e.target.value })}
-                    placeholder='例如：550'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                  />
-                  <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                    可在 TMDB 网站查找影片对应的 ID
-                  </p>
-                </div>
+              {/* 豆瓣 ID - 可选 */}
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                  豆瓣 ID（可选）
+                </label>
+                <input
+                  type='text'
+                  value={manualData.doubanId}
+                  onChange={(e) =>
+                    setManualData({ ...manualData, doubanId: e.target.value })
+                  }
+                  placeholder='例如：1292052'
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  可在豆瓣网站查找影片对应的 ID
+                </p>
+              </div>
 
-                {/* 豆瓣 ID - 可选 */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    豆瓣 ID（可选）
+              {/* 媒体类型 */}
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                  类型
+                </label>
+                <div className='flex gap-4'>
+                  <label className='flex items-center'>
+                    <input
+                      type='radio'
+                      value='movie'
+                      checked={manualData.mediaType === 'movie'}
+                      onChange={(e) =>
+                        setManualData({
+                          ...manualData,
+                          mediaType: e.target.value as 'movie' | 'tv',
+                        })
+                      }
+                      className='mr-2'
+                    />
+                    <span className='text-gray-900 dark:text-gray-100'>
+                      电影
+                    </span>
                   </label>
-                  <input
-                    type='text'
-                    value={manualData.doubanId}
-                    onChange={(e) => setManualData({ ...manualData, doubanId: e.target.value })}
-                    placeholder='例如：1292052'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                  />
-                  <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                    可在豆瓣网站查找影片对应的 ID
-                  </p>
+                  <label className='flex items-center'>
+                    <input
+                      type='radio'
+                      value='tv'
+                      checked={manualData.mediaType === 'tv'}
+                      onChange={(e) =>
+                        setManualData({
+                          ...manualData,
+                          mediaType: e.target.value as 'movie' | 'tv',
+                        })
+                      }
+                      className='mr-2'
+                    />
+                    <span className='text-gray-900 dark:text-gray-100'>
+                      电视剧
+                    </span>
+                  </label>
                 </div>
+              </div>
 
-                {/* 媒体类型 */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    类型
-                  </label>
-                  <div className='flex gap-4'>
-                    <label className='flex items-center'>
-                      <input
-                        type='radio'
-                        value='movie'
-                        checked={manualData.mediaType === 'movie'}
-                        onChange={(e) => setManualData({ ...manualData, mediaType: e.target.value as 'movie' | 'tv' })}
-                        className='mr-2'
-                      />
-                      <span className='text-gray-900 dark:text-gray-100'>电影</span>
+              {/* 如果是电视剧，显示季度信息 */}
+              {manualData.mediaType === 'tv' && (
+                <>
+                  <div>
+                    <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                      季数（可选）
                     </label>
-                    <label className='flex items-center'>
-                      <input
-                        type='radio'
-                        value='tv'
-                        checked={manualData.mediaType === 'tv'}
-                        onChange={(e) => setManualData({ ...manualData, mediaType: e.target.value as 'movie' | 'tv' })}
-                        className='mr-2'
-                      />
-                      <span className='text-gray-900 dark:text-gray-100'>电视剧</span>
-                    </label>
+                    <input
+                      type='text'
+                      value={manualData.seasonNumber}
+                      onChange={(e) =>
+                        setManualData({
+                          ...manualData,
+                          seasonNumber: e.target.value,
+                        })
+                      }
+                      placeholder='例如：1'
+                      className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                    />
                   </div>
-                </div>
-
-                {/* 如果是电视剧，显示季度信息 */}
-                {manualData.mediaType === 'tv' && (
-                  <>
-                    <div>
-                      <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                        季数（可选）
-                      </label>
-                      <input
-                        type='text'
-                        value={manualData.seasonNumber}
-                        onChange={(e) => setManualData({ ...manualData, seasonNumber: e.target.value })}
-                        placeholder='例如：1'
-                        className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </div>
-                    <div>
-                      <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                        季名称（可选）
-                      </label>
-                      <input
-                        type='text'
-                        value={manualData.seasonName}
-                        onChange={(e) => setManualData({ ...manualData, seasonName: e.target.value })}
-                        placeholder='例如：第 1 季'
-                        className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* 封面图链接 */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    封面图链接（可选）
-                  </label>
-                  <input
-                    type='text'
-                    value={manualData.posterPath}
-                    onChange={(e) => setManualData({ ...manualData, posterPath: e.target.value })}
-                    placeholder='请输入图片链接'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                  />
-                </div>
-
-                {/* 上映日期 */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    上映日期（可选）
-                  </label>
-                  <input
-                    type='date'
-                    value={manualData.releaseDate}
-                    onChange={(e) => setManualData({ ...manualData, releaseDate: e.target.value })}
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                  />
-                </div>
-
-                {/* 评分 */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    评分（可选，0-10）
-                  </label>
-                  <input
-                    type='text'
-                    value={manualData.voteAverage}
-                    onChange={(e) => setManualData({ ...manualData, voteAverage: e.target.value })}
-                    placeholder='例如：8.5'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                  />
-                </div>
-
-                {/* 简介 */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    简介（可选）
-                  </label>
-                  <textarea
-                    value={manualData.overview}
-                    onChange={(e) => setManualData({ ...manualData, overview: e.target.value })}
-                    placeholder='请输入影片简介'
-                    rows={3}
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                  />
-                </div>
-
-                {/* 错误提示 */}
-                {error && (
-                  <p className='text-sm text-red-600 dark:text-red-400'>{error}</p>
-                )}
-
-                {/* 提交按钮 */}
-                <button
-                  onClick={handleManualSubmit}
-                  disabled={correcting}
-                  className='w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed'
-                >
-                  {correcting ? '提交中...' : '提交纠错'}
-                </button>
-              </div>
-            </div>
-          ) : showSeasonSelection ? (
-            // 季度选择界面
-            <div>
-              <div className='mb-4 flex items-center gap-2'>
-                <button
-                  onClick={handleBackToResults}
-                  className='text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1'
-                >
-                  <span>←</span>
-                  <span>返回搜索结果</span>
-                </button>
-              </div>
-
-              {selectedResult && (
-                <div className='mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg'>
-                  <h3 className='font-semibold text-gray-900 dark:text-gray-100'>
-                    {selectedResult.title || selectedResult.name}
-                  </h3>
-                  <p className='text-sm text-gray-600 dark:text-gray-400 mt-1'>
-                    请选择季度：
-                  </p>
-                </div>
+                  <div>
+                    <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                      季名称（可选）
+                    </label>
+                    <input
+                      type='text'
+                      value={manualData.seasonName}
+                      onChange={(e) =>
+                        setManualData({
+                          ...manualData,
+                          seasonName: e.target.value,
+                        })
+                      }
+                      placeholder='例如：第 1 季'
+                      className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                    />
+                  </div>
+                </>
               )}
 
-              {loadingSeasons ? (
-                <div className='text-center py-12 text-gray-500 dark:text-gray-400'>
-                  加载季度列表中...
-                </div>
-              ) : seasons.length === 0 ? (
-                <div className='text-center py-12 text-gray-500 dark:text-gray-400'>
-                  未找到季度信息
-                </div>
-              ) : (
-                <div className='space-y-3'>
-                  {seasons.map((season) => (
-                    <div
-                      key={season.id}
-                      className='flex gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors'
-                    >
-                      {/* 海报 */}
-                      <div className='flex-shrink-0 w-16 h-24 relative rounded overflow-hidden bg-gray-200 dark:bg-gray-700'>
-                        {season.poster_path ? (
-                          <Image
-                            src={processImageUrl(getTMDBImageUrl(season.poster_path))}
-                            alt={season.name}
-                            fill
-                            className='object-cover'
-                            referrerPolicy='no-referrer'
-                          />
-                        ) : (
-                          <div className='w-full h-full flex items-center justify-center text-gray-400 text-xs'>
-                            无海报
-                          </div>
-                        )}
-                      </div>
+              {/* 封面图链接 */}
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                  封面图链接（可选）
+                </label>
+                <input
+                  type='text'
+                  value={manualData.posterPath}
+                  onChange={(e) =>
+                    setManualData({ ...manualData, posterPath: e.target.value })
+                  }
+                  placeholder='请输入图片链接'
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+              </div>
 
-                      {/* 信息 */}
-                      <div className='flex-1 min-w-0'>
-                        <h3 className='font-semibold text-gray-900 dark:text-gray-100'>
-                          {season.name}
-                        </h3>
-                        <p className='text-sm text-gray-600 dark:text-gray-400 mt-1'>
-                          {season.episode_count} 集
-                          {season.air_date && ` • ${season.air_date.split('-')[0]}`}
-                        </p>
-                        <p className='text-xs text-gray-500 dark:text-gray-500 mt-1 line-clamp-2'>
-                          {season.overview || '暂无简介'}
-                        </p>
-                      </div>
+              {/* 上映日期 */}
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                  上映日期（可选）
+                </label>
+                <input
+                  type='date'
+                  value={manualData.releaseDate}
+                  onChange={(e) =>
+                    setManualData({
+                      ...manualData,
+                      releaseDate: e.target.value,
+                    })
+                  }
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+              </div>
 
-                      {/* 选择按钮 */}
-                      <div className='flex-shrink-0 flex items-center'>
-                        <button
-                          onClick={() => handleSelectSeason(season)}
-                          disabled={correcting}
-                          className='px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed'
-                        >
-                          {correcting ? '处理中...' : '选择'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {/* 评分 */}
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                  评分（可选，0-10）
+                </label>
+                <input
+                  type='text'
+                  value={manualData.voteAverage}
+                  onChange={(e) =>
+                    setManualData({
+                      ...manualData,
+                      voteAverage: e.target.value,
+                    })
+                  }
+                  placeholder='例如：8.5'
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+              </div>
+
+              {/* 简介 */}
+              <div>
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                  简介（可选）
+                </label>
+                <textarea
+                  value={manualData.overview}
+                  onChange={(e) =>
+                    setManualData({ ...manualData, overview: e.target.value })
+                  }
+                  placeholder='请输入影片简介'
+                  rows={3}
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+              </div>
+
+              {/* 错误提示 */}
+              {error && (
+                <p className='text-sm text-red-600 dark:text-red-400'>
+                  {error}
+                </p>
               )}
+
+              {/* 提交按钮 */}
+              <button
+                onClick={handleManualSubmit}
+                disabled={correcting}
+                className='w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed'
+              >
+                {correcting ? '提交中...' : '提交纠错'}
+              </button>
             </div>
-          ) : results.length === 0 ? (
-            // 空状态
-            <>
+          </div>
+        ) : showSeasonSelection ? (
+          // 季度选择界面
+          <div>
+            <div className='mb-4 flex items-center gap-2'>
+              <button
+                onClick={handleBackToResults}
+                className='text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1'
+              >
+                <span>←</span>
+                <span>返回搜索结果</span>
+              </button>
+            </div>
+
+            {selectedResult && (
+              <div className='mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg'>
+                <h3 className='font-semibold text-gray-900 dark:text-gray-100'>
+                  {selectedResult.title || selectedResult.name}
+                </h3>
+                <p className='text-sm text-gray-600 dark:text-gray-400 mt-1'>
+                  请选择季度：
+                </p>
+              </div>
+            )}
+
+            {loadingSeasons ? (
               <div className='text-center py-12 text-gray-500 dark:text-gray-400'>
-                {searching ? '搜索中...' : '请输入关键词搜索'}
+                加载季度列表中...
               </div>
-
-              {/* 手动纠错入口 */}
-              {!searching && (
-                <div className='mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 text-center'>
-                  <button
-                    onClick={handleShowManualInput}
-                    className='text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors'
-                  >
-                    搜不到影片？手动纠错
-                  </button>
-                </div>
-              )}
-            </>
-          ) : (
-            // 搜索结果列表
-            <>
+            ) : seasons.length === 0 ? (
+              <div className='text-center py-12 text-gray-500 dark:text-gray-400'>
+                未找到季度信息
+              </div>
+            ) : (
               <div className='space-y-3'>
-                {results.map((result) => (
+                {seasons.map((season) => (
                   <div
-                    key={result.id}
+                    key={season.id}
                     className='flex gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors'
                   >
                     {/* 海报 */}
                     <div className='flex-shrink-0 w-16 h-24 relative rounded overflow-hidden bg-gray-200 dark:bg-gray-700'>
-                      {result.poster_path ? (
+                      {season.poster_path ? (
                         <Image
-                          src={processImageUrl(getTMDBImageUrl(result.poster_path))}
-                          alt={result.title || result.name || ''}
+                          src={processImageUrl(
+                            getTMDBImageUrl(season.poster_path),
+                          )}
+                          alt={season.name}
                           fill
                           className='object-cover'
                           referrerPolicy='no-referrer'
@@ -772,36 +775,43 @@ export default function CorrectDialog({
 
                     {/* 信息 */}
                     <div className='flex-1 min-w-0'>
-                      <h3 className='font-semibold text-gray-900 dark:text-gray-100 truncate'>
-                        {result.title || result.name}
+                      <h3 className='font-semibold text-gray-900 dark:text-gray-100'>
+                        {season.name}
                       </h3>
                       <p className='text-sm text-gray-600 dark:text-gray-400 mt-1'>
-                        {result.media_type === 'movie' ? '电影' : '电视剧'} •{' '}
-                        {result.release_date?.split('-')[0] ||
-                          result.first_air_date?.split('-')[0] ||
-                          '未知'}{' '}
-                        • 评分: {result.vote_average.toFixed(1)}
+                        {season.episode_count} 集
+                        {season.air_date &&
+                          ` • ${season.air_date.split('-')[0]}`}
                       </p>
                       <p className='text-xs text-gray-500 dark:text-gray-500 mt-1 line-clamp-2'>
-                        {result.overview || '暂无简介'}
+                        {season.overview || '暂无简介'}
                       </p>
                     </div>
 
                     {/* 选择按钮 */}
                     <div className='flex-shrink-0 flex items-center'>
                       <button
-                        onClick={() => handleSelectResult(result)}
-                        disabled={correcting || loadingSeasons}
+                        onClick={() => handleSelectSeason(season)}
+                        disabled={correcting}
                         className='px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed'
                       >
-                        {correcting || loadingSeasons ? '处理中...' : '选择'}
+                        {correcting ? '处理中...' : '选择'}
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        ) : results.length === 0 ? (
+          // 空状态
+          <>
+            <div className='text-center py-12 text-gray-500 dark:text-gray-400'>
+              {searching ? '搜索中...' : '请输入关键词搜索'}
+            </div>
 
-              {/* 手动纠错入口 */}
+            {/* 手动纠错入口 */}
+            {!searching && (
               <div className='mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 text-center'>
                 <button
                   onClick={handleShowManualInput}
@@ -810,16 +820,88 @@ export default function CorrectDialog({
                   搜不到影片？手动纠错
                 </button>
               </div>
-            </>
-          )}
-        </div>
-      </>
-    );
+            )}
+          </>
+        ) : (
+          // 搜索结果列表
+          <>
+            <div className='space-y-3'>
+              {results.map((result) => (
+                <div
+                  key={result.id}
+                  className='flex gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors'
+                >
+                  {/* 海报 */}
+                  <div className='flex-shrink-0 w-16 h-24 relative rounded overflow-hidden bg-gray-200 dark:bg-gray-700'>
+                    {result.poster_path ? (
+                      <Image
+                        src={processImageUrl(
+                          getTMDBImageUrl(result.poster_path),
+                        )}
+                        alt={result.title || result.name || ''}
+                        fill
+                        className='object-cover'
+                        referrerPolicy='no-referrer'
+                      />
+                    ) : (
+                      <div className='w-full h-full flex items-center justify-center text-gray-400 text-xs'>
+                        无海报
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 信息 */}
+                  <div className='flex-1 min-w-0'>
+                    <h3 className='font-semibold text-gray-900 dark:text-gray-100 truncate'>
+                      {result.title || result.name}
+                    </h3>
+                    <p className='text-sm text-gray-600 dark:text-gray-400 mt-1'>
+                      {result.media_type === 'movie' ? '电影' : '电视剧'} •{' '}
+                      {result.release_date?.split('-')[0] ||
+                        result.first_air_date?.split('-')[0] ||
+                        '未知'}{' '}
+                      • 评分: {result.vote_average.toFixed(1)}
+                    </p>
+                    <p className='text-xs text-gray-500 dark:text-gray-500 mt-1 line-clamp-2'>
+                      {result.overview || '暂无简介'}
+                    </p>
+                  </div>
+
+                  {/* 选择按钮 */}
+                  <div className='flex-shrink-0 flex items-center'>
+                    <button
+                      onClick={() => handleSelectResult(result)}
+                      disabled={correcting || loadingSeasons}
+                      className='px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed'
+                    >
+                      {correcting || loadingSeasons ? '处理中...' : '选择'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 手动纠错入口 */}
+            <div className='mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 text-center'>
+              <button
+                onClick={handleShowManualInput}
+                className='text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors'
+              >
+                搜不到影片？手动纠错
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
 
   return createPortal(
     useDrawer ? (
       <div className='fixed inset-0 z-[9999] flex items-center justify-end pointer-events-none'>
-        <div className={`relative ${drawerWidth} h-full bg-white dark:bg-gray-800 shadow-2xl flex flex-col pointer-events-auto`}>
+        <div
+          className={`relative ${drawerWidth} h-full bg-white dark:bg-gray-800 shadow-2xl flex flex-col pointer-events-auto`}
+        >
           {dialogContent}
         </div>
       </div>
@@ -830,6 +912,6 @@ export default function CorrectDialog({
         </div>
       </div>
     ),
-    document.body
+    document.body,
   );
 }

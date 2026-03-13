@@ -12,7 +12,11 @@ interface UseWebLiveSyncOptions {
   currentSourceName: string;
   currentSourcePlatform: string;
   currentSourceRoomId: string;
-  onSourceChange?: (sourceKey: string, platform: string, roomId: string) => void;
+  onSourceChange?: (
+    sourceKey: string,
+    platform: string,
+    roomId: string,
+  ) => void;
 }
 
 export function useWebLiveSync({
@@ -35,7 +39,13 @@ export function useWebLiveSync({
   const broadcastSourceChange = useCallback(() => {
     if (!isOwner || !socket || syncingRef.current || !watchRoom) return;
 
-    if (!currentSourceKey || !currentSourceName || !currentSourcePlatform || !currentSourceRoomId) return;
+    if (
+      !currentSourceKey ||
+      !currentSourceName ||
+      !currentSourcePlatform ||
+      !currentSourceRoomId
+    )
+      return;
 
     // 使用 channelId 存储 sourceKey，channelUrl 存储 platform:roomId
     const state: LiveState = {
@@ -47,7 +57,15 @@ export function useWebLiveSync({
 
     console.log('[WebLiveSync] Broadcasting source change:', state);
     watchRoom.changeLiveChannel(state);
-  }, [isOwner, socket, currentSourceKey, currentSourceName, currentSourcePlatform, currentSourceRoomId, watchRoom]);
+  }, [
+    isOwner,
+    socket,
+    currentSourceKey,
+    currentSourceName,
+    currentSourcePlatform,
+    currentSourceRoomId,
+    watchRoom,
+  ]);
 
   // 房员：接收并同步房主的直播源切换
   useEffect(() => {
@@ -93,7 +111,14 @@ export function useWebLiveSync({
     }, 500); // 延迟广播，避免频繁触发
 
     return () => clearTimeout(timer);
-  }, [isOwner, currentSourceKey, currentSourcePlatform, currentSourceRoomId, broadcastSourceChange, isInRoom]);
+  }, [
+    isOwner,
+    currentSourceKey,
+    currentSourcePlatform,
+    currentSourceRoomId,
+    broadcastSourceChange,
+    isInRoom,
+  ]);
 
   return {
     isInRoom,

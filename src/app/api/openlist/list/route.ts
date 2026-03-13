@@ -44,14 +44,14 @@ export async function GET(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: 'OpenList 未配置或未启用', list: [], total: 0 },
-        { status: 200 }
+        { status: 200 },
       );
     }
 
     const client = new OpenListClient(
       openListConfig.URL,
       openListConfig.Username,
-      openListConfig.Password
+      openListConfig.Password,
     );
 
     // 读取 metainfo (从数据库或缓存)
@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
             list: [],
             total: 0,
           },
-          { status: 200 }
+          { status: 200 },
         );
       }
     }
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
     if (!metaInfo) {
       return NextResponse.json(
         { error: '无数据', list: [], total: 0 },
-        { status: 200 }
+        { status: 200 },
       );
     }
 
@@ -116,32 +116,30 @@ export async function GET(request: NextRequest) {
     if (!metaInfo.folders || typeof metaInfo.folders !== 'object') {
       return NextResponse.json(
         { error: 'metainfo.json 结构无效', list: [], total: 0 },
-        { status: 200 }
+        { status: 200 },
       );
     }
 
     // 转换为数组并分页
     const allVideos = Object.entries(metaInfo.folders)
       .filter(([, info]) => includeFailed || !info.failed) // 根据参数过滤失败的视频
-      .map(
-        ([key, info]) => {
-          return {
-            id: key,
-            folder: info.folderName,
-            tmdbId: info.tmdb_id,
-            title: info.title,
-            poster: getTMDBImageUrl(info.poster_path),
-            releaseDate: info.release_date,
-            overview: info.overview,
-            voteAverage: info.vote_average,
-            mediaType: info.media_type,
-            lastUpdated: info.last_updated,
-            failed: info.failed || false,
-            seasonNumber: info.season_number,
-            seasonName: info.season_name,
-          };
-        }
-      );
+      .map(([key, info]) => {
+        return {
+          id: key,
+          folder: info.folderName,
+          tmdbId: info.tmdb_id,
+          title: info.title,
+          poster: getTMDBImageUrl(info.poster_path),
+          releaseDate: info.release_date,
+          overview: info.overview,
+          voteAverage: info.vote_average,
+          mediaType: info.media_type,
+          lastUpdated: info.last_updated,
+          failed: info.failed || false,
+          seasonNumber: info.season_number,
+          seasonName: info.season_name,
+        };
+      });
 
     // 按更新时间倒序排序
     allVideos.sort((a, b) => b.lastUpdated - a.lastUpdated);
@@ -162,8 +160,13 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('获取视频列表失败:', error);
     return NextResponse.json(
-      { error: '获取失败', details: (error as Error).message, list: [], total: 0 },
-      { status: 500 }
+      {
+        error: '获取失败',
+        details: (error as Error).message,
+        list: [],
+        total: 0,
+      },
+      { status: 500 },
     );
   }
 }

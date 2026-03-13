@@ -37,34 +37,24 @@ export async function POST(request: NextRequest) {
     const config = await getConfig();
     const openListConfig = config.OpenListConfig;
 
-    if (
-      !openListConfig ||
-      !openListConfig.Enabled ||
-      !openListConfig.URL
-    ) {
+    if (!openListConfig || !openListConfig.Enabled || !openListConfig.URL) {
       return NextResponse.json(
         { error: 'OpenList 未配置或未启用' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // 从数据库读取 metainfo
     const metainfoContent = await db.getGlobalValue('video.metainfo');
     if (!metainfoContent) {
-      return NextResponse.json(
-        { error: '未找到视频元数据' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: '未找到视频元数据' }, { status: 404 });
     }
 
     const metaInfo: MetaInfo = JSON.parse(metainfoContent);
 
     // 检查 key 是否存在
     if (!metaInfo.folders[key]) {
-      return NextResponse.json(
-        { error: '未找到该视频记录' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: '未找到该视频记录' }, { status: 404 });
     }
 
     // 删除记录
@@ -80,7 +70,9 @@ export async function POST(request: NextRequest) {
 
     // 更新配置中的资源数量
     if (config.OpenListConfig) {
-      config.OpenListConfig.ResourceCount = Object.keys(metaInfo.folders).length;
+      config.OpenListConfig.ResourceCount = Object.keys(
+        metaInfo.folders,
+      ).length;
       await db.saveAdminConfig(config);
     }
 
@@ -92,7 +84,7 @@ export async function POST(request: NextRequest) {
     console.error('删除视频记录失败:', error);
     return NextResponse.json(
       { error: '删除失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -35,19 +35,29 @@ export async function GET(request: NextRequest) {
     if (!tmdbApiKey) {
       return NextResponse.json(
         { error: 'TMDB API Key 未配置' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const response =
       type === 'movie'
-        ? await getTMDBMovieDetails(tmdbApiKey, parseInt(id), tmdbProxy, tmdbReverseProxy)
-        : await getTMDBTVDetails(tmdbApiKey, parseInt(id), tmdbProxy, tmdbReverseProxy);
+        ? await getTMDBMovieDetails(
+            tmdbApiKey,
+            parseInt(id),
+            tmdbProxy,
+            tmdbReverseProxy,
+          )
+        : await getTMDBTVDetails(
+            tmdbApiKey,
+            parseInt(id),
+            tmdbProxy,
+            tmdbReverseProxy,
+          );
 
     if (response.code !== 200 || !response.details) {
       return NextResponse.json(
         { error: 'TMDB 详情获取失败', code: response.code },
-        { status: response.code }
+        { status: response.code },
       );
     }
 
@@ -56,7 +66,7 @@ export async function GET(request: NextRequest) {
     console.error('TMDB详情获取失败:', error);
     return NextResponse.json(
       { error: '获取详情失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

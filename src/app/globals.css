@@ -15,7 +15,9 @@
   left: 0;
   width: 100%;
   height: 3px;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.8), 0 0 5px rgba(59, 130, 246, 0.6);
+  box-shadow:
+    0 0 10px rgba(59, 130, 246, 0.8),
+    0 0 5px rgba(59, 130, 246, 0.6);
 }
 
 #nprogress .peg {
@@ -24,19 +26,25 @@
   right: 0px;
   width: 100px;
   height: 100%;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.8), 0 0 5px rgba(59, 130, 246, 0.6);
-  opacity: 1.0;
+  box-shadow:
+    0 0 10px rgba(59, 130, 246, 0.8),
+    0 0 5px rgba(59, 130, 246, 0.6);
+  opacity: 1;
   transform: rotate(3deg) translate(0px, -4px);
 }
 
 /* 暗色模式下的进度条样式 */
 .dark #nprogress .bar {
   background: #60a5fa;
-  box-shadow: 0 0 10px rgba(96, 165, 250, 0.8), 0 0 5px rgba(96, 165, 250, 0.6);
+  box-shadow:
+    0 0 10px rgba(96, 165, 250, 0.8),
+    0 0 5px rgba(96, 165, 250, 0.6);
 }
 
 .dark #nprogress .peg {
-  box-shadow: 0 0 10px rgba(96, 165, 250, 0.8), 0 0 5px rgba(96, 165, 250, 0.6);
+  box-shadow:
+    0 0 10px rgba(96, 165, 250, 0.8),
+    0 0 5px rgba(96, 165, 250, 0.6);
 }
 
 @layer utilities {
@@ -218,7 +226,8 @@ div[data-media-provider] video {
     transform: scale(1);
     opacity: 0.6;
   }
-  75%, 100% {
+  75%,
+  100% {
     transform: scale(2);
     opacity: 0;
   }
@@ -226,7 +235,8 @@ div[data-media-provider] video {
 
 /* 水波纹缩放动画 - 第二层 (慢速脉冲) */
 @keyframes pulse-scale {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.4;
   }
@@ -238,7 +248,8 @@ div[data-media-provider] video {
 
 /* 主体徽章缩放动画 */
 @keyframes badge-scale {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
   }
   50% {

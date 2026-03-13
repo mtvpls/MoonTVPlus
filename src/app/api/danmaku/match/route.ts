@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
           isMatched: false,
           matches: [],
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
         isMatched: false,
         matches: [],
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

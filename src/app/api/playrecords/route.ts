@@ -29,14 +29,18 @@ export async function GET(request: NextRequest) {
 
       // 检查播放记录迁移标识，没有迁移标识时执行迁移
       if (!userInfoV2.playrecord_migrated) {
-        console.log(`用户 ${authInfo.username} 播放记录未迁移，开始执行迁移...`);
+        console.log(
+          `用户 ${authInfo.username} 播放记录未迁移，开始执行迁移...`,
+        );
         await db.migratePlayRecords(authInfo.username);
       }
     } else {
       // 站长也需要执行迁移（站长可能不在数据库中，直接尝试迁移）
       const userInfoV2 = await db.getUserInfoV2(authInfo.username);
       if (!userInfoV2 || !userInfoV2.playrecord_migrated) {
-        console.log(`站长 ${authInfo.username} 播放记录未迁移，开始执行迁移...`);
+        console.log(
+          `站长 ${authInfo.username} 播放记录未迁移，开始执行迁移...`,
+        );
         await db.migratePlayRecords(authInfo.username);
       }
     }
@@ -47,7 +51,7 @@ export async function GET(request: NextRequest) {
     console.error('获取播放记录失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
     if (!key || !record) {
       return NextResponse.json(
         { error: 'Missing key or record' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -85,7 +89,7 @@ export async function POST(request: NextRequest) {
     if (!record.title || !record.source_name || record.index < 1) {
       return NextResponse.json(
         { error: 'Invalid record data' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -94,7 +98,7 @@ export async function POST(request: NextRequest) {
     if (!source || !id) {
       return NextResponse.json(
         { error: 'Invalid key format' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -106,16 +110,18 @@ export async function POST(request: NextRequest) {
     await db.savePlayRecord(authInfo.username, source, id, finalRecord);
 
     // 异步清理旧的播放记录（不阻塞响应）
-    (db as any).storage.cleanupOldPlayRecords(authInfo.username).catch((err: Error) => {
-      console.error('异步清理播放记录失败:', err);
-    });
+    (db as any).storage
+      .cleanupOldPlayRecords(authInfo.username)
+      .catch((err: Error) => {
+        console.error('异步清理播放记录失败:', err);
+      });
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
     console.error('保存播放记录失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -149,7 +155,7 @@ export async function DELETE(request: NextRequest) {
       if (!source || !id) {
         return NextResponse.json(
           { error: 'Invalid key format' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -162,7 +168,7 @@ export async function DELETE(request: NextRequest) {
         Object.keys(all).map(async (k) => {
           const [s, i] = k.split('+');
           if (s && i) await db.deletePlayRecord(username, s, i);
-        })
+        }),
       );
     }
 
@@ -171,7 +177,7 @@ export async function DELETE(request: NextRequest) {
     console.error('删除播放记录失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

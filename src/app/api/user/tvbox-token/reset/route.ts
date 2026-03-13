@@ -15,10 +15,7 @@ export async function POST(request: NextRequest) {
     // 验证用户登录
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo?.username) {
-      return NextResponse.json(
-        { error: '未登录' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
     const username = authInfo.username;
@@ -40,7 +37,7 @@ export async function POST(request: NextRequest) {
         error: '重置订阅token失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

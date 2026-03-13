@@ -37,7 +37,7 @@ export interface PansouLoginResponse {
 export async function loginPansou(
   apiUrl: string,
   username: string,
-  password: string
+  password: string,
 ): Promise<string> {
   try {
     const response = await fetch(`${apiUrl}/api/auth/login`, {
@@ -72,7 +72,7 @@ export async function loginPansou(
 async function getValidToken(
   apiUrl: string,
   username?: string,
-  password?: string
+  password?: string,
 ): Promise<string | null> {
   // 如果没有配置账号密码，返回 null（不需要认证）
   if (!username || !password) {
@@ -108,14 +108,14 @@ export async function searchPansou(
     password?: string;
     refresh?: boolean;
     cloudTypes?: string[];
-  }
+  },
 ): Promise<PansouSearchResult> {
   try {
     // 获取 Token（如果需要认证）
     const token = await getValidToken(
       apiUrl,
       options?.username,
-      options?.password
+      options?.password,
     );
 
     // 构建请求头

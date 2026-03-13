@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
     }
 
     // 检查是否是gzip压缩
-    const isGzip = epgUrl.endsWith('.gz') || response.headers.get('content-encoding') === 'gzip';
+    const isGzip =
+      epgUrl.endsWith('.gz') ||
+      response.headers.get('content-encoding') === 'gzip';
 
     if (isGzip) {
       console.log('[EPG Download] Decompressing gzip...');
@@ -59,7 +61,11 @@ export async function GET(request: NextRequest) {
       const decompressed = zlib.gunzipSync(Buffer.from(allChunks));
       const decompressedText = decompressed.toString('utf-8');
 
-      console.log('[EPG Download] Decompressed size:', decompressedText.length, 'bytes');
+      console.log(
+        '[EPG Download] Decompressed size:',
+        decompressedText.length,
+        'bytes',
+      );
 
       // 返回解压后的XML
       return new NextResponse(decompressedText, {
@@ -80,9 +86,6 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error('[EPG Download] Error:', error);
-    return NextResponse.json(
-      { error: '下载EPG文件失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '下载EPG文件失败' }, { status: 500 });
   }
 }

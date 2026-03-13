@@ -1,11 +1,14 @@
 import { NextRequest } from 'next/server';
+
 import { getAuthInfoFromCookie } from './auth';
 
 /**
  * 获取用于代理的 token
  * 优先级：全局 token > 用户 token（从 cookie 获取）> null
  */
-export async function getProxyToken(request?: NextRequest): Promise<string | null> {
+export async function getProxyToken(
+  request?: NextRequest,
+): Promise<string | null> {
   // 1. 尝试获取全局 token
   const globalToken = process.env.TVBOX_SUBSCRIBE_TOKEN;
   if (globalToken) {

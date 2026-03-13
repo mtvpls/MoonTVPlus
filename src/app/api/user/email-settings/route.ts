@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     console.error('获取用户邮箱设置失败:', error);
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -58,10 +58,7 @@ export async function POST(request: NextRequest) {
     if (email && typeof email === 'string') {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
-        return NextResponse.json(
-          { error: '邮箱格式不正确' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: '邮箱格式不正确' }, { status: 400 });
       }
 
       if (storage.setUserEmail) {
@@ -72,7 +69,10 @@ export async function POST(request: NextRequest) {
     // 保存邮件通知偏好
     if (typeof emailNotifications === 'boolean') {
       if (storage.setEmailNotificationPreference) {
-        await storage.setEmailNotificationPreference(username, emailNotifications);
+        await storage.setEmailNotificationPreference(
+          username,
+          emailNotifications,
+        );
       }
     }
 
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     console.error('保存用户邮箱设置失败:', error);
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -13,7 +13,7 @@ export async function GET() {
     const sources = await embyManager.getEnabledSources();
 
     return NextResponse.json({
-      sources: sources.map(s => ({
+      sources: sources.map((s) => ({
         key: s.key,
         name: s.name,
       })),
@@ -22,7 +22,7 @@ export async function GET() {
     console.error('[Emby Sources] 获取Emby源列表失败:', error);
     return NextResponse.json(
       { error: '获取Emby源列表失败', sources: [] },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

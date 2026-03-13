@@ -54,7 +54,8 @@ export default async function RootLayout({
     process.env.ANNOUNCEMENT ||
     '本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。';
 
-  let doubanProxyType = process.env.NEXT_PUBLIC_DOUBAN_PROXY_TYPE || 'cmliussss-cdn-tencent';
+  let doubanProxyType =
+    process.env.NEXT_PUBLIC_DOUBAN_PROXY_TYPE || 'cmliussss-cdn-tencent';
   let doubanProxy = process.env.NEXT_PUBLIC_DOUBAN_PROXY || '';
   let doubanImageProxyType =
     process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE || 'cmliussss-cdn-tencent';
@@ -106,7 +107,7 @@ export default async function RootLayout({
     doubanImageProxy = config.SiteConfig.DoubanImageProxy;
     disableYellowFilter = config.SiteConfig.DisableYellowFilter;
     customCategories = config.CustomCategories.filter(
-      (category) => !category.disabled
+      (category) => !category.disabled,
     ).map((category) => ({
       name: category.name || '',
       type: category.type,
@@ -114,7 +115,8 @@ export default async function RootLayout({
     }));
     fluidSearch = config.SiteConfig.FluidSearch;
     enableComments = config.SiteConfig.EnableComments;
-    recommendationDataSource = config.SiteConfig.RecommendationDataSource || 'Mixed';
+    recommendationDataSource =
+      config.SiteConfig.RecommendationDataSource || 'Mixed';
     tmdbApiKey = config.SiteConfig.TMDBApiKey || '';
     loginBackgroundImage = config.ThemeConfig?.loginBackgroundImage || '';
     registerBackgroundImage = config.ThemeConfig?.registerBackgroundImage || '';
@@ -123,7 +125,8 @@ export default async function RootLayout({
     progressThumbCustomUrl = config.ThemeConfig?.progressThumbCustomUrl || '';
     enableRegistration = config.SiteConfig.EnableRegistration || false;
     loginRequireTurnstile = config.SiteConfig.LoginRequireTurnstile || false;
-    registrationRequireTurnstile = config.SiteConfig.RegistrationRequireTurnstile || false;
+    registrationRequireTurnstile =
+      config.SiteConfig.RegistrationRequireTurnstile || false;
     turnstileSiteKey = config.SiteConfig.TurnstileSiteKey || '';
     enableOIDCLogin = config.SiteConfig.EnableOIDCLogin || false;
     enableOIDCRegistration = config.SiteConfig.EnableOIDCRegistration || false;
@@ -154,12 +157,11 @@ export default async function RootLayout({
     embyEnabled = !!(
       config.EmbyConfig?.Sources &&
       config.EmbyConfig.Sources.length > 0 &&
-      config.EmbyConfig.Sources.some(s => s.enabled && s.ServerURL)
+      config.EmbyConfig.Sources.some((s) => s.enabled && s.ServerURL)
     );
     // 检查是否启用了小雅功能
     xiaoyaEnabled = !!(
-      config.XiaoyaConfig?.Enabled &&
-      config.XiaoyaConfig?.ServerURL
+      config.XiaoyaConfig?.Enabled && config.XiaoyaConfig?.ServerURL
     );
   }
 
@@ -176,8 +178,10 @@ export default async function RootLayout({
     EnableComments: enableComments,
     RecommendationDataSource: recommendationDataSource,
     ENABLE_TVBOX_SUBSCRIBE: process.env.ENABLE_TVBOX_SUBSCRIBE === 'true',
-    ENABLE_OFFLINE_DOWNLOAD: process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
-    VOICE_CHAT_STRATEGY: process.env.NEXT_PUBLIC_VOICE_CHAT_STRATEGY || 'webrtc-fallback',
+    ENABLE_OFFLINE_DOWNLOAD:
+      process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
+    VOICE_CHAT_STRATEGY:
+      process.env.NEXT_PUBLIC_VOICE_CHAT_STRATEGY || 'webrtc-fallback',
     OPENLIST_ENABLED: openListEnabled,
     EMBY_ENABLED: embyEnabled,
     XIAOYA_ENABLED: xiaoyaEnabled,
@@ -204,8 +208,7 @@ export default async function RootLayout({
     WEB_LIVE_ENABLED: webLiveEnabled,
     CUSTOM_AD_FILTER_VERSION: customAdFilterVersion,
     TUNEHUB_ENABLED: tuneHubEnabled,
-    FESTIVE_EFFECT_ENABLED:
-      process.env.FESTIVE_EFFECT_ENABLED === 'true',
+    FESTIVE_EFFECT_ENABLED: process.env.FESTIVE_EFFECT_ENABLED === 'true',
   };
 
   return (
@@ -237,7 +240,11 @@ export default async function RootLayout({
         >
           <TopProgressBar />
           <TokenRefreshManager />
-          <SiteProvider siteName={siteName} announcement={announcement} tmdbApiKey={tmdbApiKey}>
+          <SiteProvider
+            siteName={siteName}
+            announcement={announcement}
+            tmdbApiKey={tmdbApiKey}
+          >
             <WatchRoomProvider>
               <DownloadProvider>
                 <DanmakuCacheCleanup />

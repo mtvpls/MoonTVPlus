@@ -31,10 +31,7 @@ export async function GET(request: NextRequest) {
     const playlistId = searchParams.get('playlistId');
 
     if (!playlistId) {
-      return NextResponse.json(
-        { error: '歌单ID不能为空' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '歌单ID不能为空' }, { status: 400 });
     }
 
     // 检查歌单是否存在且属于当前用户
@@ -53,7 +50,7 @@ export async function GET(request: NextRequest) {
     console.error('GET /api/music/playlists/songs error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -82,17 +79,11 @@ export async function POST(request: NextRequest) {
     const { playlistId, song } = body;
 
     if (!playlistId) {
-      return NextResponse.json(
-        { error: '歌单ID不能为空' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '歌单ID不能为空' }, { status: 400 });
     }
 
     if (!song || !song.platform || !song.id || !song.name || !song.artist) {
-      return NextResponse.json(
-        { error: '歌曲信息不完整' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '歌曲信息不完整' }, { status: 400 });
     }
 
     // 检查歌单是否存在且属于当前用户
@@ -105,12 +96,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 检查歌曲是否已在歌单中
-    const exists = await db.isSongInPlaylist(playlistId, song.platform, song.id);
+    const exists = await db.isSongInPlaylist(
+      playlistId,
+      song.platform,
+      song.id,
+    );
     if (exists) {
-      return NextResponse.json(
-        { error: '歌曲已在歌单中' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '歌曲已在歌单中' }, { status: 400 });
     }
 
     await db.addSongToPlaylist(playlistId, {
@@ -128,7 +120,7 @@ export async function POST(request: NextRequest) {
     console.error('POST /api/music/playlists/songs error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -159,10 +151,7 @@ export async function DELETE(request: NextRequest) {
     const songId = searchParams.get('songId');
 
     if (!playlistId || !platform || !songId) {
-      return NextResponse.json(
-        { error: '参数不完整' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '参数不完整' }, { status: 400 });
     }
 
     // 检查歌单是否存在且属于当前用户
@@ -181,7 +170,7 @@ export async function DELETE(request: NextRequest) {
     console.error('DELETE /api/music/playlists/songs error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

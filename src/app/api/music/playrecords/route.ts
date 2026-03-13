@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const records = await db.getAllMusicPlayRecords(authInfo.username);
 
     // 从缓存中获取歌曲信息并填充到记录中
-    const keys = Object.keys(records).map(key => {
+    const keys = Object.keys(records).map((key) => {
       const [platform, id] = key.split('+');
       return { platform, id };
     });
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     console.error('获取音乐播放记录失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -85,14 +85,18 @@ export async function POST(request: NextRequest) {
     // 检查是否是批量添加
     if (Array.isArray(body.records)) {
       // 批量添加
-      const records: Array<{ platform: string; id: string; record: MusicPlayRecord }> = [];
+      const records: Array<{
+        platform: string;
+        id: string;
+        record: MusicPlayRecord;
+      }> = [];
 
       for (const item of body.records) {
         const { key, record } = item;
         if (!key || !record) {
           return NextResponse.json(
             { error: 'Missing key or record in batch item' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -100,7 +104,7 @@ export async function POST(request: NextRequest) {
         if (!record.platform || !record.id || !record.name || !record.artist) {
           return NextResponse.json(
             { error: 'Invalid record data in batch item' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -109,7 +113,7 @@ export async function POST(request: NextRequest) {
         if (!platform || !id) {
           return NextResponse.json(
             { error: 'Invalid key format in batch item' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -128,7 +132,10 @@ export async function POST(request: NextRequest) {
       // 批量保存到数据库
       await db.batchSaveMusicPlayRecords(authInfo.username, records);
 
-      return NextResponse.json({ success: true, count: records.length }, { status: 200 });
+      return NextResponse.json(
+        { success: true, count: records.length },
+        { status: 200 },
+      );
     } else {
       // 单个添加（保持向后兼容）
       const { key, record }: { key: string; record: MusicPlayRecord } = body;
@@ -136,7 +143,7 @@ export async function POST(request: NextRequest) {
       if (!key || !record) {
         return NextResponse.json(
           { error: 'Missing key or record' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -144,7 +151,7 @@ export async function POST(request: NextRequest) {
       if (!record.platform || !record.id || !record.name || !record.artist) {
         return NextResponse.json(
           { error: 'Invalid record data' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -153,7 +160,7 @@ export async function POST(request: NextRequest) {
       if (!platform || !id) {
         return NextResponse.json(
           { error: 'Invalid key format' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -174,7 +181,7 @@ export async function POST(request: NextRequest) {
     console.error('保存音乐播放记录失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -207,7 +214,7 @@ export async function DELETE(request: NextRequest) {
       if (!platform || !id) {
         return NextResponse.json(
           { error: 'Invalid key format' },
-          { status: 400 }
+          { status: 400 },
         );
       }
       await db.deleteMusicPlayRecord(authInfo.username, platform, id);
@@ -221,7 +228,7 @@ export async function DELETE(request: NextRequest) {
     console.error('删除音乐播放记录失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

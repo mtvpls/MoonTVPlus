@@ -34,14 +34,14 @@ export async function GET(request: Request) {
     if (!videoResponse.ok) {
       return NextResponse.json(
         { error: videoResponse.statusText },
-        { status: videoResponse.status }
+        { status: videoResponse.status },
       );
     }
 
     if (!videoResponse.body) {
       return NextResponse.json(
         { error: 'Video response has no body' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
     console.error('Error proxying video:', error);
     return NextResponse.json(
       { error: 'Error fetching video' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

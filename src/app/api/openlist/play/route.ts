@@ -21,7 +21,8 @@ async function getFinalUrl(url: string, maxRedirects = 5): Promise<string> {
         method: 'HEAD',
         redirect: 'manual',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
       });
 
@@ -89,7 +90,10 @@ export async function GET(request: NextRequest) {
       !openListConfig.Username ||
       !openListConfig.Password
     ) {
-      return NextResponse.json({ error: 'OpenList 未配置或未启用' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'OpenList 未配置或未启用' },
+        { status: 400 },
+      );
     }
 
     // folderName 已经是完整路径，直接使用
@@ -99,7 +103,7 @@ export async function GET(request: NextRequest) {
     const client = new OpenListClient(
       openListConfig.URL,
       openListConfig.Username,
-      openListConfig.Password
+      openListConfig.Password,
     );
 
     // 如果启用了禁用预览视频，直接使用直连方法
@@ -114,7 +118,7 @@ export async function GET(request: NextRequest) {
         });
         return NextResponse.json(
           { error: '获取播放链接失败' },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
@@ -131,7 +135,10 @@ export async function GET(request: NextRequest) {
       }
 
       // 检查URL是否为空
-      if (!fileResponse.data.raw_url || fileResponse.data.raw_url.trim() === '') {
+      if (
+        !fileResponse.data.raw_url ||
+        fileResponse.data.raw_url.trim() === ''
+      ) {
         throw new Error('获取到的播放链接为空');
       }
 
@@ -143,16 +150,17 @@ export async function GET(request: NextRequest) {
     try {
       const data = await client.getVideoPreview(filePath);
 
-      const taskList = data.data?.video_preview_play_info?.live_transcoding_task_list;
+      const taskList =
+        data.data?.video_preview_play_info?.live_transcoding_task_list;
       if (!taskList || taskList.length === 0) {
         throw new Error('未找到可用的播放链接');
       }
 
       const qualityOrder: Record<string, number> = {
-        'FHD': 1,
-        'HD': 2,
-        'LD': 3,
-        'SD': 4,
+        FHD: 1,
+        HD: 2,
+        LD: 3,
+        SD: 4,
       };
 
       const qualities = taskList
@@ -162,7 +170,10 @@ export async function GET(request: NextRequest) {
           url: task.url,
         }))
         .filter((quality: any) => quality.url && quality.url.trim() !== '') // 过滤空URL
-        .sort((a: any, b: any) => (qualityOrder[a.name] || 999) - (qualityOrder[b.name] || 999));
+        .sort(
+          (a: any, b: any) =>
+            (qualityOrder[a.name] || 999) - (qualityOrder[b.name] || 999),
+        );
 
       if (qualities.length === 0) {
         throw new Error('未找到已完成的播放链接');
@@ -172,7 +183,7 @@ export async function GET(request: NextRequest) {
       if (format === 'json') {
         return NextResponse.json({
           url: qualities[0].url,
-          qualities
+          qualities,
         });
       }
 
@@ -180,7 +191,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(qualities[0].url);
     } catch (error) {
       // 视频预览流失败，降级到直连方法
-      console.log('[openlist/play] 视频预览流失败，降级到直连方法:', (error as Error).message);
+      console.log(
+        '[openlist/play] 视频预览流失败，降级到直连方法:',
+        (error as Error).message,
+      );
 
       const fileResponse = await client.getFile(filePath);
 
@@ -192,7 +206,7 @@ export async function GET(request: NextRequest) {
         });
         return NextResponse.json(
           { error: '获取播放链接失败' },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
@@ -209,7 +223,10 @@ export async function GET(request: NextRequest) {
       }
 
       // 检查URL是否为空
-      if (!fileResponse.data.raw_url || fileResponse.data.raw_url.trim() === '') {
+      if (
+        !fileResponse.data.raw_url ||
+        fileResponse.data.raw_url.trim() === ''
+      ) {
         throw new Error('获取到的播放链接为空');
       }
 
@@ -220,7 +237,7 @@ export async function GET(request: NextRequest) {
     console.error('获取播放链接失败:', error);
     return NextResponse.json(
       { error: '获取失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

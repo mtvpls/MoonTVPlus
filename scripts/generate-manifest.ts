@@ -24,7 +24,10 @@ interface WebManifest {
 }
 
 export function generateManifest(): void {
-  const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const projectRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+  );
   const publicDir = path.join(projectRoot, 'public');
   const manifestPath = path.join(publicDir, 'manifest.json');
   const siteName = process.env.NEXT_PUBLIC_SITE_NAME || 'MoonTVPlus';
@@ -60,6 +63,9 @@ export function generateManifest(): void {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   generateManifest();
 }

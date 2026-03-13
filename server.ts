@@ -25,7 +25,8 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 async function getWatchRoomConfig(): Promise<WatchRoomConfig> {
-  const serverType = process.env.WATCH_ROOM_SERVER_TYPE === 'external' ? 'external' : 'internal';
+  const serverType =
+    process.env.WATCH_ROOM_SERVER_TYPE === 'external' ? 'external' : 'internal';
   const config: WatchRoomConfig = {
     enabled: process.env.WATCH_ROOM_ENABLED === 'true',
     serverType,
@@ -33,7 +34,9 @@ async function getWatchRoomConfig(): Promise<WatchRoomConfig> {
     externalServerAuth: process.env.WATCH_ROOM_EXTERNAL_SERVER_AUTH,
   };
 
-  console.log(`[WatchRoom] Watch room ${config.enabled ? 'enabled' : 'disabled'} via environment variable.`);
+  console.log(
+    `[WatchRoom] Watch room ${config.enabled ? 'enabled' : 'disabled'} via environment variable.`,
+  );
   return config;
 }
 
@@ -92,7 +95,9 @@ class WatchRoomServer {
 
           socket.join(roomId);
 
-          console.log(`[WatchRoom] Room created: ${roomId} by ${data.userName}`);
+          console.log(
+            `[WatchRoom] Room created: ${roomId} by ${data.userName}`,
+          );
           callback({ success: true, room });
         } catch (error) {
           console.error('[WatchRoom] Error creating room:', error);
@@ -121,12 +126,16 @@ class WatchRoomServer {
             room.ownerId = userId;
             room.lastOwnerHeartbeat = Date.now();
             this.rooms.set(data.roomId, room);
-            console.log(`[WatchRoom] Owner ${data.userName} reconnected to room ${data.roomId}`);
+            console.log(
+              `[WatchRoom] Owner ${data.userName} reconnected to room ${data.roomId}`,
+            );
           }
 
           const deletionTimer = this.roomDeletionTimers.get(data.roomId);
           if (deletionTimer) {
-            console.log(`[WatchRoom] Cancelling deletion timer for room ${data.roomId}`);
+            console.log(
+              `[WatchRoom] Cancelling deletion timer for room ${data.roomId}`,
+            );
             clearTimeout(deletionTimer);
             this.roomDeletionTimers.delete(data.roomId);
           }
@@ -155,7 +164,9 @@ class WatchRoomServer {
           socket.join(data.roomId);
           socket.to(data.roomId).emit('room:member-joined', member);
 
-          console.log(`[WatchRoom] User ${data.userName} joined room ${data.roomId}${isOwner ? ' (as owner)' : ''}`);
+          console.log(
+            `[WatchRoom] User ${data.userName} joined room ${data.roomId}${isOwner ? ' (as owner)' : ''}`,
+          );
 
           const members = Array.from(roomMembers?.values() || []);
           callback({ success: true, room, members });
@@ -170,15 +181,22 @@ class WatchRoomServer {
       });
 
       socket.on('room:list', (callback) => {
-        const publicRooms = Array.from(this.rooms.values()).filter((room) => room.isPublic);
+        const publicRooms = Array.from(this.rooms.values()).filter(
+          (room) => room.isPublic,
+        );
         callback(publicRooms);
       });
 
       socket.on('play:update', (state) => {
-        console.log(`[WatchRoom] Received play:update from ${socket.id}:`, state);
+        console.log(
+          `[WatchRoom] Received play:update from ${socket.id}:`,
+          state,
+        );
         const roomInfo = this.socketToRoom.get(socket.id);
         if (!roomInfo) {
-          console.log('[WatchRoom] No room info for socket, ignoring play:update');
+          console.log(
+            '[WatchRoom] No room info for socket, ignoring play:update',
+          );
           return;
         }
 
@@ -190,19 +208,28 @@ class WatchRoomServer {
 
         room.currentState = state;
         this.rooms.set(roomInfo.roomId, room);
-        console.log(`[WatchRoom] Broadcasting play:update to room ${roomInfo.roomId} from ${roomInfo.userName}`);
+        console.log(
+          `[WatchRoom] Broadcasting play:update to room ${roomInfo.roomId} from ${roomInfo.userName}`,
+        );
         socket.to(roomInfo.roomId).emit('play:update', state);
       });
 
       socket.on('play:seek', (currentTime) => {
-        console.log(`[WatchRoom] Received play:seek from ${socket.id}:`, currentTime);
+        console.log(
+          `[WatchRoom] Received play:seek from ${socket.id}:`,
+          currentTime,
+        );
         const roomInfo = this.socketToRoom.get(socket.id);
         if (!roomInfo) {
-          console.log('[WatchRoom] No room info for socket, ignoring play:seek');
+          console.log(
+            '[WatchRoom] No room info for socket, ignoring play:seek',
+          );
           return;
         }
 
-        console.log(`[WatchRoom] Broadcasting play:seek to room ${roomInfo.roomId}`);
+        console.log(
+          `[WatchRoom] Broadcasting play:seek to room ${roomInfo.roomId}`,
+        );
         socket.to(roomInfo.roomId).emit('play:seek', currentTime);
       });
 
@@ -210,11 +237,15 @@ class WatchRoomServer {
         console.log(`[WatchRoom] Received play:play from ${socket.id}`);
         const roomInfo = this.socketToRoom.get(socket.id);
         if (!roomInfo) {
-          console.log('[WatchRoom] No room info for socket, ignoring play:play');
+          console.log(
+            '[WatchRoom] No room info for socket, ignoring play:play',
+          );
           return;
         }
 
-        console.log(`[WatchRoom] Broadcasting play:play to room ${roomInfo.roomId}`);
+        console.log(
+          `[WatchRoom] Broadcasting play:play to room ${roomInfo.roomId}`,
+        );
         socket.to(roomInfo.roomId).emit('play:play');
       });
 
@@ -222,19 +253,28 @@ class WatchRoomServer {
         console.log(`[WatchRoom] Received play:pause from ${socket.id}`);
         const roomInfo = this.socketToRoom.get(socket.id);
         if (!roomInfo) {
-          console.log('[WatchRoom] No room info for socket, ignoring play:pause');
+          console.log(
+            '[WatchRoom] No room info for socket, ignoring play:pause',
+          );
           return;
         }
 
-        console.log(`[WatchRoom] Broadcasting play:pause to room ${roomInfo.roomId}`);
+        console.log(
+          `[WatchRoom] Broadcasting play:pause to room ${roomInfo.roomId}`,
+        );
         socket.to(roomInfo.roomId).emit('play:pause');
       });
 
       socket.on('play:change', (state) => {
-        console.log(`[WatchRoom] Received play:change from ${socket.id}:`, state);
+        console.log(
+          `[WatchRoom] Received play:change from ${socket.id}:`,
+          state,
+        );
         const roomInfo = this.socketToRoom.get(socket.id);
         if (!roomInfo) {
-          console.log('[WatchRoom] No room info for socket, ignoring play:change');
+          console.log(
+            '[WatchRoom] No room info for socket, ignoring play:change',
+          );
           return;
         }
 
@@ -251,7 +291,9 @@ class WatchRoomServer {
 
         room.currentState = state;
         this.rooms.set(roomInfo.roomId, room);
-        console.log(`[WatchRoom] Broadcasting play:change to room ${roomInfo.roomId}`);
+        console.log(
+          `[WatchRoom] Broadcasting play:change to room ${roomInfo.roomId}`,
+        );
         socket.to(roomInfo.roomId).emit('play:change', state);
       });
 
@@ -389,7 +431,9 @@ class WatchRoomServer {
       socket.to(roomId).emit('room:member-left', userId);
 
       if (isOwner) {
-        console.log(`[WatchRoom] Owner actively left room ${roomId}, disbanding room`);
+        console.log(
+          `[WatchRoom] Owner actively left room ${roomId}, disbanding room`,
+        );
         socket.to(roomId).emit('room:deleted', { reason: 'owner_left' });
 
         for (const memberId of roomMembers.keys()) {
@@ -404,12 +448,16 @@ class WatchRoomServer {
           this.roomDeletionTimers.delete(roomId);
         }
       } else if (roomMembers.size === 0) {
-        console.log(`[WatchRoom] Room ${roomId} is now empty, will delete in 30 seconds if no one rejoins`);
+        console.log(
+          `[WatchRoom] Room ${roomId} is now empty, will delete in 30 seconds if no one rejoins`,
+        );
 
         const deletionTimer = setTimeout(() => {
           const currentRoomMembers = this.members.get(roomId);
           if (currentRoomMembers && currentRoomMembers.size === 0) {
-            console.log(`[WatchRoom] Room ${roomId} deletion timer expired, deleting room`);
+            console.log(
+              `[WatchRoom] Room ${roomId} deletion timer expired, deleting room`,
+            );
             this.deleteRoom(roomId);
             this.roomDeletionTimers.delete(roomId);
           }
@@ -443,8 +491,13 @@ class WatchRoomServer {
       for (const [roomId, room] of this.rooms.entries()) {
         const timeSinceHeartbeat = now - room.lastOwnerHeartbeat;
 
-        if (timeSinceHeartbeat > clearStateTimeout && room.currentState !== null) {
-          console.log(`[WatchRoom] Room ${roomId} owner inactive for 30s, clearing play state`);
+        if (
+          timeSinceHeartbeat > clearStateTimeout &&
+          room.currentState !== null
+        ) {
+          console.log(
+            `[WatchRoom] Room ${roomId} owner inactive for 30s, clearing play state`,
+          );
           room.currentState = null;
           this.rooms.set(roomId, room);
           this.io.to(roomId).emit('state:cleared');
@@ -500,13 +553,16 @@ void app
     if (watchRoomConfig.enabled && watchRoomConfig.serverType === 'internal') {
       console.log('[WatchRoom] Initializing Socket.IO server...');
 
-      const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-        path: '/socket.io',
-        cors: {
-          origin: '*',
-          methods: ['GET', 'POST'],
+      const io = new Server<ClientToServerEvents, ServerToClientEvents>(
+        httpServer,
+        {
+          path: '/socket.io',
+          cors: {
+            origin: '*',
+            methods: ['GET', 'POST'],
+          },
         },
-      });
+      );
 
       watchRoomServer = new WatchRoomServer(io);
       console.log('[WatchRoom] Socket.IO server initialized');
@@ -523,7 +579,10 @@ void app
       })
       .listen(port, () => {
         console.log(`> Ready on http://${hostname}:${port}`);
-        if (watchRoomConfig.enabled && watchRoomConfig.serverType === 'internal') {
+        if (
+          watchRoomConfig.enabled &&
+          watchRoomConfig.serverType === 'internal'
+        ) {
           console.log(`> Socket.IO ready on ws://${hostname}:${port}`);
         }
       });

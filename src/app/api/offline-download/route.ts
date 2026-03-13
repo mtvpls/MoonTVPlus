@@ -7,10 +7,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as path from 'path';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
-import { OfflineDownloader, OfflineDownloadTask } from '@/lib/offline-downloader';
+import {
+  OfflineDownloader,
+  OfflineDownloadTask,
+} from '@/lib/offline-downloader';
 
 // 检查是否启用离线下载功能
-const OFFLINE_DOWNLOAD_ENABLED = process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true';
+const OFFLINE_DOWNLOAD_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true';
 const OFFLINE_DOWNLOAD_DIR = process.env.OFFLINE_DOWNLOAD_DIR || '/data';
 
 // 全局下载器实例
@@ -137,7 +141,11 @@ export async function GET(request: NextRequest) {
     }
 
     const downloader = getDownloader();
-    const downloaded = downloader.checkDownloaded(source, videoId, parseInt(episodeIndex));
+    const downloaded = downloader.checkDownloaded(
+      source,
+      videoId,
+      parseInt(episodeIndex),
+    );
 
     return NextResponse.json({ downloaded });
   }
@@ -165,7 +173,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { source, videoId, episodeIndex, title, m3u8Url, metadata } = body;
 
-    if (!source || !videoId || episodeIndex === undefined || !title || !m3u8Url) {
+    if (
+      !source ||
+      !videoId ||
+      episodeIndex === undefined ||
+      !title ||
+      !m3u8Url
+    ) {
       return NextResponse.json({ error: '参数不完整' }, { status: 400 });
     }
 
@@ -176,12 +190,15 @@ export async function POST(request: NextRequest) {
       (t) =>
         t.source === source &&
         t.videoId === videoId &&
-        t.episodeIndex === episodeIndex
+        t.episodeIndex === episodeIndex,
     );
 
     if (existingTask) {
       // 如果任务正在下载或等待中，不允许重复创建
-      if (existingTask.status === 'downloading' || existingTask.status === 'pending') {
+      if (
+        existingTask.status === 'downloading' ||
+        existingTask.status === 'pending'
+      ) {
         return NextResponse.json(
           {
             task: {
@@ -191,7 +208,7 @@ export async function POST(request: NextRequest) {
             },
             message: '该任务正在下载中，请勿重复添加',
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -206,7 +223,7 @@ export async function POST(request: NextRequest) {
             },
             message: '该视频已下载完成，如需重新下载请先删除任务',
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -221,25 +238,36 @@ export async function POST(request: NextRequest) {
             },
             message: '该任务已存在但未完成，请使用重试功能继续下载',
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
 
     // 2. 检查文件系统中是否已下载完成（防止任务被删除但文件还在的情况）
-    const downloaded = downloader.checkDownloaded(source, videoId, episodeIndex);
+    const downloaded = downloader.checkDownloaded(
+      source,
+      videoId,
+      episodeIndex,
+    );
     if (downloaded) {
       return NextResponse.json(
         {
           message: '该视频文件已存在，无需重复下载',
           downloaded: true,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // 创建新任务
-    const task = await downloader.createTask(source, videoId, episodeIndex, title, m3u8Url, metadata);
+    const task = await downloader.createTask(
+      source,
+      videoId,
+      episodeIndex,
+      title,
+      m3u8Url,
+      metadata,
+    );
     tasks.set(task.id, task);
     saveTasks(); // 持久化任务
 
@@ -276,7 +304,7 @@ export async function POST(request: NextRequest) {
     console.error('创建任务失败:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '创建任务失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -316,7 +344,7 @@ export async function DELETE(request: NextRequest) {
       activeDownloads.delete(taskId);
 
       // 等待一小段时间，让下载操作有机会停止
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     // 删除文件
@@ -331,7 +359,7 @@ export async function DELETE(request: NextRequest) {
     console.error('删除任务失败:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '删除任务失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -364,7 +392,10 @@ export async function PUT(request: NextRequest) {
 
     // 检查任务状态，只有错误、暂停或完成状态可以重试
     if (task.status === 'downloading' || task.status === 'pending') {
-      return NextResponse.json({ error: '任务正在进行中，无法重试' }, { status: 400 });
+      return NextResponse.json(
+        { error: '任务正在进行中，无法重试' },
+        { status: 400 },
+      );
     }
 
     // 检查是否已经在重试中
@@ -415,7 +446,7 @@ export async function PUT(request: NextRequest) {
     console.error('重试任务失败:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '重试任务失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

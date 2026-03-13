@@ -29,7 +29,7 @@ async function getEmbyClient(embyKey?: string) {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string; itemId: string } }
+  { params }: { params: { token: string; itemId: string } },
 ) {
   try {
     const { searchParams } = new URL(request.url);
@@ -69,15 +69,26 @@ export async function GET(
     }
 
     const itemId = params.itemId;
-    const imageType = (searchParams.get('imageType') || 'Primary') as 'Primary' | 'Backdrop' | 'Logo';
-    const maxWidth = searchParams.get('maxWidth') ? parseInt(searchParams.get('maxWidth')!) : undefined;
+    const imageType = (searchParams.get('imageType') || 'Primary') as
+      | 'Primary'
+      | 'Backdrop'
+      | 'Logo';
+    const maxWidth = searchParams.get('maxWidth')
+      ? parseInt(searchParams.get('maxWidth')!)
+      : undefined;
     const embyKey = searchParams.get('embyKey') || undefined;
 
     // 获取 Emby 客户端
     const client = await getEmbyClient(embyKey);
 
     // 获取图片 URL（强制获取直接URL，避免代理循环）
-    const imageUrl = client.getImageUrl(itemId, imageType, maxWidth, undefined, true);
+    const imageUrl = client.getImageUrl(
+      itemId,
+      imageType,
+      maxWidth,
+      undefined,
+      true,
+    );
 
     // 构建请求头，添加自定义 User-Agent
     const requestHeaders: HeadersInit = {
@@ -96,14 +107,12 @@ export async function GET(
         status: imageResponse.status,
         statusText: imageResponse.statusText,
       });
-      return NextResponse.json(
-        { error: '获取图片失败' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: '获取图片失败' }, { status: 500 });
     }
 
     // 获取 Content-Type
-    const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+    const contentType =
+      imageResponse.headers.get('content-type') || 'image/jpeg';
 
     // 构建响应头
     const headers = new Headers();
@@ -127,7 +136,7 @@ export async function GET(
     console.error('[Emby Image] 错误:', error);
     return NextResponse.json(
       { error: '获取图片失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

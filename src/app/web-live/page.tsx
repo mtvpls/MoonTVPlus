@@ -1,13 +1,12 @@
 'use client';
 
-import { AlertTriangle,Radio } from 'lucide-react';
+import { AlertTriangle, Radio } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { useWebLiveSync } from '@/hooks/useWebLiveSync';
 
 import PageLayout from '@/components/PageLayout';
-import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
 
 let Artplayer: any = null;
 let Hls: any = null;
@@ -19,19 +18,26 @@ export default function WebLivePage() {
   const artRef = useRef<HTMLDivElement | null>(null);
   const artPlayerRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingStage, setLoadingStage] = useState<'loading' | 'fetching' | 'ready'>('loading');
+  const [loadingStage, setLoadingStage] = useState<
+    'loading' | 'fetching' | 'ready'
+  >('loading');
   const [loadingMessage, setLoadingMessage] = useState('正在加载直播源...');
   const [sources, setSources] = useState<any[]>([]);
   const [currentSource, setCurrentSource] = useState<any | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [originalVideoUrl, setOriginalVideoUrl] = useState('');
-  const [streamInfo, setStreamInfo] = useState<{ name?: string; title?: string } | null>(null);
+  const [streamInfo, setStreamInfo] = useState<{
+    name?: string;
+    title?: string;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<'rooms' | 'platforms'>('rooms');
   const [isChannelListCollapsed, setIsChannelListCollapsed] = useState(false);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-  const [isWebLiveEnabled, setIsWebLiveEnabled] = useState<boolean | null>(null);
+  const [isWebLiveEnabled, setIsWebLiveEnabled] = useState<boolean | null>(
+    null,
+  );
   const [librariesLoaded, setLibrariesLoaded] = useState(false);
   const hasAutoLoadedRef = useRef(false); // 防止重复自动加载
 
@@ -44,7 +50,7 @@ export default function WebLivePage() {
     onSourceChange: (sourceKey, platform, roomId) => {
       // 房员接收到直播源切换指令
       if (!sources || !Array.isArray(sources)) return;
-      const source = sources.find(s => s.key === sourceKey);
+      const source = sources.find((s) => s.key === sourceKey);
       if (source) {
         handleSourceClick(source);
       }
@@ -60,9 +66,15 @@ export default function WebLivePage() {
     if (typeof window !== 'undefined') {
       // 异步加载所有必需的库
       Promise.all([
-        import('artplayer').then(mod => { Artplayer = mod.default; }),
-        import('hls.js').then(mod => { Hls = mod.default; }),
-        import('flv.js').then(mod => { flvjs = mod.default; })
+        import('artplayer').then((mod) => {
+          Artplayer = mod.default;
+        }),
+        import('hls.js').then((mod) => {
+          Hls = mod.default;
+        }),
+        import('flv.js').then((mod) => {
+          flvjs = mod.default;
+        }),
       ]).then(() => {
         setLibrariesLoaded(true);
       });
@@ -95,7 +107,7 @@ export default function WebLivePage() {
         const data = await res.json();
         setSources(data);
         setLoadingStage('ready');
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     } catch (err) {
       console.error('获取直播源失败:', err);
@@ -119,7 +131,10 @@ export default function WebLivePage() {
     }
 
     // 检查是否已经加载了这个频道
-    if (currentSource?.platform === needLoadPlatform && currentSource?.roomId === needLoadRoomId) {
+    if (
+      currentSource?.platform === needLoadPlatform &&
+      currentSource?.roomId === needLoadRoomId
+    ) {
       return;
     }
 
@@ -131,7 +146,9 @@ export default function WebLivePage() {
     hasAutoLoadedRef.current = true;
 
     // 查找匹配的 source
-    const foundSource = sources.find(s => s.platform === needLoadPlatform && s.roomId === needLoadRoomId);
+    const foundSource = sources.find(
+      (s) => s.platform === needLoadPlatform && s.roomId === needLoadRoomId,
+    );
     if (foundSource) {
       handleSourceClick(foundSource);
     } else {
@@ -141,7 +158,11 @@ export default function WebLivePage() {
 
   function m3u8Loader(video: HTMLVideoElement, url: string) {
     if (!Hls) return;
-    const hls = new Hls({ debug: false, enableWorker: true, lowLatencyMode: true });
+    const hls = new Hls({
+      debug: false,
+      enableWorker: true,
+      lowLatencyMode: true,
+    });
     hls.loadSource(url);
     hls.attachMedia(video);
     (video as any).hls = hls;
@@ -151,11 +172,14 @@ export default function WebLivePage() {
     if (!flvjs) return;
     const flvPlayer = flvjs.createPlayer({ type: 'flv', url, isLive: true });
     flvPlayer.attachMediaElement(video);
-    flvPlayer.on(flvjs.Events.ERROR, (errorType: string, errorDetail: string) => {
-      console.error('FLV.js error:', errorType, errorDetail);
-      setErrorMessage(`播放失败: ${errorType} - ${errorDetail}`);
-      setVideoUrl('');
-    });
+    flvPlayer.on(
+      flvjs.Events.ERROR,
+      (errorType: string, errorDetail: string) => {
+        console.error('FLV.js error:', errorType, errorDetail);
+        setErrorMessage(`播放失败: ${errorType} - ${errorDetail}`);
+        setVideoUrl('');
+      },
+    );
     flvPlayer.load();
     (video as any).flv = flvPlayer;
   }
@@ -178,7 +202,10 @@ export default function WebLivePage() {
         }
 
         // 销毁 FLV 实例
-        if (artPlayerRef.current.video && (artPlayerRef.current.video as any).flv) {
+        if (
+          artPlayerRef.current.video &&
+          (artPlayerRef.current.video as any).flv
+        ) {
           try {
             if ((artPlayerRef.current.video as any).flv.unload) {
               (artPlayerRef.current.video as any).flv.unload();
@@ -219,9 +246,12 @@ export default function WebLivePage() {
       fullscreen: true,
       customType: {
         m3u8: m3u8Loader,
-        flv: flvLoader
+        flv: flvLoader,
       },
-      icons: { loading: '<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 100 100"><circle cx="50" cy="50" fill="none" stroke="currentColor" stroke-width="4" r="35" stroke-dasharray="164.93361431346415 56.97787143782138"><animateTransform attributeName="transform" type="rotate" repeatCount="indefinite" dur="1s" values="0 50 50;360 50 50" keyTimes="0;1"/></circle></svg>' }
+      icons: {
+        loading:
+          '<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 100 100"><circle cx="50" cy="50" fill="none" stroke="currentColor" stroke-width="4" r="35" stroke-dasharray="164.93361431346415 56.97787143782138"><animateTransform attributeName="transform" type="rotate" repeatCount="indefinite" dur="1s" values="0 50 50;360 50 50" keyTimes="0;1"/></circle></svg>',
+      },
     });
 
     return () => {
@@ -266,7 +296,9 @@ export default function WebLivePage() {
     router.replace(`/web-live?${newSearchParams.toString()}`);
 
     try {
-      const res = await fetch(`/api/web-live/stream?platform=${source.platform}&roomId=${source.roomId}`);
+      const res = await fetch(
+        `/api/web-live/stream?platform=${source.platform}&roomId=${source.roomId}`,
+      );
       if (res.ok) {
         const data = await res.json();
 
@@ -287,7 +319,7 @@ export default function WebLivePage() {
         if (data.name || data.title) {
           setStreamInfo({
             name: data.name,
-            title: data.title
+            title: data.title,
           });
         }
       } else {
@@ -315,11 +347,11 @@ export default function WebLivePage() {
     return '';
   };
 
-  const platforms = Array.from(new Set(sources.map(s => s.platform)));
+  const platforms = Array.from(new Set(sources.map((s) => s.platform)));
 
   // 根据选中的平台筛选房间
   const filteredSources = selectedPlatform
-    ? sources.filter(s => s.platform === selectedPlatform)
+    ? sources.filter((s) => s.platform === selectedPlatform)
     : sources;
 
   // 处理平台点击
@@ -347,7 +379,9 @@ export default function WebLivePage() {
             </div>
 
             <div className='space-y-4'>
-              <h3 className='text-2xl font-bold text-gray-900 dark:text-gray-100'>功能未启用</h3>
+              <h3 className='text-2xl font-bold text-gray-900 dark:text-gray-100'>
+                功能未启用
+              </h3>
               <div className='bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4'>
                 <p className='text-sm text-gray-700 dark:text-gray-300 leading-relaxed'>
                   网络直播功能当前未启用。请联系管理员在管理面板中开启此功能。
@@ -406,7 +440,12 @@ export default function WebLivePage() {
                 <div
                   className='h-full bg-gradient-to-r from-green-500 to-emerald-600 rounded-full transition-all duration-1000 ease-out'
                   style={{
-                    width: loadingStage === 'loading' ? '33%' : loadingStage === 'fetching' ? '66%' : '100%',
+                    width:
+                      loadingStage === 'loading'
+                        ? '33%'
+                        : loadingStage === 'fetching'
+                          ? '66%'
+                          : '100%',
                   }}
                 ></div>
               </div>
@@ -450,19 +489,33 @@ export default function WebLivePage() {
                 stroke='currentColor'
                 viewBox='0 0 24 24'
               >
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M9 5l7 7-7 7' />
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth='2'
+                  d='M9 5l7 7-7 7'
+                />
               </svg>
               <span className='text-xs font-medium text-gray-600 dark:text-gray-300'>
                 {isChannelListCollapsed ? '显示' : '隐藏'}
               </span>
-              <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full transition-all duration-200 ${isChannelListCollapsed ? 'bg-orange-400 animate-pulse' : 'bg-green-400'}`}></div>
+              <div
+                className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full transition-all duration-200 ${isChannelListCollapsed ? 'bg-orange-400 animate-pulse' : 'bg-green-400'}`}
+              ></div>
             </button>
           </div>
 
-          <div className={`grid gap-4 lg:h-[500px] xl:h-[650px] 2xl:h-[750px] transition-all duration-300 ease-in-out ${isChannelListCollapsed ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-4'}`}>
-            <div className={`h-full transition-all duration-300 ease-in-out ${isChannelListCollapsed ? 'col-span-1' : 'md:col-span-3'}`}>
+          <div
+            className={`grid gap-4 lg:h-[500px] xl:h-[650px] 2xl:h-[750px] transition-all duration-300 ease-in-out ${isChannelListCollapsed ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-4'}`}
+          >
+            <div
+              className={`h-full transition-all duration-300 ease-in-out ${isChannelListCollapsed ? 'col-span-1' : 'md:col-span-3'}`}
+            >
               <div className='relative w-full h-[300px] lg:h-full'>
-                <div ref={artRef} className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'></div>
+                <div
+                  ref={artRef}
+                  className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
+                ></div>
 
                 {errorMessage && (
                   <div className='absolute inset-0 bg-black/90 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30 flex items-center justify-center z-[600] transition-all duration-300'>
@@ -474,9 +527,13 @@ export default function WebLivePage() {
                         </div>
                       </div>
                       <div className='space-y-4'>
-                        <h3 className='text-xl font-semibold text-white'>获取直播流失败</h3>
+                        <h3 className='text-xl font-semibold text-white'>
+                          获取直播流失败
+                        </h3>
                         <div className='bg-orange-500/20 border border-orange-500/30 rounded-lg p-4'>
-                          <p className='text-orange-300 font-medium'>{errorMessage}</p>
+                          <p className='text-orange-300 font-medium'>
+                            {errorMessage}
+                          </p>
                         </div>
                         <p className='text-sm text-gray-300'>请尝试其他房间</p>
                       </div>
@@ -494,7 +551,9 @@ export default function WebLivePage() {
                         </div>
                       </div>
                       <div className='space-y-2'>
-                        <p className='text-xl font-semibold text-white animate-pulse'>🔄 加载中...</p>
+                        <p className='text-xl font-semibold text-white animate-pulse'>
+                          🔄 加载中...
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -542,7 +601,10 @@ export default function WebLivePage() {
                         onClick={(e) => {
                           e.preventDefault();
                           if (originalVideoUrl) {
-                            window.open(`potplayer://${originalVideoUrl}`, '_blank');
+                            window.open(
+                              `potplayer://${originalVideoUrl}`,
+                              '_blank',
+                            );
                           }
                         }}
                         className='group relative flex items-center justify-center gap-1 w-8 h-8 lg:w-auto lg:h-auto lg:px-2 lg:py-1.5 bg-white hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-xs font-medium rounded-md transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer overflow-hidden border border-gray-300 dark:border-gray-600 flex-shrink-0'
@@ -607,9 +669,9 @@ export default function WebLivePage() {
                           if (originalVideoUrl) {
                             window.open(
                               `intent://${originalVideoUrl}#Intent;package=com.mxtech.videoplayer.ad;S.title=${encodeURIComponent(
-                                currentSource?.name || '直播'
+                                currentSource?.name || '直播',
                               )};end`,
-                              '_blank'
+                              '_blank',
                             );
                           }
                         }}
@@ -631,7 +693,10 @@ export default function WebLivePage() {
                         onClick={(e) => {
                           e.preventDefault();
                           if (originalVideoUrl) {
-                            window.open(`nplayer-${originalVideoUrl}`, '_blank');
+                            window.open(
+                              `nplayer-${originalVideoUrl}`,
+                              '_blank',
+                            );
                           }
                         }}
                         className='group relative flex items-center justify-center gap-1 w-8 h-8 lg:w-auto lg:h-auto lg:px-2 lg:py-1.5 bg-white hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-xs font-medium rounded-md transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer overflow-hidden border border-gray-300 dark:border-gray-600 flex-shrink-0'
@@ -654,7 +719,7 @@ export default function WebLivePage() {
                           if (originalVideoUrl) {
                             window.open(
                               `iina://weblink?url=${encodeURIComponent(originalVideoUrl)}`,
-                              '_blank'
+                              '_blank',
                             );
                           }
                         }}
@@ -694,7 +759,9 @@ export default function WebLivePage() {
               )}
             </div>
 
-            <div className={`h-[300px] lg:h-full md:overflow-hidden transition-all duration-300 ease-in-out ${isChannelListCollapsed ? 'md:col-span-1 lg:hidden lg:opacity-0 lg:scale-95' : 'md:col-span-1 lg:opacity-100 lg:scale-100'}`}>
+            <div
+              className={`h-[300px] lg:h-full md:overflow-hidden transition-all duration-300 ease-in-out ${isChannelListCollapsed ? 'md:col-span-1 lg:hidden lg:opacity-0 lg:scale-95' : 'md:col-span-1 lg:opacity-100 lg:scale-100'}`}
+            >
               <div className='md:ml-2 px-4 py-0 h-full rounded-xl bg-black/10 dark:bg-white/5 flex flex-col border border-white/0 dark:border-white/30 overflow-hidden'>
                 <div className='flex mb-1 -mx-6 flex-shrink-0'>
                   <div
@@ -716,9 +783,17 @@ export default function WebLivePage() {
                     {selectedPlatform && (
                       <div className='mb-3 flex items-center justify-between px-2 py-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800'>
                         <div className='flex items-center gap-2'>
-                          <span className='text-xs text-green-700 dark:text-green-300'>筛选平台:</span>
+                          <span className='text-xs text-green-700 dark:text-green-300'>
+                            筛选平台:
+                          </span>
                           <span className='text-sm font-medium text-green-800 dark:text-green-200'>
-                            {selectedPlatform === 'huya' ? '虎牙' : selectedPlatform === 'bilibili' ? '哔哩哔哩' : selectedPlatform === 'douyin' ? '抖音' : selectedPlatform}
+                            {selectedPlatform === 'huya'
+                              ? '虎牙'
+                              : selectedPlatform === 'bilibili'
+                                ? '哔哩哔哩'
+                                : selectedPlatform === 'douyin'
+                                  ? '抖音'
+                                  : selectedPlatform}
                           </span>
                         </div>
                         <button
@@ -744,8 +819,12 @@ export default function WebLivePage() {
                                 <Radio className='w-5 h-5 text-gray-500' />
                               </div>
                               <div className='flex-1 min-w-0'>
-                                <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>{source.name}</div>
-                                <div className='text-xs text-gray-500 dark:text-gray-400 mt-1'>房间ID: {source.roomId}</div>
+                                <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>
+                                  {source.name}
+                                </div>
+                                <div className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                                  房间ID: {source.roomId}
+                                </div>
                               </div>
                             </div>
                           </button>
@@ -757,7 +836,9 @@ export default function WebLivePage() {
                           <Radio className='w-8 h-8 text-gray-400 dark:text-gray-600' />
                         </div>
                         <p className='text-gray-500 dark:text-gray-400 font-medium'>
-                          {selectedPlatform ? '该平台暂无可用房间' : '暂无可用房间'}
+                          {selectedPlatform
+                            ? '该平台暂无可用房间'
+                            : '暂无可用房间'}
                         </p>
                       </div>
                     )}
@@ -777,21 +858,43 @@ export default function WebLivePage() {
                           >
                             <div className='w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden'>
                               {platform === 'huya' ? (
-                                <img src='https://hd.huya.com/favicon.ico' alt='虎牙' className='w-8 h-8' />
+                                <img
+                                  src='https://hd.huya.com/favicon.ico'
+                                  alt='虎牙'
+                                  className='w-8 h-8'
+                                />
                               ) : platform === 'bilibili' ? (
-                                <img src='https://www.bilibili.com/favicon.ico' alt='哔哩哔哩' className='w-8 h-8' />
+                                <img
+                                  src='https://www.bilibili.com/favicon.ico'
+                                  alt='哔哩哔哩'
+                                  className='w-8 h-8'
+                                />
                               ) : platform === 'douyin' ? (
-                                <img src='https://lf1-cdn-tos.bytegoofy.com/goofy/ies/douyin_web/public/favicon.ico' alt='抖音' className='w-8 h-8' />
+                                <img
+                                  src='https://lf1-cdn-tos.bytegoofy.com/goofy/ies/douyin_web/public/favicon.ico'
+                                  alt='抖音'
+                                  className='w-8 h-8'
+                                />
                               ) : (
                                 <Radio className='w-6 h-6 text-gray-500' />
                               )}
                             </div>
                             <div className='flex-1 min-w-0 text-left'>
                               <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>
-                                {platform === 'huya' ? '虎牙' : platform === 'bilibili' ? '哔哩哔哩' : platform === 'douyin' ? '抖音' : platform}
+                                {platform === 'huya'
+                                  ? '虎牙'
+                                  : platform === 'bilibili'
+                                    ? '哔哩哔哩'
+                                    : platform === 'douyin'
+                                      ? '抖音'
+                                      : platform}
                               </div>
                               <div className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
-                                {sources.filter(s => s.platform === platform).length} 个房间
+                                {
+                                  sources.filter((s) => s.platform === platform)
+                                    .length
+                                }{' '}
+                                个房间
                               </div>
                             </div>
                           </button>
@@ -801,7 +904,9 @@ export default function WebLivePage() {
                           <div className='w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4'>
                             <Radio className='w-8 h-8 text-gray-400 dark:text-gray-600' />
                           </div>
-                          <p className='text-gray-500 dark:text-gray-400 font-medium'>暂无可用平台</p>
+                          <p className='text-gray-500 dark:text-gray-400 font-medium'>
+                            暂无可用平台
+                          </p>
                         </div>
                       )}
                     </div>

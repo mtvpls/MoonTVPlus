@@ -5,7 +5,7 @@ import { TOKEN_CONFIG, verifyRefreshToken } from './refresh-token';
 // 生成签名
 export async function generateSignatureForMiddleware(
   data: string,
-  secret: string
+  secret: string,
 ): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
@@ -16,7 +16,7 @@ export async function generateSignatureForMiddleware(
     keyData,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   );
 
   const signature = await crypto.subtle.sign('HMAC', key, messageData);
@@ -32,7 +32,7 @@ export async function refreshAccessToken(
   role: string,
   tokenId: string,
   refreshToken: string,
-  refreshExpires: number
+  refreshExpires: number,
 ): Promise<string | null> {
   // 验证 Refresh Token
   const isValid = await verifyRefreshToken(username, tokenId, refreshToken);
@@ -48,12 +48,12 @@ export async function refreshAccessToken(
   const dataToSign = JSON.stringify({
     username,
     role,
-    timestamp: now
+    timestamp: now,
   });
 
   const signature = await generateSignatureForMiddleware(
     dataToSign,
-    process.env.PASSWORD || ''
+    process.env.PASSWORD || '',
   );
 
   const authData = {
@@ -63,7 +63,7 @@ export async function refreshAccessToken(
     tokenId,
     refreshToken,
     refreshExpires,
-    signature
+    signature,
   };
 
   console.log(`Refreshed access token for ${username}`);

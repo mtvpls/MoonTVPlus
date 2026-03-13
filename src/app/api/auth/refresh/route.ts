@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie, parseAuthInfo } from '@/lib/auth';
 import { refreshAccessToken } from '@/lib/middleware-auth';
-import { TOKEN_CONFIG } from '@/lib/refresh-token';
 
 export const runtime = 'nodejs';
 
@@ -77,7 +76,7 @@ export async function POST(request: NextRequest) {
   if (now >= authInfo.refreshExpires) {
     return NextResponse.json(
       { error: 'Refresh token expired' },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
@@ -88,7 +87,7 @@ export async function POST(request: NextRequest) {
     authInfo.role,
     authInfo.tokenId,
     authInfo.refreshToken,
-    authInfo.refreshExpires
+    authInfo.refreshExpires,
   );
 
   if (!newAuthData) {

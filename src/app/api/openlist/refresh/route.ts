@@ -22,10 +22,13 @@ export async function POST(request: NextRequest) {
 
     // 检查 TMDB API Key 是否配置
     const config = await getConfig();
-    if (!config.SiteConfig.TMDBApiKey || config.SiteConfig.TMDBApiKey.trim() === '') {
+    if (
+      !config.SiteConfig.TMDBApiKey ||
+      config.SiteConfig.TMDBApiKey.trim() === ''
+    ) {
       return NextResponse.json(
         { error: '请先在站点配置中配置 TMDB API Key' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -45,7 +48,7 @@ export async function POST(request: NextRequest) {
     console.error('启动刷新任务失败:', error);
     return NextResponse.json(
       { error: '启动失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

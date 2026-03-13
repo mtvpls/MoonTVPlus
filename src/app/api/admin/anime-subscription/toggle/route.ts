@@ -24,7 +24,7 @@ export async function PUT(req: NextRequest) {
     if (typeof enabled !== 'boolean') {
       return NextResponse.json(
         { error: 'enabled 必须是布尔值' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -41,7 +41,7 @@ export async function PUT(req: NextRequest) {
     console.error('切换追番功能状态失败:', error);
     return NextResponse.json(
       { error: error.message || '切换状态失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

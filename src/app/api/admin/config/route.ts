@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       {
         error: '不支持本地存储进行管理员配置',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       } else {
         return NextResponse.json(
           { error: '你是管理员吗你就访问？' },
-          { status: 401 }
+          { status: 401 },
         );
       }
     }
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
         error: '获取管理员配置失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
   if (storageType === 'localstorage') {
     return NextResponse.json(
       { error: '不支持本地存储进行管理员配置' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -88,7 +88,11 @@ export async function POST(request: NextRequest) {
       const { db } = await import('@/lib/db');
       const userInfoV2 = await db.getUserInfoV2(username);
 
-      if (!userInfoV2 || (userInfoV2.role !== 'admin' && userInfoV2.role !== 'owner') || userInfoV2.banned) {
+      if (
+        !userInfoV2 ||
+        (userInfoV2.role !== 'admin' && userInfoV2.role !== 'owner') ||
+        userInfoV2.banned
+      ) {
         return NextResponse.json({ error: '权限不足' }, { status: 401 });
       }
     }
@@ -111,7 +115,7 @@ export async function POST(request: NextRequest) {
     console.error('保存配置失败:', error);
     return NextResponse.json(
       { error: '保存配置失败: ' + (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

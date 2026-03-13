@@ -113,7 +113,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
     buttonRefs: React.MutableRefObject<(HTMLButtonElement | null)[]>,
     setIndicatorStyle: React.Dispatch<
       React.SetStateAction<{ left: number; width: number }>
-    >
+    >,
   ) => {
     if (
       activeIndex >= 0 &&
@@ -145,44 +145,45 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
     if (type === 'movie') {
       const activeIndex = moviePrimaryOptions.findIndex(
         (opt) =>
-          opt.value === (primarySelection || moviePrimaryOptions[0].value)
+          opt.value === (primarySelection || moviePrimaryOptions[0].value),
       );
       updateIndicatorPosition(
         activeIndex,
         primaryContainerRef,
         primaryButtonRefs,
-        setPrimaryIndicatorStyle
+        setPrimaryIndicatorStyle,
       );
     } else if (type === 'tv') {
       const activeIndex = tvPrimaryOptions.findIndex(
-        (opt) => opt.value === (primarySelection || tvPrimaryOptions[1].value)
+        (opt) => opt.value === (primarySelection || tvPrimaryOptions[1].value),
       );
       updateIndicatorPosition(
         activeIndex,
         primaryContainerRef,
         primaryButtonRefs,
-        setPrimaryIndicatorStyle
+        setPrimaryIndicatorStyle,
       );
     } else if (type === 'anime') {
       const activeIndex = animePrimaryOptions.findIndex(
         (opt) =>
-          opt.value === (primarySelection || animePrimaryOptions[0].value)
+          opt.value === (primarySelection || animePrimaryOptions[0].value),
       );
       updateIndicatorPosition(
         activeIndex,
         primaryContainerRef,
         primaryButtonRefs,
-        setPrimaryIndicatorStyle
+        setPrimaryIndicatorStyle,
       );
     } else if (type === 'show') {
       const activeIndex = showPrimaryOptions.findIndex(
-        (opt) => opt.value === (primarySelection || showPrimaryOptions[1].value)
+        (opt) =>
+          opt.value === (primarySelection || showPrimaryOptions[1].value),
       );
       updateIndicatorPosition(
         activeIndex,
         primaryContainerRef,
         primaryButtonRefs,
-        setPrimaryIndicatorStyle
+        setPrimaryIndicatorStyle,
       );
     }
 
@@ -191,17 +192,17 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
     if (type === 'movie') {
       secondaryActiveIndex = movieSecondaryOptions.findIndex(
         (opt) =>
-          opt.value === (secondarySelection || movieSecondaryOptions[0].value)
+          opt.value === (secondarySelection || movieSecondaryOptions[0].value),
       );
     } else if (type === 'tv') {
       secondaryActiveIndex = tvSecondaryOptions.findIndex(
         (opt) =>
-          opt.value === (secondarySelection || tvSecondaryOptions[0].value)
+          opt.value === (secondarySelection || tvSecondaryOptions[0].value),
       );
     } else if (type === 'show') {
       secondaryActiveIndex = showSecondaryOptions.findIndex(
         (opt) =>
-          opt.value === (secondarySelection || showSecondaryOptions[0].value)
+          opt.value === (secondarySelection || showSecondaryOptions[0].value),
       );
     }
 
@@ -210,7 +211,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
         secondaryActiveIndex,
         secondaryContainerRef,
         secondaryButtonRefs,
-        setSecondaryIndicatorStyle
+        setSecondaryIndicatorStyle,
       );
     }
   }, [type]); // 只在type变化时重新计算
@@ -219,46 +220,46 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
   useEffect(() => {
     if (type === 'movie') {
       const activeIndex = moviePrimaryOptions.findIndex(
-        (opt) => opt.value === primarySelection
+        (opt) => opt.value === primarySelection,
       );
       const cleanup = updateIndicatorPosition(
         activeIndex,
         primaryContainerRef,
         primaryButtonRefs,
-        setPrimaryIndicatorStyle
+        setPrimaryIndicatorStyle,
       );
       return cleanup;
     } else if (type === 'tv') {
       const activeIndex = tvPrimaryOptions.findIndex(
-        (opt) => opt.value === primarySelection
+        (opt) => opt.value === primarySelection,
       );
       const cleanup = updateIndicatorPosition(
         activeIndex,
         primaryContainerRef,
         primaryButtonRefs,
-        setPrimaryIndicatorStyle
+        setPrimaryIndicatorStyle,
       );
       return cleanup;
     } else if (type === 'anime') {
       const activeIndex = animePrimaryOptions.findIndex(
-        (opt) => opt.value === primarySelection
+        (opt) => opt.value === primarySelection,
       );
       const cleanup = updateIndicatorPosition(
         activeIndex,
         primaryContainerRef,
         primaryButtonRefs,
-        setPrimaryIndicatorStyle
+        setPrimaryIndicatorStyle,
       );
       return cleanup;
     } else if (type === 'show') {
       const activeIndex = showPrimaryOptions.findIndex(
-        (opt) => opt.value === primarySelection
+        (opt) => opt.value === primarySelection,
       );
       const cleanup = updateIndicatorPosition(
         activeIndex,
         primaryContainerRef,
         primaryButtonRefs,
-        setPrimaryIndicatorStyle
+        setPrimaryIndicatorStyle,
       );
       return cleanup;
     }
@@ -271,17 +272,17 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
 
     if (type === 'movie') {
       activeIndex = movieSecondaryOptions.findIndex(
-        (opt) => opt.value === secondarySelection
+        (opt) => opt.value === secondarySelection,
       );
       options = movieSecondaryOptions;
     } else if (type === 'tv') {
       activeIndex = tvSecondaryOptions.findIndex(
-        (opt) => opt.value === secondarySelection
+        (opt) => opt.value === secondarySelection,
       );
       options = tvSecondaryOptions;
     } else if (type === 'show') {
       activeIndex = showSecondaryOptions.findIndex(
-        (opt) => opt.value === secondarySelection
+        (opt) => opt.value === secondarySelection,
       );
       options = showSecondaryOptions;
     }
@@ -291,7 +292,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
         activeIndex,
         secondaryContainerRef,
         secondaryButtonRefs,
-        setSecondaryIndicatorStyle
+        setSecondaryIndicatorStyle,
       );
       return cleanup;
     }
@@ -302,7 +303,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
     options: SelectorOption[],
     activeValue: string | undefined,
     onChange: (value: string) => void,
-    isPrimary = false
+    isPrimary = false,
   ) => {
     const containerRef = isPrimary
       ? primaryContainerRef
@@ -366,7 +367,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
                 moviePrimaryOptions,
                 primarySelection || moviePrimaryOptions[0].value,
                 onPrimaryChange,
-                true
+                true,
               )}
             </div>
           </div>
@@ -382,7 +383,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
                   movieSecondaryOptions,
                   secondarySelection || movieSecondaryOptions[0].value,
                   onSecondaryChange,
-                  false
+                  false,
                 )}
               </div>
             </div>
@@ -417,7 +418,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
                 tvPrimaryOptions,
                 primarySelection || tvPrimaryOptions[1].value,
                 onPrimaryChange,
-                true
+                true,
               )}
             </div>
           </div>
@@ -433,7 +434,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
                   tvSecondaryOptions,
                   secondarySelection || tvSecondaryOptions[0].value,
                   onSecondaryChange,
-                  false
+                  false,
                 )}
               </div>
             </div>
@@ -467,7 +468,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
                 animePrimaryOptions,
                 primarySelection || animePrimaryOptions[0].value,
                 onPrimaryChange,
-                true
+                true,
               )}
             </div>
           </div>
@@ -523,7 +524,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
                 showPrimaryOptions,
                 primarySelection || showPrimaryOptions[1].value,
                 onPrimaryChange,
-                true
+                true,
               )}
             </div>
           </div>
@@ -539,7 +540,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
                   showSecondaryOptions,
                   secondarySelection || showSecondaryOptions[0].value,
                   onSecondaryChange,
-                  false
+                  false,
                 )}
               </div>
             </div>

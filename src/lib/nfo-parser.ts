@@ -16,7 +16,9 @@ export interface NFOMetadata {
 /**
  * 解析 NFO 文件（XML 格式）
  */
-export async function parseNFO(xmlContent: string): Promise<NFOMetadata | null> {
+export async function parseNFO(
+  xmlContent: string,
+): Promise<NFOMetadata | null> {
   return new Promise((resolve) => {
     parseString(xmlContent, { explicitArray: false }, (err, result) => {
       if (err || !result) {
@@ -37,7 +39,11 @@ export async function parseNFO(xmlContent: string): Promise<NFOMetadata | null> 
         year: data.year ? parseInt(data.year) : undefined,
         plot: data.plot,
         rating: data.rating ? parseFloat(data.rating) : undefined,
-        genres: Array.isArray(data.genre) ? data.genre : data.genre ? [data.genre] : [],
+        genres: Array.isArray(data.genre)
+          ? data.genre
+          : data.genre
+            ? [data.genre]
+            : [],
         mediaType: result.movie ? 'movie' : 'tv',
       };
 

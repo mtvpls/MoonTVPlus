@@ -55,7 +55,7 @@ export default function DanmakuPanel({
       } else {
         setSearchResults([]);
         setSearchError(
-          response.errorMessage || '未找到匹配的剧集，请尝试其他关键词'
+          response.errorMessage || '未找到匹配的剧集，请尝试其他关键词',
         );
       }
     } catch (error) {
@@ -105,7 +105,7 @@ export default function DanmakuPanel({
 
       onDanmakuSelect(selection);
     },
-    [selectedAnime, searchKeyword, onDanmakuSelect]
+    [selectedAnime, searchKeyword, onDanmakuSelect],
   );
 
   // 回到搜索结果
@@ -119,40 +119,43 @@ export default function DanmakuPanel({
     (episodeId: number) => {
       return currentSelection?.episodeId === episodeId;
     },
-    [currentSelection]
+    [currentSelection],
   );
 
   // 处理文件上传
-  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFileUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
 
-    if (!file.name.endsWith('.xml')) {
-      setSearchError('请上传XML格式的弹幕文件');
-      return;
-    }
-
-    try {
-      const text = await file.text();
-      const { parseXmlDanmaku } = await import('@/lib/danmaku/xml-parser');
-      const comments = parseXmlDanmaku(text);
-
-      if (comments.length === 0) {
-        setSearchError('弹幕文件解析失败或文件为空');
+      if (!file.name.endsWith('.xml')) {
+        setSearchError('请上传XML格式的弹幕文件');
         return;
       }
 
-      onUploadDanmaku?.(comments);
-      setSearchError(null);
-    } catch (error) {
-      console.error('上传弹幕失败:', error);
-      setSearchError('弹幕文件解析失败');
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      try {
+        const text = await file.text();
+        const { parseXmlDanmaku } = await import('@/lib/danmaku/xml-parser');
+        const comments = parseXmlDanmaku(text);
+
+        if (comments.length === 0) {
+          setSearchError('弹幕文件解析失败或文件为空');
+          return;
+        }
+
+        onUploadDanmaku?.(comments);
+        setSearchError(null);
+      } catch (error) {
+        console.error('上传弹幕失败:', error);
+        setSearchError('弹幕文件解析失败');
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
-    }
-  }, [onUploadDanmaku]);
+    },
+    [onUploadDanmaku],
+  );
 
   // 当视频标题首次加载时，初始化搜索关键词（仅执行一次）
   useEffect(() => {
@@ -241,7 +244,8 @@ export default function DanmakuPanel({
             {currentSelection.danmakuCount !== undefined && (
               <p className='mt-1 text-xs text-gray-500 dark:text-gray-500'>
                 弹幕数量: {currentSelection.danmakuCount}
-                {currentSelection.danmakuOriginalCount && ` (原始 ${currentSelection.danmakuOriginalCount} 条)`}
+                {currentSelection.danmakuOriginalCount &&
+                  ` (原始 ${currentSelection.danmakuOriginalCount} 条)`}
               </p>
             )}
           </div>
@@ -249,43 +253,43 @@ export default function DanmakuPanel({
 
         {/* 内容区域 */}
         <div>
-        {/* 显示剧集列表 */}
-        {selectedAnime && (
-          <div className='space-y-2'>
-            {/* 返回按钮 */}
-            <button
-              onClick={handleBackToResults}
-              className='mb-2 text-sm text-green-600 hover:underline
+          {/* 显示剧集列表 */}
+          {selectedAnime && (
+            <div className='space-y-2'>
+              {/* 返回按钮 */}
+              <button
+                onClick={handleBackToResults}
+                className='mb-2 text-sm text-green-600 hover:underline
                        dark:text-green-400'
-            >
-              ← 返回搜索结果
-            </button>
+              >
+                ← 返回搜索结果
+              </button>
 
-            {/* 动漫标题 */}
-            <h3 className='mb-3 text-base font-semibold text-gray-800 dark:text-white'>
-              {selectedAnime.animeTitle}
-            </h3>
+              {/* 动漫标题 */}
+              <h3 className='mb-3 text-base font-semibold text-gray-800 dark:text-white'>
+                {selectedAnime.animeTitle}
+              </h3>
 
-            {/* 加载中 */}
-            {isLoadingEpisodes && (
-              <div className='flex items-center justify-center py-8'>
-                <div
-                  className='h-8 w-8 animate-spin rounded-full border-4
+              {/* 加载中 */}
+              {isLoadingEpisodes && (
+                <div className='flex items-center justify-center py-8'>
+                  <div
+                    className='h-8 w-8 animate-spin rounded-full border-4
                               border-gray-300 border-t-green-500'
-                />
-              </div>
-            )}
+                  />
+                </div>
+              )}
 
-            {/* 剧集列表 */}
-            {!isLoadingEpisodes && episodes.length > 0 && (
-              <div className='space-y-2 pb-4'>
-                {episodes.map((episode, index) => {
-                  const isSelected = isEpisodeSelected(episode.episodeId);
-                  return (
-                    <button
-                      key={episode.episodeId}
-                      onClick={() => handleEpisodeSelect(episode)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg text-left
+              {/* 剧集列表 */}
+              {!isLoadingEpisodes && episodes.length > 0 && (
+                <div className='space-y-2 pb-4'>
+                  {episodes.map((episode, index) => {
+                    const isSelected = isEpisodeSelected(episode.episodeId);
+                    return (
+                      <button
+                        key={episode.episodeId}
+                        onClick={() => handleEpisodeSelect(episode)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg text-left
                                 transition-all duration-200 group border
                         ${
                           isSelected
@@ -294,121 +298,141 @@ export default function DanmakuPanel({
                               'dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-700 ' +
                               'hover:border-green-500/50 hover:shadow-sm'
                         }`}
-                    >
-                      {/* 序号徽章 */}
-                      <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm
+                      >
+                        {/* 序号徽章 */}
+                        <div
+                          className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm
                         ${
                           isSelected
                             ? 'bg-white/20 text-white'
                             : 'bg-green-500 text-white group-hover:bg-green-600'
                         }`}
-                      >
-                        {index + 1}
-                      </div>
-
-                      {/* 标题和信息 */}
-                      <div className='flex-1 min-w-0'>
-                        <div className='font-semibold text-sm mb-1 truncate'>
-                          {episode.episodeTitle}
+                        >
+                          {index + 1}
                         </div>
-                        <div className={`flex items-center gap-2 text-xs
+
+                        {/* 标题和信息 */}
+                        <div className='flex-1 min-w-0'>
+                          <div className='font-semibold text-sm mb-1 truncate'>
+                            {episode.episodeTitle}
+                          </div>
+                          <div
+                            className={`flex items-center gap-2 text-xs
                           ${
                             isSelected
                               ? 'text-white/80'
                               : 'text-gray-500 dark:text-gray-400'
                           }`}
-                        >
-                          <span className='flex items-center gap-1'>
-                            🆔 ID: {episode.episodeId}
-                          </span>
+                          >
+                            <span className='flex items-center gap-1'>
+                              🆔 ID: {episode.episodeId}
+                            </span>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* 选中标记 */}
-                      {isSelected && (
-                        <div className='flex-shrink-0'>
-                          <svg className='w-6 h-6 text-white' fill='currentColor' viewBox='0 0 20 20'>
-                            <path fillRule='evenodd' d='M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z' clipRule='evenodd' />
-                          </svg>
-                        </div>
-                      )}
+                        {/* 选中标记 */}
+                        {isSelected && (
+                          <div className='flex-shrink-0'>
+                            <svg
+                              className='w-6 h-6 text-white'
+                              fill='currentColor'
+                              viewBox='0 0 20 20'
+                            >
+                              <path
+                                fillRule='evenodd'
+                                d='M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z'
+                                clipRule='evenodd'
+                              />
+                            </svg>
+                          </div>
+                        )}
 
-                      {/* 未选中时的箭头 */}
-                      {!isSelected && (
-                        <div className='flex-shrink-0'>
-                          <svg className='w-5 h-5 text-gray-400 group-hover:text-green-500 transition-colors' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M9 5l7 7-7 7' />
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                        {/* 未选中时的箭头 */}
+                        {!isSelected && (
+                          <div className='flex-shrink-0'>
+                            <svg
+                              className='w-5 h-5 text-gray-400 group-hover:text-green-500 transition-colors'
+                              fill='none'
+                              stroke='currentColor'
+                              viewBox='0 0 24 24'
+                            >
+                              <path
+                                strokeLinecap='round'
+                                strokeLinejoin='round'
+                                strokeWidth='2'
+                                d='M9 5l7 7-7 7'
+                              />
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-            {!isLoadingEpisodes && episodes.length === 0 && (
-              <div className='py-8 text-center text-sm text-gray-500'>
-                暂无剧集信息
-              </div>
-            )}
-          </div>
-        )}
+              {!isLoadingEpisodes && episodes.length === 0 && (
+                <div className='py-8 text-center text-sm text-gray-500'>
+                  暂无剧集信息
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* 显示搜索结果 */}
-        {!selectedAnime && searchResults.length > 0 && (
-          <div className='space-y-2 pb-4'>
-            {searchResults.map((anime) => (
-              <div
-                key={anime.animeId}
-                onClick={() => handleAnimeSelect(anime)}
-                className='flex cursor-pointer items-start gap-3 rounded-lg
+          {/* 显示搜索结果 */}
+          {!selectedAnime && searchResults.length > 0 && (
+            <div className='space-y-2 pb-4'>
+              {searchResults.map((anime) => (
+                <div
+                  key={anime.animeId}
+                  onClick={() => handleAnimeSelect(anime)}
+                  className='flex cursor-pointer items-start gap-3 rounded-lg
                          bg-gray-100 p-3 transition-colors hover:bg-gray-200
                          dark:bg-gray-800 dark:hover:bg-gray-700'
-              >
-                {/* 封面 */}
-                {anime.imageUrl && (
-                  <div className='h-16 w-12 flex-shrink-0 overflow-hidden rounded'>
-                    <img
-                      src={anime.imageUrl}
-                      alt={anime.animeTitle}
-                      className='h-full w-full object-cover'
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  </div>
-                )}
+                >
+                  {/* 封面 */}
+                  {anime.imageUrl && (
+                    <div className='h-16 w-12 flex-shrink-0 overflow-hidden rounded'>
+                      <img
+                        src={anime.imageUrl}
+                        alt={anime.animeTitle}
+                        className='h-full w-full object-cover'
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
 
-                {/* 信息 */}
-                <div className='min-w-0 flex-1'>
-                  <p className='truncate font-semibold text-gray-800 dark:text-white'>
-                    {anime.animeTitle}
-                  </p>
-                  <div className='mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-400'>
-                    <span className='rounded bg-gray-200 px-2 py-0.5 dark:bg-gray-700'>
-                      {anime.typeDescription || anime.type}
-                    </span>
-                    {anime.episodeCount && (
-                      <span>{anime.episodeCount} 集</span>
-                    )}
-                    {anime.startDate && <span>{anime.startDate}</span>}
+                  {/* 信息 */}
+                  <div className='min-w-0 flex-1'>
+                    <p className='truncate font-semibold text-gray-800 dark:text-white'>
+                      {anime.animeTitle}
+                    </p>
+                    <div className='mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-400'>
+                      <span className='rounded bg-gray-200 px-2 py-0.5 dark:bg-gray-700'>
+                        {anime.typeDescription || anime.type}
+                      </span>
+                      {anime.episodeCount && (
+                        <span>{anime.episodeCount} 集</span>
+                      )}
+                      {anime.startDate && <span>{anime.startDate}</span>}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
 
-        {/* 空状态 */}
-        {!selectedAnime && searchResults.length === 0 && !isSearching && (
-          <div className='flex flex-col items-center justify-center py-12 text-center'>
-            <MagnifyingGlassIcon className='mb-3 h-12 w-12 text-gray-400' />
-            <p className='text-sm text-gray-500 dark:text-gray-400'>
-              输入剧集名称搜索弹幕
-            </p>
-          </div>
-        )}
+          {/* 空状态 */}
+          {!selectedAnime && searchResults.length === 0 && !isSearching && (
+            <div className='flex flex-col items-center justify-center py-12 text-center'>
+              <MagnifyingGlassIcon className='mb-3 h-12 w-12 text-gray-400' />
+              <p className='text-sm text-gray-500 dark:text-gray-400'>
+                输入剧集名称搜索弹幕
+              </p>
+            </div>
+          )}
         </div>
 
         {/* 上传弹幕区域 - 移动端：在滚动容器内 */}

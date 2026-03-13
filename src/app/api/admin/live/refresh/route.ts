@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     // 并发刷新所有启用的直播源
     const refreshPromises = (config.LiveConfig || [])
-      .filter(liveInfo => !liveInfo.disabled)
+      .filter((liveInfo) => !liveInfo.disabled)
       .map(async (liveInfo) => {
         try {
           const nums = await refreshLiveChannels(liveInfo);
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     console.error('直播源刷新失败:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '刷新失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

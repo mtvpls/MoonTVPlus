@@ -2,7 +2,7 @@
 'use client';
 
 import { AlertCircle, Download, ExternalLink, Loader2 } from 'lucide-react';
-import { useCallback,useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import CapsuleSwitch from '@/components/CapsuleSwitch';
 import Toast, { ToastProps } from '@/components/Toast';
@@ -89,14 +89,18 @@ export default function AcgSearch({
 
       if (isLoadMore) {
         // 追加新数据
-        setAllItems(prev => [...prev, ...data.items]);
+        setAllItems((prev) => [...prev, ...data.items]);
         // 如果当前页没有结果，说明没有更多了
-        setHasMore(source !== 'mikan' && source !== 'dmhy' && data.items.length > 0);
+        setHasMore(
+          source !== 'mikan' && source !== 'dmhy' && data.items.length > 0,
+        );
       } else {
         // 新搜索，重置数据
         setAllItems(data.items);
         // 如果第一页有结果，假设可能还有更多
-        setHasMore(source !== 'mikan' && source !== 'dmhy' && data.items.length > 0);
+        setHasMore(
+          source !== 'mikan' && source !== 'dmhy' && data.items.length > 0,
+        );
       }
 
       setCurrentPage(page);
@@ -169,7 +173,7 @@ export default function AcgSearch({
         root: null,
         rootMargin: '100px',
         threshold: 0.1,
-      }
+      },
     );
 
     observer.observe(element);
@@ -250,7 +254,9 @@ export default function AcgSearch({
         <div className='flex items-center justify-center py-12'>
           <div className='text-center'>
             <AlertCircle className='mx-auto h-12 w-12 text-red-500 dark:text-red-400' />
-            <p className='mt-4 text-sm text-red-600 dark:text-red-400'>{error}</p>
+            <p className='mt-4 text-sm text-red-600 dark:text-red-400'>
+              {error}
+            </p>
           </div>
         </div>
       );
@@ -340,7 +346,10 @@ export default function AcgSearch({
 
         {/* 加载更多指示器 */}
         {source !== 'mikan' && source !== 'dmhy' && hasMore && (
-          <div ref={loadMoreRef} className='flex items-center justify-center py-8'>
+          <div
+            ref={loadMoreRef}
+            className='flex items-center justify-center py-8'
+          >
             <div className='text-center'>
               <Loader2 className='mx-auto h-6 w-6 animate-spin text-green-600 dark:text-green-400' />
               <p className='mt-2 text-sm text-gray-600 dark:text-gray-400'>

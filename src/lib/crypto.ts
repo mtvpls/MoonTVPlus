@@ -15,7 +15,10 @@ export function sha256(data: string): string {
  * @param existingKeys 已存在的 key 集合，用于检测冲突
  * @returns 唯一的 key（SHA256 的前10位）
  */
-export function generateFolderKey(folderName: string, existingKeys: Set<string> = new Set()): string {
+export function generateFolderKey(
+  folderName: string,
+  existingKeys: Set<string> = new Set(),
+): string {
   let hash = sha256(folderName);
   let key = hash.substring(0, 10);
 

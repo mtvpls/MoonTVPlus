@@ -37,7 +37,10 @@ export async function POST(request: NextRequest) {
       !openListConfig.Username ||
       !openListConfig.Password
     ) {
-      return NextResponse.json({ error: 'OpenList 未配置或未启用' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'OpenList 未配置或未启用' },
+        { status: 400 },
+      );
     }
 
     // folder 已经是完整路径，直接使用
@@ -45,7 +48,7 @@ export async function POST(request: NextRequest) {
     const client = new OpenListClient(
       openListConfig.URL,
       openListConfig.Username,
-      openListConfig.Password
+      openListConfig.Password,
     );
 
     // 清除缓存
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
     console.error('刷新视频失败:', error);
     return NextResponse.json(
       { error: '刷新失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -29,10 +29,13 @@ export interface RedisConnectionConfig {
 }
 
 // 添加Redis操作重试包装器
-export function createRetryWrapper(clientName: string, getClient: () => RedisClientType) {
+export function createRetryWrapper(
+  clientName: string,
+  getClient: () => RedisClientType,
+) {
   return async function withRetry<T>(
     operation: () => Promise<T>,
-    maxRetries = 3
+    maxRetries = 3,
   ): Promise<T> {
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -48,7 +51,7 @@ export function createRetryWrapper(clientName: string, getClient: () => RedisCli
 
         if (isConnectionError && !isLastAttempt) {
           console.log(
-            `${clientName} operation failed, retrying... (${i + 1}/${maxRetries})`
+            `${clientName} operation failed, retrying... (${i + 1}/${maxRetries})`,
           );
           console.error('Error:', err.message);
 
@@ -77,7 +80,10 @@ export function createRetryWrapper(clientName: string, getClient: () => RedisCli
 }
 
 // 创建客户端的工厂函数
-export function createRedisClient(config: RedisConnectionConfig, globalSymbol: symbol): RedisClientType {
+export function createRedisClient(
+  config: RedisConnectionConfig,
+  globalSymbol: symbol,
+): RedisClientType {
   let client: RedisClientType | undefined = (global as any)[globalSymbol];
 
   if (!client) {
@@ -91,9 +97,13 @@ export function createRedisClient(config: RedisConnectionConfig, globalSymbol: s
       socket: {
         // 重连策略：指数退避，最大30秒
         reconnectStrategy: (retries: number) => {
-          console.log(`${config.clientName} reconnection attempt ${retries + 1}`);
+          console.log(
+            `${config.clientName} reconnection attempt ${retries + 1}`,
+          );
           if (retries > 10) {
-            console.error(`${config.clientName} max reconnection attempts exceeded`);
+            console.error(
+              `${config.clientName} max reconnection attempts exceeded`,
+            );
             return false; // 停止重连
           }
           return Math.min(1000 * Math.pow(2, retries), 30000); // 指数退避，最大30秒
@@ -148,11 +158,20 @@ export function createRedisClient(config: RedisConnectionConfig, globalSymbol: s
 // 抽象基类，包含所有通用的Redis操作逻辑
 export abstract class BaseRedisStorage implements IStorage {
   protected adapter: RedisAdapter;
-  protected withRetry: <T>(operation: () => Promise<T>, maxRetries?: number) => Promise<T>;
+  protected withRetry: <T>(
+    operation: () => Promise<T>,
+    maxRetries?: number,
+  ) => Promise<T>;
   // 保留 client 属性用于向后兼容（数据迁移代码使用）
   client: any;
 
-  constructor(adapter: RedisAdapter, withRetryFn: <T>(operation: () => Promise<T>, maxRetries?: number) => Promise<T>) {
+  constructor(
+    adapter: RedisAdapter,
+    withRetryFn: <T>(
+      operation: () => Promise<T>,
+      maxRetries?: number,
+    ) => Promise<T>,
+  ) {
     this.adapter = adapter;
     this.withRetry = withRetryFn;
     // 创建兼容层，同时支持驼峰和小写命名（用于数据迁移代码）
@@ -173,8 +192,10 @@ export abstract class BaseRedisStorage implements IStorage {
       hget: (key: string, field: string) => this.adapter.hGet(key, field),
       hGetAll: (key: string) => this.adapter.hGetAll(key),
       hgetall: (key: string) => this.adapter.hGetAll(key),
-      zAdd: (key: string, member: { score: number; value: string }) => this.adapter.zAdd(key, member),
-      zadd: (key: string, member: { score: number; value: string }) => this.adapter.zAdd(key, member),
+      zAdd: (key: string, member: { score: number; value: string }) =>
+        this.adapter.zAdd(key, member),
+      zadd: (key: string, member: { score: number; value: string }) =>
+        this.adapter.zAdd(key, member),
       set: (key: string, value: string) => this.adapter.set(key, value),
       get: (key: string) => this.adapter.get(key),
       del: (...keys: string[]) => this.adapter.del(keys),
@@ -193,10 +214,10 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async getPlayRecord(
     userName: string,
-    key: string
+    key: string,
   ): Promise<PlayRecord | null> {
     const val = await this.withRetry(() =>
-      this.adapter.hGet(this.prHashKey(userName), key)
+      this.adapter.hGet(this.prHashKey(userName), key),
     );
     return val ? (JSON.parse(val) as PlayRecord) : null;
   }
@@ -204,18 +225,18 @@ export abstract class BaseRedisStorage implements IStorage {
   async setPlayRecord(
     userName: string,
     key: string,
-    record: PlayRecord
+    record: PlayRecord,
   ): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.hSet(this.prHashKey(userName), key, JSON.stringify(record))
+      this.adapter.hSet(this.prHashKey(userName), key, JSON.stringify(record)),
     );
   }
 
   async getAllPlayRecords(
-    userName: string
+    userName: string,
   ): Promise<Record<string, PlayRecord>> {
     const hashData = await this.withRetry(() =>
-      this.adapter.hGetAll(this.prHashKey(userName))
+      this.adapter.hGetAll(this.prHashKey(userName)),
     );
 
     const result: Record<string, PlayRecord> = {};
@@ -228,7 +249,9 @@ export abstract class BaseRedisStorage implements IStorage {
   }
 
   async deletePlayRecord(userName: string, key: string): Promise<void> {
-    await this.withRetry(() => this.adapter.hDel(this.prHashKey(userName), key));
+    await this.withRetry(() =>
+      this.adapter.hDel(this.prHashKey(userName), key),
+    );
   }
 
   // 清理超出限制的旧播放记录
@@ -257,7 +280,10 @@ export abstract class BaseRedisStorage implements IStorage {
   private async doCleanup(userName: string): Promise<void> {
     try {
       // 获取配置的最大播放记录数，默认100
-      const maxRecords = parseInt(process.env.MAX_PLAY_RECORDS_PER_USER || '100', 10);
+      const maxRecords = parseInt(
+        process.env.MAX_PLAY_RECORDS_PER_USER || '100',
+        10,
+      );
       const threshold = maxRecords + 10; // 超过最大值+10时才触发清理
 
       // 获取所有播放记录
@@ -269,11 +295,13 @@ export abstract class BaseRedisStorage implements IStorage {
         return;
       }
 
-      console.log(`用户 ${userName} 的播放记录数 ${recordCount} 超过阈值 ${threshold}，开始清理...`);
+      console.log(
+        `用户 ${userName} 的播放记录数 ${recordCount} 超过阈值 ${threshold}，开始清理...`,
+      );
 
       // 将记录转换为数组并按 save_time 排序（从旧到新）
       const sortedRecords = Object.entries(allRecords).sort(
-        ([, a], [, b]) => a.save_time - b.save_time
+        ([, a], [, b]) => a.save_time - b.save_time,
       );
 
       // 计算需要删除的记录数
@@ -327,13 +355,19 @@ export abstract class BaseRedisStorage implements IStorage {
 
     // 2. 获取旧结构的所有播放记录key
     const pattern = `u:${userName}:pr:*`;
-    const oldKeys: string[] = await this.withRetry(() => this.adapter.keys(pattern));
+    const oldKeys: string[] = await this.withRetry(() =>
+      this.adapter.keys(pattern),
+    );
 
     if (oldKeys.length === 0) {
       console.log(`用户 ${userName} 没有旧的播放记录，标记为已迁移`);
       // 即使没有数据也标记为已迁移
       await this.withRetry(() =>
-        this.adapter.hSet(this.userInfoKey(userName), 'playrecord_migrated', 'true')
+        this.adapter.hSet(
+          this.userInfoKey(userName),
+          'playrecord_migrated',
+          'true',
+        ),
       );
       // 清除用户信息缓存
       const { userInfoCache } = await import('./user-cache');
@@ -360,9 +394,11 @@ export abstract class BaseRedisStorage implements IStorage {
     // 5. 写入新的hash结构
     if (Object.keys(hashData).length > 0) {
       await this.withRetry(() =>
-        this.adapter.hSet(this.prHashKey(userName), hashData)
+        this.adapter.hSet(this.prHashKey(userName), hashData),
       );
-      console.log(`成功迁移 ${Object.keys(hashData).length} 条播放记录到hash结构`);
+      console.log(
+        `成功迁移 ${Object.keys(hashData).length} 条播放记录到hash结构`,
+      );
     }
 
     // 6. 删除旧的key
@@ -371,7 +407,11 @@ export abstract class BaseRedisStorage implements IStorage {
 
     // 7. 标记迁移完成
     await this.withRetry(() =>
-      this.adapter.hSet(this.userInfoKey(userName), 'playrecord_migrated', 'true')
+      this.adapter.hSet(
+        this.userInfoKey(userName),
+        'playrecord_migrated',
+        'true',
+      ),
     );
 
     // 8. 清除用户信息缓存，确保下次获取时能读取到最新的迁移标识
@@ -393,7 +433,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async getFavorite(userName: string, key: string): Promise<Favorite | null> {
     const val = await this.withRetry(() =>
-      this.adapter.hGet(this.favHashKey(userName), key)
+      this.adapter.hGet(this.favHashKey(userName), key),
     );
     return val ? (JSON.parse(val) as Favorite) : null;
   }
@@ -401,16 +441,20 @@ export abstract class BaseRedisStorage implements IStorage {
   async setFavorite(
     userName: string,
     key: string,
-    favorite: Favorite
+    favorite: Favorite,
   ): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.hSet(this.favHashKey(userName), key, JSON.stringify(favorite))
+      this.adapter.hSet(
+        this.favHashKey(userName),
+        key,
+        JSON.stringify(favorite),
+      ),
     );
   }
 
   async getAllFavorites(userName: string): Promise<Record<string, Favorite>> {
     const hashData = await this.withRetry(() =>
-      this.adapter.hGetAll(this.favHashKey(userName))
+      this.adapter.hGetAll(this.favHashKey(userName)),
     );
 
     const result: Record<string, Favorite> = {};
@@ -423,7 +467,9 @@ export abstract class BaseRedisStorage implements IStorage {
   }
 
   async deleteFavorite(userName: string, key: string): Promise<void> {
-    await this.withRetry(() => this.adapter.hDel(this.favHashKey(userName), key));
+    await this.withRetry(() =>
+      this.adapter.hDel(this.favHashKey(userName), key),
+    );
   }
 
   // 迁移收藏：从旧的多key结构迁移到新的hash结构
@@ -461,13 +507,19 @@ export abstract class BaseRedisStorage implements IStorage {
 
     // 2. 获取旧结构的所有收藏key
     const pattern = `u:${userName}:fav:*`;
-    const oldKeys: string[] = await this.withRetry(() => this.adapter.keys(pattern));
+    const oldKeys: string[] = await this.withRetry(() =>
+      this.adapter.keys(pattern),
+    );
 
     if (oldKeys.length === 0) {
       console.log(`用户 ${userName} 没有旧的收藏，标记为已迁移`);
       // 即使没有数据也标记为已迁移
       await this.withRetry(() =>
-        this.adapter.hSet(this.userInfoKey(userName), 'favorite_migrated', 'true')
+        this.adapter.hSet(
+          this.userInfoKey(userName),
+          'favorite_migrated',
+          'true',
+        ),
       );
       // 清除用户信息缓存
       const { userInfoCache } = await import('./user-cache');
@@ -494,7 +546,7 @@ export abstract class BaseRedisStorage implements IStorage {
     // 5. 写入新的hash结构
     if (Object.keys(hashData).length > 0) {
       await this.withRetry(() =>
-        this.adapter.hSet(this.favHashKey(userName), hashData)
+        this.adapter.hSet(this.favHashKey(userName), hashData),
       );
       console.log(`成功迁移 ${Object.keys(hashData).length} 条收藏到hash结构`);
     }
@@ -505,7 +557,11 @@ export abstract class BaseRedisStorage implements IStorage {
 
     // 7. 标记迁移完成
     await this.withRetry(() =>
-      this.adapter.hSet(this.userInfoKey(userName), 'favorite_migrated', 'true')
+      this.adapter.hSet(
+        this.userInfoKey(userName),
+        'favorite_migrated',
+        'true',
+      ),
     );
 
     // 8. 清除用户信息缓存，确保下次获取时能读取到最新的迁移标识
@@ -522,22 +578,29 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async getMusicPlayRecord(userName: string, key: string): Promise<any | null> {
     const value = await this.withRetry(() =>
-      this.adapter.hGet(this.musicPlayRecordHashKey(userName), key)
+      this.adapter.hGet(this.musicPlayRecordHashKey(userName), key),
     );
     return value ? JSON.parse(value) : null;
   }
 
-  async setMusicPlayRecord(userName: string, key: string, record: any): Promise<void> {
+  async setMusicPlayRecord(
+    userName: string,
+    key: string,
+    record: any,
+  ): Promise<void> {
     await this.withRetry(() =>
       this.adapter.hSet(
         this.musicPlayRecordHashKey(userName),
         key,
-        JSON.stringify(record)
-      )
+        JSON.stringify(record),
+      ),
     );
   }
 
-  async batchSetMusicPlayRecords(userName: string, records: { key: string; record: any }[]): Promise<void> {
+  async batchSetMusicPlayRecords(
+    userName: string,
+    records: { key: string; record: any }[],
+  ): Promise<void> {
     if (records.length === 0) return;
 
     const hashKey = this.musicPlayRecordHashKey(userName);
@@ -547,14 +610,12 @@ export abstract class BaseRedisStorage implements IStorage {
       data[key] = JSON.stringify(record);
     }
 
-    await this.withRetry(() =>
-      this.adapter.hSet(hashKey, data)
-    );
+    await this.withRetry(() => this.adapter.hSet(hashKey, data));
   }
 
   async getAllMusicPlayRecords(userName: string): Promise<Record<string, any>> {
     const hashData = await this.withRetry(() =>
-      this.adapter.hGetAll(this.musicPlayRecordHashKey(userName))
+      this.adapter.hGetAll(this.musicPlayRecordHashKey(userName)),
     );
 
     const result: Record<string, any> = {};
@@ -568,13 +629,13 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async deleteMusicPlayRecord(userName: string, key: string): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.hDel(this.musicPlayRecordHashKey(userName), key)
+      this.adapter.hDel(this.musicPlayRecordHashKey(userName), key),
     );
   }
 
   async clearAllMusicPlayRecords(userName: string): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.del(this.musicPlayRecordHashKey(userName))
+      this.adapter.del(this.musicPlayRecordHashKey(userName)),
     );
   }
 
@@ -591,12 +652,15 @@ export abstract class BaseRedisStorage implements IStorage {
     return `music_playlist:${playlistId}:songs`;
   }
 
-  async createMusicPlaylist(userName: string, playlist: {
-    id: string;
-    name: string;
-    description?: string;
-    cover?: string;
-  }): Promise<void> {
+  async createMusicPlaylist(
+    userName: string,
+    playlist: {
+      id: string;
+      name: string;
+      description?: string;
+      cover?: string;
+    },
+  ): Promise<void> {
     const now = Date.now();
     const playlistData = {
       id: playlist.id,
@@ -610,7 +674,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
     // 存储歌单信息
     await this.withRetry(() =>
-      this.adapter.hSet(this.musicPlaylistKey(playlist.id), playlistData)
+      this.adapter.hSet(this.musicPlaylistKey(playlist.id), playlistData),
     );
 
     // 添加到用户的歌单列表（使用 sorted set，按创建时间排序）
@@ -618,13 +682,13 @@ export abstract class BaseRedisStorage implements IStorage {
       this.adapter.zAdd(this.musicPlaylistsKey(userName), {
         score: now,
         value: playlist.id,
-      })
+      }),
     );
   }
 
   async getMusicPlaylist(playlistId: string): Promise<any | null> {
     const data = await this.withRetry(() =>
-      this.adapter.hGetAll(this.musicPlaylistKey(playlistId))
+      this.adapter.hGetAll(this.musicPlaylistKey(playlistId)),
     );
 
     if (!data || Object.keys(data).length === 0) return null;
@@ -643,7 +707,7 @@ export abstract class BaseRedisStorage implements IStorage {
   async getUserMusicPlaylists(userName: string): Promise<any[]> {
     // 获取用户的所有歌单ID（按创建时间倒序）
     const playlistIds = await this.withRetry(() =>
-      this.adapter.zRange(this.musicPlaylistsKey(userName), 0, -1)
+      this.adapter.zRange(this.musicPlaylistsKey(userName), 0, -1),
     );
 
     if (!playlistIds || playlistIds.length === 0) return [];
@@ -661,11 +725,14 @@ export abstract class BaseRedisStorage implements IStorage {
     return playlists.sort((a, b) => b.created_at - a.created_at);
   }
 
-  async updateMusicPlaylist(playlistId: string, updates: {
-    name?: string;
-    description?: string;
-    cover?: string;
-  }): Promise<void> {
+  async updateMusicPlaylist(
+    playlistId: string,
+    updates: {
+      name?: string;
+      description?: string;
+      cover?: string;
+    },
+  ): Promise<void> {
     const updateData: Record<string, string> = {
       updated_at: Date.now().toString(),
     };
@@ -681,7 +748,7 @@ export abstract class BaseRedisStorage implements IStorage {
     }
 
     await this.withRetry(() =>
-      this.adapter.hSet(this.musicPlaylistKey(playlistId), updateData)
+      this.adapter.hSet(this.musicPlaylistKey(playlistId), updateData),
     );
   }
 
@@ -692,29 +759,32 @@ export abstract class BaseRedisStorage implements IStorage {
 
     // 从用户的歌单列表中移除
     await this.withRetry(() =>
-      this.adapter.zRem(this.musicPlaylistsKey(playlist.username), playlistId)
+      this.adapter.zRem(this.musicPlaylistsKey(playlist.username), playlistId),
     );
 
     // 删除歌单信息
     await this.withRetry(() =>
-      this.adapter.del(this.musicPlaylistKey(playlistId))
+      this.adapter.del(this.musicPlaylistKey(playlistId)),
     );
 
     // 删除歌单的歌曲列表
     await this.withRetry(() =>
-      this.adapter.del(this.musicPlaylistSongsKey(playlistId))
+      this.adapter.del(this.musicPlaylistSongsKey(playlistId)),
     );
   }
 
-  async addSongToPlaylist(playlistId: string, song: {
-    platform: string;
-    id: string;
-    name: string;
-    artist: string;
-    album?: string;
-    pic?: string;
-    duration: number;
-  }): Promise<void> {
+  async addSongToPlaylist(
+    playlistId: string,
+    song: {
+      platform: string;
+      id: string;
+      name: string;
+      artist: string;
+      album?: string;
+      pic?: string;
+      duration: number;
+    },
+  ): Promise<void> {
     const now = Date.now();
     const songKey = `${song.platform}+${song.id}`;
 
@@ -731,7 +801,11 @@ export abstract class BaseRedisStorage implements IStorage {
 
     // 添加歌曲到歌单（使用 hash 存储歌曲信息）
     await this.withRetry(() =>
-      this.adapter.hSet(this.musicPlaylistSongsKey(playlistId), songKey, JSON.stringify(songData))
+      this.adapter.hSet(
+        this.musicPlaylistSongsKey(playlistId),
+        songKey,
+        JSON.stringify(songData),
+      ),
     );
 
     // 更新歌单的 updated_at
@@ -744,11 +818,15 @@ export abstract class BaseRedisStorage implements IStorage {
     }
   }
 
-  async removeSongFromPlaylist(playlistId: string, platform: string, songId: string): Promise<void> {
+  async removeSongFromPlaylist(
+    playlistId: string,
+    platform: string,
+    songId: string,
+  ): Promise<void> {
     const songKey = `${platform}+${songId}`;
 
     await this.withRetry(() =>
-      this.adapter.hDel(this.musicPlaylistSongsKey(playlistId), songKey)
+      this.adapter.hDel(this.musicPlaylistSongsKey(playlistId), songKey),
     );
 
     // 更新歌单的 updated_at
@@ -757,7 +835,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async getPlaylistSongs(playlistId: string): Promise<any[]> {
     const songsData = await this.withRetry(() =>
-      this.adapter.hGetAll(this.musicPlaylistSongsKey(playlistId))
+      this.adapter.hGetAll(this.musicPlaylistSongsKey(playlistId)),
     );
 
     if (!songsData || Object.keys(songsData).length === 0) return [];
@@ -783,10 +861,14 @@ export abstract class BaseRedisStorage implements IStorage {
     return songs.sort((a, b) => a.added_at - b.added_at);
   }
 
-  async isSongInPlaylist(playlistId: string, platform: string, songId: string): Promise<boolean> {
+  async isSongInPlaylist(
+    playlistId: string,
+    platform: string,
+    songId: string,
+  ): Promise<boolean> {
     const songKey = `${platform}+${songId}`;
     const exists = await this.withRetry(() =>
-      this.adapter.hGet(this.musicPlaylistSongsKey(playlistId), songKey)
+      this.adapter.hGet(this.musicPlaylistSongsKey(playlistId), songKey),
     );
     return exists !== null;
   }
@@ -798,7 +880,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async verifyUser(userName: string, password: string): Promise<boolean> {
     const stored = await this.withRetry(() =>
-      this.adapter.get(this.userPwdKey(userName))
+      this.adapter.get(this.userPwdKey(userName)),
     );
     if (stored === null) return false;
     // 确保比较时都是字符串类型
@@ -809,7 +891,7 @@ export abstract class BaseRedisStorage implements IStorage {
   async checkUserExist(userName: string): Promise<boolean> {
     // 使用 EXISTS 判断 key 是否存在
     const exists = await this.withRetry(() =>
-      this.adapter.exists(this.userPwdKey(userName))
+      this.adapter.exists(this.userPwdKey(userName)),
     );
     return exists === 1;
   }
@@ -818,7 +900,7 @@ export abstract class BaseRedisStorage implements IStorage {
   async changePassword(userName: string, newPassword: string): Promise<void> {
     // 简单存储明文密码，生产环境应加密
     await this.withRetry(() =>
-      this.adapter.set(this.userPwdKey(userName), newPassword)
+      this.adapter.set(this.userPwdKey(userName), newPassword),
     );
   }
 
@@ -836,7 +918,7 @@ export abstract class BaseRedisStorage implements IStorage {
     // 删除旧的播放记录key（如果有）
     const playRecordPattern = `u:${userName}:pr:*`;
     const playRecordKeys = await this.withRetry(() =>
-      this.adapter.keys(playRecordPattern)
+      this.adapter.keys(playRecordPattern),
     );
     if (playRecordKeys.length > 0) {
       await this.withRetry(() => this.adapter.del(playRecordKeys));
@@ -848,7 +930,7 @@ export abstract class BaseRedisStorage implements IStorage {
     // 删除旧的收藏key（如果有）
     const favoritePattern = `u:${userName}:fav:*`;
     const favoriteKeys = await this.withRetry(() =>
-      this.adapter.keys(favoritePattern)
+      this.adapter.keys(favoritePattern),
     );
     if (favoriteKeys.length > 0) {
       await this.withRetry(() => this.adapter.del(favoriteKeys));
@@ -860,18 +942,20 @@ export abstract class BaseRedisStorage implements IStorage {
     // 删除旧的跳过配置key（如果有）
     const skipConfigPattern = `u:${userName}:skip:*`;
     const skipConfigKeys = await this.withRetry(() =>
-      this.adapter.keys(skipConfigPattern)
+      this.adapter.keys(skipConfigPattern),
     );
     if (skipConfigKeys.length > 0) {
       await this.withRetry(() => this.adapter.del(skipConfigKeys));
     }
 
     // 删除音乐播放记录
-    await this.withRetry(() => this.adapter.del(this.musicPlayRecordHashKey(userName)));
+    await this.withRetry(() =>
+      this.adapter.del(this.musicPlayRecordHashKey(userName)),
+    );
 
     // 删除用户的所有歌单
     const playlistIds = await this.withRetry(() =>
-      this.adapter.zRange(this.musicPlaylistsKey(userName), 0, -1)
+      this.adapter.zRange(this.musicPlaylistsKey(userName), 0, -1),
     );
     if (playlistIds && playlistIds.length > 0) {
       for (const playlistId of playlistIds) {
@@ -879,11 +963,15 @@ export abstract class BaseRedisStorage implements IStorage {
         // 删除歌单信息
         await this.withRetry(() => this.adapter.del(this.musicPlaylistKey(id)));
         // 删除歌单的歌曲列表
-        await this.withRetry(() => this.adapter.del(this.musicPlaylistSongsKey(id)));
+        await this.withRetry(() =>
+          this.adapter.del(this.musicPlaylistSongsKey(id)),
+        );
       }
     }
     // 删除用户的歌单列表
-    await this.withRetry(() => this.adapter.del(this.musicPlaylistsKey(userName)));
+    await this.withRetry(() =>
+      this.adapter.del(this.musicPlaylistsKey(userName)),
+    );
   }
 
   // ---------- 新版用户存储（使用Hash和Sorted Set） ----------
@@ -905,7 +993,7 @@ export abstract class BaseRedisStorage implements IStorage {
     const data = encoder.encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
   // 创建新用户（新版本）
@@ -915,7 +1003,7 @@ export abstract class BaseRedisStorage implements IStorage {
     role: 'owner' | 'admin' | 'user' = 'user',
     tags?: string[],
     oidcSub?: string,
-    enabledApis?: string[]
+    enabledApis?: string[],
   ): Promise<void> {
     const hashedPassword = await this.hashPassword(password);
     const createdAt = Date.now();
@@ -939,16 +1027,22 @@ export abstract class BaseRedisStorage implements IStorage {
     if (oidcSub) {
       userInfo.oidcSub = oidcSub;
       // 创建OIDC映射
-      await this.withRetry(() => this.adapter.set(this.oidcSubKey(oidcSub), userName));
+      await this.withRetry(() =>
+        this.adapter.set(this.oidcSubKey(oidcSub), userName),
+      );
     }
 
-    await this.withRetry(() => this.adapter.hSet(this.userInfoKey(userName), userInfo));
+    await this.withRetry(() =>
+      this.adapter.hSet(this.userInfoKey(userName), userInfo),
+    );
 
     // 添加到用户列表（Sorted Set，按注册时间排序）
-    await this.withRetry(() => this.adapter.zAdd(this.userListKey(), {
-      score: createdAt,
-      value: userName,
-    }));
+    await this.withRetry(() =>
+      this.adapter.zAdd(this.userListKey(), {
+        score: createdAt,
+        value: userName,
+      }),
+    );
 
     // 清除用户信息缓存
     userInfoCache?.delete(userName);
@@ -963,7 +1057,7 @@ export abstract class BaseRedisStorage implements IStorage {
   // 验证用户密码（新版本）
   async verifyUserV2(userName: string, password: string): Promise<boolean> {
     const userInfo = await this.withRetry(() =>
-      this.adapter.hGetAll(this.userInfoKey(userName))
+      this.adapter.hGetAll(this.userInfoKey(userName)),
     );
 
     if (!userInfo || !userInfo.password) {
@@ -996,7 +1090,7 @@ export abstract class BaseRedisStorage implements IStorage {
     }
 
     const userInfoRaw = await this.withRetry(() =>
-      this.adapter.hGetAll(this.userInfoKey(userName))
+      this.adapter.hGetAll(this.userInfoKey(userName)),
     );
 
     if (!userInfoRaw || Object.keys(userInfoRaw).length === 0) {
@@ -1023,13 +1117,17 @@ export abstract class BaseRedisStorage implements IStorage {
             skip_migrated: 'true',
           };
 
-          await this.withRetry(() => this.adapter.hSet(this.userInfoKey(userName), userInfo));
+          await this.withRetry(() =>
+            this.adapter.hSet(this.userInfoKey(userName), userInfo),
+          );
 
           // 添加到用户列表（Sorted Set，按注册时间排序）
-          await this.withRetry(() => this.adapter.zAdd(this.userListKey(), {
-            score: ownerInfo.created_at,
-            value: userName,
-          }));
+          await this.withRetry(() =>
+            this.adapter.zAdd(this.userListKey(), {
+              score: ownerInfo.created_at,
+              value: userName,
+            }),
+          );
 
           console.log(`Created database record for site owner: ${userName}`);
         } catch (insertErr) {
@@ -1049,12 +1147,16 @@ export abstract class BaseRedisStorage implements IStorage {
       banned: userInfoRaw.banned === 'true',
       tags: userInfoRaw.tags ? JSON.parse(userInfoRaw.tags) : undefined,
       oidcSub: userInfoRaw.oidcSub,
-      enabledApis: userInfoRaw.enabledApis ? JSON.parse(userInfoRaw.enabledApis) : undefined,
+      enabledApis: userInfoRaw.enabledApis
+        ? JSON.parse(userInfoRaw.enabledApis)
+        : undefined,
       created_at: parseInt(userInfoRaw.created_at || '0', 10),
       playrecord_migrated: userInfoRaw.playrecord_migrated === 'true',
       favorite_migrated: userInfoRaw.favorite_migrated === 'true',
       skip_migrated: userInfoRaw.skip_migrated === 'true',
-      last_movie_request_time: userInfoRaw.last_movie_request_time ? parseInt(userInfoRaw.last_movie_request_time, 10) : undefined,
+      last_movie_request_time: userInfoRaw.last_movie_request_time
+        ? parseInt(userInfoRaw.last_movie_request_time, 10)
+        : undefined,
       email: userInfoRaw.email,
       emailNotifications: userInfoRaw.emailNotifications === 'true',
     };
@@ -1079,7 +1181,7 @@ export abstract class BaseRedisStorage implements IStorage {
       tags?: string[];
       oidcSub?: string;
       enabledApis?: string[];
-    }
+    },
   ): Promise<void> {
     const userInfo: Record<string, string> = {};
 
@@ -1096,7 +1198,9 @@ export abstract class BaseRedisStorage implements IStorage {
         userInfo.tags = JSON.stringify(updates.tags);
       } else {
         // 删除tags字段
-        await this.withRetry(() => this.adapter.hDel(this.userInfoKey(userName), 'tags'));
+        await this.withRetry(() =>
+          this.adapter.hDel(this.userInfoKey(userName), 'tags'),
+        );
       }
     }
 
@@ -1105,7 +1209,9 @@ export abstract class BaseRedisStorage implements IStorage {
         userInfo.enabledApis = JSON.stringify(updates.enabledApis);
       } else {
         // 删除enabledApis字段
-        await this.withRetry(() => this.adapter.hDel(this.userInfoKey(userName), 'enabledApis'));
+        await this.withRetry(() =>
+          this.adapter.hDel(this.userInfoKey(userName), 'enabledApis'),
+        );
       }
     }
 
@@ -1113,15 +1219,21 @@ export abstract class BaseRedisStorage implements IStorage {
       const oldInfo = await this.getUserInfoV2(userName);
       if (oldInfo?.oidcSub && oldInfo.oidcSub !== updates.oidcSub) {
         // 删除旧的OIDC映射
-        await this.withRetry(() => this.adapter.del(this.oidcSubKey(oldInfo.oidcSub!)));
+        await this.withRetry(() =>
+          this.adapter.del(this.oidcSubKey(oldInfo.oidcSub!)),
+        );
       }
       userInfo.oidcSub = updates.oidcSub;
       // 创建新的OIDC映射
-      await this.withRetry(() => this.adapter.set(this.oidcSubKey(updates.oidcSub!), userName));
+      await this.withRetry(() =>
+        this.adapter.set(this.oidcSubKey(updates.oidcSub!), userName),
+      );
     }
 
     if (Object.keys(userInfo).length > 0) {
-      await this.withRetry(() => this.adapter.hSet(this.userInfoKey(userName), userInfo));
+      await this.withRetry(() =>
+        this.adapter.hSet(this.userInfoKey(userName), userInfo),
+      );
     }
 
     // 清除缓存
@@ -1132,7 +1244,7 @@ export abstract class BaseRedisStorage implements IStorage {
   async changePasswordV2(userName: string, newPassword: string): Promise<void> {
     const hashedPassword = await this.hashPassword(newPassword);
     await this.withRetry(() =>
-      this.adapter.hSet(this.userInfoKey(userName), 'password', hashedPassword)
+      this.adapter.hSet(this.userInfoKey(userName), 'password', hashedPassword),
     );
 
     // 清除缓存
@@ -1142,7 +1254,7 @@ export abstract class BaseRedisStorage implements IStorage {
   // 检查用户是否存在（新版本）
   async checkUserExistV2(userName: string): Promise<boolean> {
     const exists = await this.withRetry(() =>
-      this.adapter.exists(this.userInfoKey(userName))
+      this.adapter.exists(this.userInfoKey(userName)),
     );
     return exists === 1;
   }
@@ -1150,7 +1262,7 @@ export abstract class BaseRedisStorage implements IStorage {
   // 通过OIDC Sub查找用户名
   async getUserByOidcSub(oidcSub: string): Promise<string | null> {
     const userName = await this.withRetry(() =>
-      this.adapter.get(this.oidcSubKey(oidcSub))
+      this.adapter.get(this.oidcSubKey(oidcSub)),
     );
     return userName ? ensureString(userName) : null;
   }
@@ -1159,7 +1271,7 @@ export abstract class BaseRedisStorage implements IStorage {
   async getUserListV2(
     offset = 0,
     limit = 20,
-    ownerUsername?: string
+    ownerUsername?: string,
   ): Promise<{
     users: Array<{
       username: string;
@@ -1173,7 +1285,9 @@ export abstract class BaseRedisStorage implements IStorage {
     total: number;
   }> {
     // 获取总数
-    let total = await this.withRetry(() => this.adapter.zCard(this.userListKey()));
+    let total = await this.withRetry(() =>
+      this.adapter.zCard(this.userListKey()),
+    );
 
     // 检查站长是否在数据库中（使用缓存）
     let ownerInfo = null;
@@ -1220,7 +1334,11 @@ export abstract class BaseRedisStorage implements IStorage {
 
     // 获取用户列表（按注册时间升序）
     const usernames = await this.withRetry(() =>
-      this.adapter.zRange(this.userListKey(), actualOffset, actualOffset + actualLimit - 1)
+      this.adapter.zRange(
+        this.userListKey(),
+        actualOffset,
+        actualOffset + actualLimit - 1,
+      ),
     );
 
     const users = [];
@@ -1271,7 +1389,9 @@ export abstract class BaseRedisStorage implements IStorage {
 
     // 删除OIDC映射
     if (userInfo?.oidcSub) {
-      await this.withRetry(() => this.adapter.del(this.oidcSubKey(userInfo.oidcSub!)));
+      await this.withRetry(() =>
+        this.adapter.del(this.oidcSubKey(userInfo.oidcSub!)),
+      );
     }
 
     // 删除用户信息Hash
@@ -1294,7 +1414,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async getSearchHistory(userName: string): Promise<string[]> {
     const result = await this.withRetry(() =>
-      this.adapter.lRange(this.shKey(userName), 0, -1)
+      this.adapter.lRange(this.shKey(userName), 0, -1),
     );
     // 确保返回的都是字符串类型
     return ensureStringArray(result as any[]);
@@ -1303,17 +1423,23 @@ export abstract class BaseRedisStorage implements IStorage {
   async addSearchHistory(userName: string, keyword: string): Promise<void> {
     const key = this.shKey(userName);
     // 先去重
-    await this.withRetry(() => this.adapter.lRem(key, 0, ensureString(keyword)));
+    await this.withRetry(() =>
+      this.adapter.lRem(key, 0, ensureString(keyword)),
+    );
     // 插入到最前
     await this.withRetry(() => this.adapter.lPush(key, ensureString(keyword)));
     // 限制最大长度
-    await this.withRetry(() => this.adapter.lTrim(key, 0, SEARCH_HISTORY_LIMIT - 1));
+    await this.withRetry(() =>
+      this.adapter.lTrim(key, 0, SEARCH_HISTORY_LIMIT - 1),
+    );
   }
 
   async deleteSearchHistory(userName: string, keyword?: string): Promise<void> {
     const key = this.shKey(userName);
     if (keyword) {
-      await this.withRetry(() => this.adapter.lRem(key, 0, ensureString(keyword)));
+      await this.withRetry(() =>
+        this.adapter.lRem(key, 0, ensureString(keyword)),
+      );
     } else {
       await this.withRetry(() => this.adapter.del(key));
     }
@@ -1324,9 +1450,9 @@ export abstract class BaseRedisStorage implements IStorage {
     // 从新版用户列表获取
     const userListKey = this.userListKey();
     const users = await this.withRetry(() =>
-      this.adapter.zRange(userListKey, 0, -1)
+      this.adapter.zRange(userListKey, 0, -1),
     );
-    const userList = users.map(u => ensureString(u));
+    const userList = users.map((u) => ensureString(u));
 
     // 确保站长在列表中（站长可能不在数据库中，使用环境变量认证）
     const ownerUsername = process.env.USERNAME;
@@ -1343,13 +1469,15 @@ export abstract class BaseRedisStorage implements IStorage {
   }
 
   async getAdminConfig(): Promise<AdminConfig | null> {
-    const val = await this.withRetry(() => this.adapter.get(this.adminConfigKey()));
+    const val = await this.withRetry(() =>
+      this.adapter.get(this.adminConfigKey()),
+    );
     return val ? (JSON.parse(val) as AdminConfig) : null;
   }
 
   async setAdminConfig(config: AdminConfig): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.set(this.adminConfigKey(), JSON.stringify(config))
+      this.adapter.set(this.adminConfigKey(), JSON.stringify(config)),
     );
   }
 
@@ -1365,11 +1493,11 @@ export abstract class BaseRedisStorage implements IStorage {
   async getSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<SkipConfig | null> {
     const key = `${source}+${id}`;
     const val = await this.withRetry(() =>
-      this.adapter.hGet(this.skipHashKey(userName), key)
+      this.adapter.hGet(this.skipHashKey(userName), key),
     );
     return val ? (JSON.parse(val) as SkipConfig) : null;
   }
@@ -1378,30 +1506,34 @@ export abstract class BaseRedisStorage implements IStorage {
     userName: string,
     source: string,
     id: string,
-    config: SkipConfig
+    config: SkipConfig,
   ): Promise<void> {
     const key = `${source}+${id}`;
     await this.withRetry(() =>
-      this.adapter.hSet(this.skipHashKey(userName), key, JSON.stringify(config))
+      this.adapter.hSet(
+        this.skipHashKey(userName),
+        key,
+        JSON.stringify(config),
+      ),
     );
   }
 
   async deleteSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<void> {
     const key = `${source}+${id}`;
     await this.withRetry(() =>
-      this.adapter.hDel(this.skipHashKey(userName), key)
+      this.adapter.hDel(this.skipHashKey(userName), key),
     );
   }
 
   async getAllSkipConfigs(
-    userName: string
+    userName: string,
   ): Promise<{ [key: string]: SkipConfig }> {
     const hashData = await this.withRetry(() =>
-      this.adapter.hGetAll(this.skipHashKey(userName))
+      this.adapter.hGetAll(this.skipHashKey(userName)),
     );
 
     const result: Record<string, SkipConfig> = {};
@@ -1442,12 +1574,14 @@ export abstract class BaseRedisStorage implements IStorage {
     }
 
     const pattern = `u:${userName}:skip:*`;
-    const oldKeys: string[] = await this.withRetry(() => this.adapter.keys(pattern));
+    const oldKeys: string[] = await this.withRetry(() =>
+      this.adapter.keys(pattern),
+    );
 
     if (oldKeys.length === 0) {
       console.log(`用户 ${userName} 没有旧的跳过配置，标记为已迁移`);
       await this.withRetry(() =>
-        this.adapter.hSet(this.userInfoKey(userName), 'skip_migrated', 'true')
+        this.adapter.hSet(this.userInfoKey(userName), 'skip_migrated', 'true'),
       );
       const { userInfoCache } = await import('./user-cache');
       userInfoCache?.delete(userName);
@@ -1470,16 +1604,18 @@ export abstract class BaseRedisStorage implements IStorage {
 
     if (Object.keys(hashData).length > 0) {
       await this.withRetry(() =>
-        this.adapter.hSet(this.skipHashKey(userName), hashData)
+        this.adapter.hSet(this.skipHashKey(userName), hashData),
       );
-      console.log(`成功迁移 ${Object.keys(hashData).length} 条跳过配置到hash结构`);
+      console.log(
+        `成功迁移 ${Object.keys(hashData).length} 条跳过配置到hash结构`,
+      );
     }
 
     await this.withRetry(() => this.adapter.del(oldKeys));
     console.log(`删除了 ${oldKeys.length} 个旧的跳过配置key`);
 
     await this.withRetry(() =>
-      this.adapter.hSet(this.userInfoKey(userName), 'skip_migrated', 'true')
+      this.adapter.hSet(this.userInfoKey(userName), 'skip_migrated', 'true'),
     );
     const { userInfoCache } = await import('./user-cache');
     userInfoCache?.delete(userName);
@@ -1489,29 +1625,31 @@ export abstract class BaseRedisStorage implements IStorage {
 
   // ---------- 弹幕过滤配置 ----------
   async getDanmakuFilterConfig(
-    userName: string
+    userName: string,
   ): Promise<import('./types').DanmakuFilterConfig | null> {
     const val = await this.withRetry(() =>
-      this.adapter.get(this.danmakuFilterConfigKey(userName))
+      this.adapter.get(this.danmakuFilterConfigKey(userName)),
     );
-    return val ? (JSON.parse(val) as import('./types').DanmakuFilterConfig) : null;
+    return val
+      ? (JSON.parse(val) as import('./types').DanmakuFilterConfig)
+      : null;
   }
 
   async setDanmakuFilterConfig(
     userName: string,
-    config: import('./types').DanmakuFilterConfig
+    config: import('./types').DanmakuFilterConfig,
   ): Promise<void> {
     await this.withRetry(() =>
       this.adapter.set(
         this.danmakuFilterConfigKey(userName),
-        JSON.stringify(config)
-      )
+        JSON.stringify(config),
+      ),
     );
   }
 
   async deleteDanmakuFilterConfig(userName: string): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.del(this.danmakuFilterConfigKey(userName))
+      this.adapter.del(this.danmakuFilterConfigKey(userName)),
     );
   }
 
@@ -1543,14 +1681,14 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async getGlobalValue(key: string): Promise<string | null> {
     const val = await this.withRetry(() =>
-      this.adapter.get(this.globalValueKey(key))
+      this.adapter.get(this.globalValueKey(key)),
     );
     return val ? ensureString(val) : null;
   }
 
   async setGlobalValue(key: string, value: string): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.set(this.globalValueKey(key), ensureString(value))
+      this.adapter.set(this.globalValueKey(key), ensureString(value)),
     );
   }
 
@@ -1567,16 +1705,18 @@ export abstract class BaseRedisStorage implements IStorage {
     return `u:${userName}:last_fav_check`;
   }
 
-  async getNotifications(userName: string): Promise<import('./types').Notification[]> {
+  async getNotifications(
+    userName: string,
+  ): Promise<import('./types').Notification[]> {
     const val = await this.withRetry(() =>
-      this.adapter.get(this.notificationsKey(userName))
+      this.adapter.get(this.notificationsKey(userName)),
     );
     return val ? (JSON.parse(val) as import('./types').Notification[]) : [];
   }
 
   async addNotification(
     userName: string,
-    notification: import('./types').Notification
+    notification: import('./types').Notification,
   ): Promise<void> {
     const notifications = await this.getNotifications(userName);
     notifications.unshift(notification); // 新通知放在最前面
@@ -1585,37 +1725,48 @@ export abstract class BaseRedisStorage implements IStorage {
       notifications.splice(100);
     }
     await this.withRetry(() =>
-      this.adapter.set(this.notificationsKey(userName), JSON.stringify(notifications))
+      this.adapter.set(
+        this.notificationsKey(userName),
+        JSON.stringify(notifications),
+      ),
     );
   }
 
   async markNotificationAsRead(
     userName: string,
-    notificationId: string
+    notificationId: string,
   ): Promise<void> {
     const notifications = await this.getNotifications(userName);
     const notification = notifications.find((n) => n.id === notificationId);
     if (notification) {
       notification.read = true;
       await this.withRetry(() =>
-        this.adapter.set(this.notificationsKey(userName), JSON.stringify(notifications))
+        this.adapter.set(
+          this.notificationsKey(userName),
+          JSON.stringify(notifications),
+        ),
       );
     }
   }
 
   async deleteNotification(
     userName: string,
-    notificationId: string
+    notificationId: string,
   ): Promise<void> {
     const notifications = await this.getNotifications(userName);
     const filtered = notifications.filter((n) => n.id !== notificationId);
     await this.withRetry(() =>
-      this.adapter.set(this.notificationsKey(userName), JSON.stringify(filtered))
+      this.adapter.set(
+        this.notificationsKey(userName),
+        JSON.stringify(filtered),
+      ),
     );
   }
 
   async clearAllNotifications(userName: string): Promise<void> {
-    await this.withRetry(() => this.adapter.del(this.notificationsKey(userName)));
+    await this.withRetry(() =>
+      this.adapter.del(this.notificationsKey(userName)),
+    );
   }
 
   async getUnreadNotificationCount(userName: string): Promise<number> {
@@ -1625,27 +1776,33 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async getLastFavoriteCheckTime(userName: string): Promise<number> {
     const val = await this.withRetry(() =>
-      this.adapter.get(this.lastFavoriteCheckKey(userName))
+      this.adapter.get(this.lastFavoriteCheckKey(userName)),
     );
     return val ? parseInt(val, 10) : 0;
   }
 
   async setLastFavoriteCheckTime(
     userName: string,
-    timestamp: number
+    timestamp: number,
   ): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.set(this.lastFavoriteCheckKey(userName), timestamp.toString())
+      this.adapter.set(
+        this.lastFavoriteCheckKey(userName),
+        timestamp.toString(),
+      ),
     );
   }
 
-  async updateLastMovieRequestTime(userName: string, timestamp: number): Promise<void> {
+  async updateLastMovieRequestTime(
+    userName: string,
+    timestamp: number,
+  ): Promise<void> {
     await this.withRetry(() =>
       this.adapter.hSet(
         this.userInfoKey(userName),
         'last_movie_request_time',
-        timestamp.toString()
-      )
+        timestamp.toString(),
+      ),
     );
   }
 
@@ -1659,42 +1816,81 @@ export abstract class BaseRedisStorage implements IStorage {
   }
 
   async getAllMovieRequests(): Promise<import('./types').MovieRequest[]> {
-    const data = await this.withRetry(() => this.adapter.hGetAll(this.movieRequestsKey()));
+    const data = await this.withRetry(() =>
+      this.adapter.hGetAll(this.movieRequestsKey()),
+    );
     if (!data || Object.keys(data).length === 0) return [];
-    return Object.values(data).map(v => JSON.parse(v) as import('./types').MovieRequest);
+    return Object.values(data).map(
+      (v) => JSON.parse(v) as import('./types').MovieRequest,
+    );
   }
 
-  async getMovieRequest(requestId: string): Promise<import('./types').MovieRequest | null> {
-    const val = await this.withRetry(() => this.adapter.hGet(this.movieRequestsKey(), requestId));
+  async getMovieRequest(
+    requestId: string,
+  ): Promise<import('./types').MovieRequest | null> {
+    const val = await this.withRetry(() =>
+      this.adapter.hGet(this.movieRequestsKey(), requestId),
+    );
     return val ? (JSON.parse(val) as import('./types').MovieRequest) : null;
   }
 
-  async createMovieRequest(request: import('./types').MovieRequest): Promise<void> {
-    await this.withRetry(() => this.adapter.hSet(this.movieRequestsKey(), request.id, JSON.stringify(request)));
+  async createMovieRequest(
+    request: import('./types').MovieRequest,
+  ): Promise<void> {
+    await this.withRetry(() =>
+      this.adapter.hSet(
+        this.movieRequestsKey(),
+        request.id,
+        JSON.stringify(request),
+      ),
+    );
   }
 
-  async updateMovieRequest(requestId: string, updates: Partial<import('./types').MovieRequest>): Promise<void> {
+  async updateMovieRequest(
+    requestId: string,
+    updates: Partial<import('./types').MovieRequest>,
+  ): Promise<void> {
     const existing = await this.getMovieRequest(requestId);
     if (!existing) throw new Error('Movie request not found');
     const updated = { ...existing, ...updates };
-    await this.withRetry(() => this.adapter.hSet(this.movieRequestsKey(), requestId, JSON.stringify(updated)));
+    await this.withRetry(() =>
+      this.adapter.hSet(
+        this.movieRequestsKey(),
+        requestId,
+        JSON.stringify(updated),
+      ),
+    );
   }
 
   async deleteMovieRequest(requestId: string): Promise<void> {
-    await this.withRetry(() => this.adapter.hDel(this.movieRequestsKey(), requestId));
+    await this.withRetry(() =>
+      this.adapter.hDel(this.movieRequestsKey(), requestId),
+    );
   }
 
   async getUserMovieRequests(userName: string): Promise<string[]> {
-    const val = await this.withRetry(() => this.adapter.sMembers(this.userMovieRequestsKey(userName)));
+    const val = await this.withRetry(() =>
+      this.adapter.sMembers(this.userMovieRequestsKey(userName)),
+    );
     return val ? ensureStringArray(val) : [];
   }
 
-  async addUserMovieRequest(userName: string, requestId: string): Promise<void> {
-    await this.withRetry(() => this.adapter.sAdd(this.userMovieRequestsKey(userName), requestId));
+  async addUserMovieRequest(
+    userName: string,
+    requestId: string,
+  ): Promise<void> {
+    await this.withRetry(() =>
+      this.adapter.sAdd(this.userMovieRequestsKey(userName), requestId),
+    );
   }
 
-  async removeUserMovieRequest(userName: string, requestId: string): Promise<void> {
-    await this.withRetry(() => this.adapter.sRem(this.userMovieRequestsKey(userName), requestId));
+  async removeUserMovieRequest(
+    userName: string,
+    requestId: string,
+  ): Promise<void> {
+    await this.withRetry(() =>
+      this.adapter.sRem(this.userMovieRequestsKey(userName), requestId),
+    );
   }
 
   // ---------- 用户邮箱相关 ----------
@@ -1705,7 +1901,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async setUserEmail(userName: string, email: string): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.hSet(this.userInfoKey(userName), 'email', email)
+      this.adapter.hSet(this.userInfoKey(userName), 'email', email),
     );
     // 清除缓存
     userInfoCache?.delete(userName);
@@ -1716,9 +1912,16 @@ export abstract class BaseRedisStorage implements IStorage {
     return userInfo?.emailNotifications || false;
   }
 
-  async setEmailNotificationPreference(userName: string, enabled: boolean): Promise<void> {
+  async setEmailNotificationPreference(
+    userName: string,
+    enabled: boolean,
+  ): Promise<void> {
     await this.withRetry(() =>
-      this.adapter.hSet(this.userInfoKey(userName), 'emailNotifications', enabled.toString())
+      this.adapter.hSet(
+        this.userInfoKey(userName),
+        'emailNotifications',
+        enabled.toString(),
+      ),
     );
     // 清除缓存
     userInfoCache?.delete(userName);
@@ -1728,7 +1931,7 @@ export abstract class BaseRedisStorage implements IStorage {
   async getTvboxSubscribeToken(userName: string): Promise<string | null> {
     // 直接从数据库读取，不使用缓存
     const token = await this.withRetry(() =>
-      this.adapter.hGet(this.userInfoKey(userName), 'tvboxSubscribeToken')
+      this.adapter.hGet(this.userInfoKey(userName), 'tvboxSubscribeToken'),
     );
     return token || null;
   }
@@ -1736,12 +1939,16 @@ export abstract class BaseRedisStorage implements IStorage {
   async setTvboxSubscribeToken(userName: string, token: string): Promise<void> {
     // 保存token到用户信息
     await this.withRetry(() =>
-      this.adapter.hSet(this.userInfoKey(userName), 'tvboxSubscribeToken', token)
+      this.adapter.hSet(
+        this.userInfoKey(userName),
+        'tvboxSubscribeToken',
+        token,
+      ),
     );
 
     // 创建token到用户名的反向索引
     await this.withRetry(() =>
-      this.adapter.set(`tvbox:token:${token}`, userName)
+      this.adapter.set(`tvbox:token:${token}`, userName),
     );
 
     // 清除缓存
@@ -1750,7 +1957,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
   async getUsernameByTvboxToken(token: string): Promise<string | null> {
     const userName = await this.withRetry(() =>
-      this.adapter.get(`tvbox:token:${token}`)
+      this.adapter.get(`tvbox:token:${token}`),
     );
     return userName || null;
   }

@@ -21,12 +21,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: channelData.channels
+      data: channelData.channels,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: '获取频道信息失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '获取频道信息失败' }, { status: 500 });
   }
 }

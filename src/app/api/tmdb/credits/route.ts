@@ -28,7 +28,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (type !== 'movie' && type !== 'tv') {
-      return NextResponse.json({ error: '类型参数必须是movie或tv' }, { status: 400 });
+      return NextResponse.json(
+        { error: '类型参数必须是movie或tv' },
+        { status: 400 },
+      );
     }
 
     const config = await getConfig();
@@ -39,7 +42,7 @@ export async function GET(request: NextRequest) {
     if (!tmdbApiKey) {
       return NextResponse.json(
         { error: 'TMDB API Key 未配置' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -48,13 +51,13 @@ export async function GET(request: NextRequest) {
       parseInt(id),
       type as 'movie' | 'tv',
       tmdbProxy,
-      tmdbReverseProxy
+      tmdbReverseProxy,
     );
 
     if (response.code !== 200 || !response.credits) {
       return NextResponse.json(
         { error: 'TMDB 演职人员信息获取失败', code: response.code },
-        { status: response.code }
+        { status: response.code },
       );
     }
 
@@ -63,7 +66,7 @@ export async function GET(request: NextRequest) {
     console.error('TMDB演职人员信息获取失败:', error);
     return NextResponse.json(
       { error: '获取演职人员信息失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

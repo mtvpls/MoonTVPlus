@@ -17,18 +17,24 @@ const STORAGE_TYPE =
     | undefined) || 'localstorage';
 
 // 验证Cloudflare Turnstile Token
-async function verifyTurnstileToken(token: string, secretKey: string): Promise<boolean> {
+async function verifyTurnstileToken(
+  token: string,
+  secretKey: string,
+): Promise<boolean> {
   try {
-    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          secret: secretKey,
+          response: token,
+        }),
       },
-      body: JSON.stringify({
-        secret: secretKey,
-        response: token,
-      }),
-    });
+    );
 
     const data = await response.json();
     return data.success === true;
@@ -44,7 +50,7 @@ export async function POST(req: NextRequest) {
     if (STORAGE_TYPE === 'localstorage') {
       return NextResponse.json(
         { error: 'localStorage模式不支持注册功能' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -54,10 +60,7 @@ export async function POST(req: NextRequest) {
 
     // 检查是否开启注册
     if (!siteConfig.EnableRegistration) {
-      return NextResponse.json(
-        { error: '注册功能未开启' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: '注册功能未开启' }, { status: 403 });
     }
 
     const { username, password, turnstileToken } = await req.json();
@@ -74,24 +77,18 @@ export async function POST(req: NextRequest) {
     if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
       return NextResponse.json(
         { error: '用户名只能包含字母、数字、下划线，长度3-20位' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // 验证密码长度
     if (password.length < 6) {
-      return NextResponse.json(
-        { error: '密码长度至少为6位' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '密码长度至少为6位' }, { status: 400 });
     }
 
     // 检查是否与站长同名
     if (username === process.env.USERNAME) {
-      return NextResponse.json(
-        { error: '该用户名不可用' },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: '该用户名不可用' }, { status: 409 });
     }
 
     // 获取用户名锁，防止并发注册
@@ -101,7 +98,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       return NextResponse.json(
         { error: '服务器繁忙，请稍后重试' },
-        { status: 503 }
+        { status: 503 },
       );
     }
 
@@ -109,10 +106,7 @@ export async function POST(req: NextRequest) {
       // 检查用户是否已存在（只检查V2存储）
       const userExists = await db.checkUserExistV2(username);
       if (userExists) {
-        return NextResponse.json(
-          { error: '用户名已存在' },
-          { status: 409 }
-        );
+        return NextResponse.json({ error: '用户名已存在' }, { status: 409 });
       }
 
       // 如果开启了Turnstile验证
@@ -120,7 +114,7 @@ export async function POST(req: NextRequest) {
         if (!turnstileToken) {
           return NextResponse.json(
             { error: '请完成人机验证' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -128,16 +122,19 @@ export async function POST(req: NextRequest) {
           console.error('Turnstile Secret Key未配置');
           return NextResponse.json(
             { error: '服务器配置错误' },
-            { status: 500 }
+            { status: 500 },
           );
         }
 
         // 验证Turnstile Token
-        const isValid = await verifyTurnstileToken(turnstileToken, siteConfig.TurnstileSecretKey);
+        const isValid = await verifyTurnstileToken(
+          turnstileToken,
+          siteConfig.TurnstileSecretKey,
+        );
         if (!isValid) {
           return NextResponse.json(
             { error: '人机验证失败，请重试' },
-            { status: 400 }
+            { status: 400 },
           );
         }
       }
@@ -145,9 +142,10 @@ export async function POST(req: NextRequest) {
       // 创建用户
       try {
         // 使用新版本创建用户（带SHA256加密）
-        const defaultTags = siteConfig.DefaultUserTags && siteConfig.DefaultUserTags.length > 0
-          ? siteConfig.DefaultUserTags
-          : undefined;
+        const defaultTags =
+          siteConfig.DefaultUserTags && siteConfig.DefaultUserTags.length > 0
+            ? siteConfig.DefaultUserTags
+            : undefined;
 
         await db.createUserV2(username, password, 'user', defaultTags);
 
@@ -159,7 +157,10 @@ export async function POST(req: NextRequest) {
         if (err.message === '用户已存在') {
           return NextResponse.json({ error: '用户名已存在' }, { status: 409 });
         }
-        return NextResponse.json({ error: '注册失败，请稍后重试' }, { status: 500 });
+        return NextResponse.json(
+          { error: '注册失败，请稍后重试' },
+          { status: 500 },
+        );
       }
     } finally {
       // 释放锁

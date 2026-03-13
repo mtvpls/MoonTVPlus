@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     if (!tmdbApiKey) {
       return NextResponse.json(
         { error: 'TMDB API Key 未配置' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -42,19 +42,19 @@ export async function GET(request: NextRequest) {
       tmdbApiKey,
       query,
       tmdbProxy,
-      tmdbReverseProxy
+      tmdbReverseProxy,
     );
 
     if (response.code !== 200) {
       return NextResponse.json(
         { error: 'TMDB 搜索失败', code: response.code },
-        { status: response.code }
+        { status: response.code },
       );
     }
 
     // 过滤出电影和电视剧
     const validResults = response.results.filter(
-      (item: any) => item.media_type === 'movie' || item.media_type === 'tv'
+      (item: any) => item.media_type === 'movie' || item.media_type === 'tv',
     );
 
     return NextResponse.json({
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     console.error('TMDB搜索失败:', error);
     return NextResponse.json(
       { error: '搜索失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

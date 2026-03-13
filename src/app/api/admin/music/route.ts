@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       {
         error: '不支持本地存储进行管理员配置',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -55,12 +55,18 @@ export async function POST(request: NextRequest) {
       (TuneHubEnabled !== undefined && typeof TuneHubEnabled !== 'boolean') ||
       (TuneHubBaseUrl !== undefined && typeof TuneHubBaseUrl !== 'string') ||
       (TuneHubApiKey !== undefined && typeof TuneHubApiKey !== 'string') ||
-      (OpenListCacheEnabled !== undefined && typeof OpenListCacheEnabled !== 'boolean') ||
-      (OpenListCacheURL !== undefined && typeof OpenListCacheURL !== 'string') ||
-      (OpenListCacheUsername !== undefined && typeof OpenListCacheUsername !== 'string') ||
-      (OpenListCachePassword !== undefined && typeof OpenListCachePassword !== 'string') ||
-      (OpenListCachePath !== undefined && typeof OpenListCachePath !== 'string') ||
-      (OpenListCacheProxyEnabled !== undefined && typeof OpenListCacheProxyEnabled !== 'boolean')
+      (OpenListCacheEnabled !== undefined &&
+        typeof OpenListCacheEnabled !== 'boolean') ||
+      (OpenListCacheURL !== undefined &&
+        typeof OpenListCacheURL !== 'string') ||
+      (OpenListCacheUsername !== undefined &&
+        typeof OpenListCacheUsername !== 'string') ||
+      (OpenListCachePassword !== undefined &&
+        typeof OpenListCachePassword !== 'string') ||
+      (OpenListCachePath !== undefined &&
+        typeof OpenListCachePath !== 'string') ||
+      (OpenListCacheProxyEnabled !== undefined &&
+        typeof OpenListCacheProxyEnabled !== 'boolean')
     ) {
       return NextResponse.json({ error: '参数格式错误' }, { status: 400 });
     }
@@ -97,7 +103,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store', // 不缓存结果
         },
-      }
+      },
     );
   } catch (error) {
     console.error('更新音乐配置失败:', error);
@@ -106,7 +112,7 @@ export async function POST(request: NextRequest) {
         error: '更新音乐配置失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

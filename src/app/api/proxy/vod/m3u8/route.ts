@@ -1,9 +1,9 @@
 /* eslint-disable no-console,@typescript-eslint/no-explicit-any */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-import { getConfig } from "@/lib/config";
-import { getBaseUrl, resolveUrl } from "@/lib/live";
+import { getConfig } from '@/lib/config';
+import { getBaseUrl, resolveUrl } from '@/lib/live';
 
 export const runtime = 'nodejs';
 
@@ -29,7 +29,10 @@ export async function GET(request: Request) {
   }
 
   if (!videoSource.proxyMode) {
-    return NextResponse.json({ error: 'Proxy mode not enabled for this source' }, { status: 403 });
+    return NextResponse.json(
+      { error: 'Proxy mode not enabled for this source' },
+      { status: 403 },
+    );
   }
 
   let response: Response | null = null;
@@ -43,18 +46,26 @@ export async function GET(request: Request) {
       redirect: 'follow',
       credentials: 'same-origin',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': decodedUrl,
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Referer: decodedUrl,
       },
     });
 
     if (!response.ok) {
-      return NextResponse.json({ error: 'Failed to fetch m3u8' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Failed to fetch m3u8' },
+        { status: 500 },
+      );
     }
 
     const contentType = response.headers.get('Content-Type') || '';
     // rewrite m3u8
-    if (contentType.toLowerCase().includes('mpegurl') || contentType.toLowerCase().includes('octet-stream') || decodedUrl.includes('.m3u8')) {
+    if (
+      contentType.toLowerCase().includes('mpegurl') ||
+      contentType.toLowerCase().includes('octet-stream') ||
+      decodedUrl.includes('.m3u8')
+    ) {
       // 获取最终的响应URL（处理重定向后的URL）
       const finalUrl = response.url;
       const m3u8Content = await response.text();
@@ -64,25 +75,48 @@ export async function GET(request: Request) {
       const baseUrl = getBaseUrl(finalUrl);
 
       // 重写 M3U8 内容
-      const modifiedContent = rewriteM3U8Content(m3u8Content, baseUrl, request, source);
+      const modifiedContent = rewriteM3U8Content(
+        m3u8Content,
+        baseUrl,
+        request,
+        source,
+      );
 
       const headers = new Headers();
-      headers.set('Content-Type', contentType || 'application/vnd.apple.mpegurl');
+      headers.set(
+        'Content-Type',
+        contentType || 'application/vnd.apple.mpegurl',
+      );
       headers.set('Access-Control-Allow-Origin', '*');
       headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      headers.set('Access-Control-Allow-Headers', 'Content-Type, Range, Origin, Accept');
+      headers.set(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Range, Origin, Accept',
+      );
       headers.set('Cache-Control', 'no-cache');
-      headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+      headers.set(
+        'Access-Control-Expose-Headers',
+        'Content-Length, Content-Range',
+      );
       return new Response(modifiedContent, { headers });
     }
     // just proxy
     const headers = new Headers();
-    headers.set('Content-Type', response.headers.get('Content-Type') || 'application/vnd.apple.mpegurl');
+    headers.set(
+      'Content-Type',
+      response.headers.get('Content-Type') || 'application/vnd.apple.mpegurl',
+    );
     headers.set('Access-Control-Allow-Origin', '*');
     headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Range, Origin, Accept');
+    headers.set(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Range, Origin, Accept',
+    );
     headers.set('Cache-Control', 'no-cache');
-    headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+    headers.set(
+      'Access-Control-Expose-Headers',
+      'Content-Length, Content-Range',
+    );
 
     // 直接返回视频流
     return new Response(response.body, {
@@ -90,7 +124,10 @@ export async function GET(request: Request) {
       headers,
     });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch m3u8' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to fetch m3u8' },
+      { status: 500 },
+    );
   } finally {
     // 确保 response 被正确关闭以释放资源
     if (response && !responseUsed) {
@@ -104,7 +141,12 @@ export async function GET(request: Request) {
   }
 }
 
-function rewriteM3U8Content(content: string, baseUrl: string, req: Request, source: string) {
+function rewriteM3U8Content(
+  content: string,
+  baseUrl: string,
+  req: Request,
+  source: string,
+) {
   // 从 referer 头提取协议信息
   const referer = req.headers.get('referer');
   let protocol = 'http';
@@ -168,7 +210,12 @@ function rewriteM3U8Content(content: string, baseUrl: string, req: Request, sour
   return rewrittenLines.join('\n');
 }
 
-function rewriteMapUri(line: string, baseUrl: string, proxyBase: string, source: string) {
+function rewriteMapUri(
+  line: string,
+  baseUrl: string,
+  proxyBase: string,
+  source: string,
+) {
   const uriMatch = line.match(/URI="([^"]+)"/);
   if (uriMatch) {
     const originalUri = uriMatch[1];
@@ -179,7 +226,12 @@ function rewriteMapUri(line: string, baseUrl: string, proxyBase: string, source:
   return line;
 }
 
-function rewriteKeyUri(line: string, baseUrl: string, proxyBase: string, source: string) {
+function rewriteKeyUri(
+  line: string,
+  baseUrl: string,
+  proxyBase: string,
+  source: string,
+) {
   const uriMatch = line.match(/URI="([^"]+)"/);
   if (uriMatch) {
     const originalUri = uriMatch[1];

@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
-import { CURRENT_VERSION } from '@/lib/version'
+import { CURRENT_VERSION } from '@/lib/version';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // 禁用缓存
@@ -17,7 +17,9 @@ export async function GET(request: NextRequest) {
   // 注意：不要暴露 externalServerAuth 到前端，这是敏感凭据
   const watchRoomConfig = {
     enabled: process.env.WATCH_ROOM_ENABLED === 'true',
-    serverType: (process.env.WATCH_ROOM_SERVER_TYPE as 'internal' | 'external') || 'internal',
+    serverType:
+      (process.env.WATCH_ROOM_SERVER_TYPE as 'internal' | 'external') ||
+      'internal',
     externalServerUrl: process.env.WATCH_ROOM_EXTERNAL_SERVER_URL,
     // externalServerAuth 不应该暴露给前端
   };
@@ -29,7 +31,8 @@ export async function GET(request: NextRequest) {
       StorageType: 'localstorage',
       Version: CURRENT_VERSION,
       WatchRoom: watchRoomConfig,
-      EnableOfflineDownload: process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
+      EnableOfflineDownload:
+        process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
     });
   }
 
@@ -40,9 +43,11 @@ export async function GET(request: NextRequest) {
     StorageType: storageType,
     Version: CURRENT_VERSION,
     WatchRoom: watchRoomConfig,
-    EnableOfflineDownload: process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
+    EnableOfflineDownload:
+      process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
     EnableRegistration: config.SiteConfig.EnableRegistration || false,
-    RegistrationRequireTurnstile: config.SiteConfig.RegistrationRequireTurnstile || false,
+    RegistrationRequireTurnstile:
+      config.SiteConfig.RegistrationRequireTurnstile || false,
     LoginRequireTurnstile: config.SiteConfig.LoginRequireTurnstile || false,
     TurnstileSiteKey: config.SiteConfig.TurnstileSiteKey || '',
     EnableOIDCLogin: config.SiteConfig.EnableOIDCLogin || false,

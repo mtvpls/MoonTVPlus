@@ -36,7 +36,11 @@ function findExactMatch(results: any[], originalTitle: string): any | null {
   // 寻找完全匹配的结果
   for (const result of results) {
     const resultTitle = (result.title || result.name || '').toLowerCase();
-    const resultOriginalTitle = (result.original_title || result.original_name || '').toLowerCase();
+    const resultOriginalTitle = (
+      result.original_title ||
+      result.original_name ||
+      ''
+    ).toLowerCase();
 
     if (resultTitle === cleanedTitle || resultOriginalTitle === cleanedTitle) {
       return result;
@@ -54,10 +58,7 @@ export async function GET(request: NextRequest) {
     const cachedId = searchParams.get('cachedId'); // 浏览器缓存的ID
 
     if (!title && !cachedId) {
-      return NextResponse.json(
-        { error: '缺少必要参数' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
     }
 
     const config = await getConfig();
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
     if (!tmdbApiKey) {
       return NextResponse.json(
         { error: 'TMDB API Key 未配置' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -92,7 +93,12 @@ export async function GET(request: NextRequest) {
         mediaType = cached.data.mediaType;
       } else {
         // 搜索TMDB
-        const searchResult = await searchTMDBMulti(tmdbApiKey, cleanedTitle, tmdbProxy, tmdbReverseProxy);
+        const searchResult = await searchTMDBMulti(
+          tmdbApiKey,
+          cleanedTitle,
+          tmdbProxy,
+          tmdbReverseProxy,
+        );
 
         if (searchResult.code !== 200 || !searchResult.results.length) {
           return NextResponse.json(
@@ -102,13 +108,13 @@ export async function GET(request: NextRequest) {
               headers: {
                 'Cache-Control': 'public, max-age=86400', // 浏览器缓存1天
               },
-            }
+            },
           );
         }
 
         // 过滤出电影和电视剧
         const validResults = searchResult.results.filter(
-          (r: any) => r.media_type === 'movie' || r.media_type === 'tv'
+          (r: any) => r.media_type === 'movie' || r.media_type === 'tv',
         );
 
         // 精确匹配
@@ -122,7 +128,7 @@ export async function GET(request: NextRequest) {
               headers: {
                 'Cache-Control': 'public, max-age=86400',
               },
-            }
+            },
           );
         }
 
@@ -147,8 +153,18 @@ export async function GET(request: NextRequest) {
     // 获取推荐
     const recommendationsResult =
       mediaType === 'movie'
-        ? await getTMDBMovieRecommendations(tmdbApiKey, tmdbId, tmdbProxy, tmdbReverseProxy)
-        : await getTMDBTVRecommendations(tmdbApiKey, tmdbId, tmdbProxy, tmdbReverseProxy);
+        ? await getTMDBMovieRecommendations(
+            tmdbApiKey,
+            tmdbId,
+            tmdbProxy,
+            tmdbReverseProxy,
+          )
+        : await getTMDBTVRecommendations(
+            tmdbApiKey,
+            tmdbId,
+            tmdbProxy,
+            tmdbReverseProxy,
+          );
 
     if (recommendationsResult.code !== 200) {
       return NextResponse.json(
@@ -158,7 +174,7 @@ export async function GET(request: NextRequest) {
           headers: {
             'Cache-Control': 'public, max-age=86400',
           },
-        }
+        },
       );
     }
 
@@ -185,13 +201,10 @@ export async function GET(request: NextRequest) {
         headers: {
           'Cache-Control': 'public, max-age=86400', // 浏览器缓存1天
         },
-      }
+      },
     );
   } catch (error) {
     console.error('获取 TMDB 推荐失败:', error);
-    return NextResponse.json(
-      { error: '获取推荐失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '获取推荐失败' }, { status: 500 });
   }
 }

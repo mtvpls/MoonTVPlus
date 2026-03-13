@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     console.error('获取跳过片头片尾配置失败:', error);
     return NextResponse.json(
       { error: '获取跳过片头片尾配置失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     console.error('保存跳过片头片尾配置失败:', error);
     return NextResponse.json(
       { error: '保存跳过片头片尾配置失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -147,7 +147,7 @@ export async function DELETE(request: NextRequest) {
     console.error('删除跳过片头片尾配置失败:', error);
     return NextResponse.json(
       { error: '删除跳过片头片尾配置失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

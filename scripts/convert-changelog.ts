@@ -29,7 +29,9 @@ function parseChangelog(content: string): { versions: OutputVersion[] } {
 
   for (const line of lines) {
     const trimmedLine = line.trim();
-    const versionMatch = trimmedLine.match(/^## \[([\d.]+)\] - (\d{4}-\d{2}-\d{2})$/);
+    const versionMatch = trimmedLine.match(
+      /^## \[([\d.]+)\] - (\d{4}-\d{2}-\d{2})$/,
+    );
 
     if (versionMatch) {
       if (currentVersion) {
@@ -73,7 +75,11 @@ function parseChangelog(content: string): { versions: OutputVersion[] } {
       continue;
     }
 
-    if (trimmedLine && !trimmedLine.startsWith('#') && !trimmedLine.startsWith('###')) {
+    if (
+      trimmedLine &&
+      !trimmedLine.startsWith('#') &&
+      !trimmedLine.startsWith('###')
+    ) {
       currentVersion.content.push(trimmedLine);
     }
   }
@@ -83,7 +89,10 @@ function parseChangelog(content: string): { versions: OutputVersion[] } {
   }
 
   const normalizedVersions = versions.map<OutputVersion>((version) => {
-    const hasCategories = version.added.length > 0 || version.changed.length > 0 || version.fixed.length > 0;
+    const hasCategories =
+      version.added.length > 0 ||
+      version.changed.length > 0 ||
+      version.fixed.length > 0;
     return {
       version: version.version,
       date: version.date,
@@ -96,12 +105,20 @@ function parseChangelog(content: string): { versions: OutputVersion[] } {
   return { versions: normalizedVersions };
 }
 
-function generateTypeScript(changelogData: { versions: OutputVersion[] }): string {
+function generateTypeScript(changelogData: {
+  versions: OutputVersion[];
+}): string {
   const entries = changelogData.versions
     .map((version) => {
-      const addedEntries = version.added.map((entry) => `    ${JSON.stringify(entry)}`).join(',\n');
-      const changedEntries = version.changed.map((entry) => `    ${JSON.stringify(entry)}`).join(',\n');
-      const fixedEntries = version.fixed.map((entry) => `    ${JSON.stringify(entry)}`).join(',\n');
+      const addedEntries = version.added
+        .map((entry) => `    ${JSON.stringify(entry)}`)
+        .join(',\n');
+      const changedEntries = version.changed
+        .map((entry) => `    ${JSON.stringify(entry)}`)
+        .join(',\n');
+      const fixedEntries = version.fixed
+        .map((entry) => `    ${JSON.stringify(entry)}`)
+        .join(',\n');
 
       return `  {
     version: ${JSON.stringify(version.version)},
@@ -156,7 +173,7 @@ function updateVersionTs(version: string): void {
     const content = fs.readFileSync(versionTsPath, 'utf8');
     const updatedContent = content.replace(
       /const CURRENT_VERSION = ['"`][^'"`]+['"`];/,
-      `const CURRENT_VERSION = '${version}';`
+      `const CURRENT_VERSION = '${version}';`,
     );
 
     fs.writeFileSync(versionTsPath, updatedContent, 'utf8');
@@ -210,7 +227,7 @@ function main(): void {
     console.log('📊 版本统计:');
     changelogData.versions.forEach((version) => {
       console.log(
-        `   ${version.version} (${version.date}): +${version.added.length} ~${version.changed.length} !${version.fixed.length}`
+        `   ${version.version} (${version.date}): +${version.added.length} ~${version.changed.length} !${version.fixed.length}`,
       );
     });
 

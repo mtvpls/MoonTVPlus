@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     console.error('获取邮件配置失败:', error);
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -90,28 +90,28 @@ export async function POST(request: NextRequest) {
       if (!testEmail) {
         return NextResponse.json(
           { error: '请提供测试邮箱地址' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
       const emailConfig = config as AdminConfig['EmailConfig'];
       if (!emailConfig || !emailConfig.enabled) {
-        return NextResponse.json(
-          { error: '邮件配置未启用' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: '邮件配置未启用' }, { status: 400 });
       }
 
       try {
         const adminConfig = await getConfig();
         const siteName = adminConfig?.SiteConfig?.SiteName || 'MoonTVPlus';
         await EmailService.sendTestEmail(emailConfig, testEmail, siteName);
-        return NextResponse.json({ success: true, message: '测试邮件发送成功' });
+        return NextResponse.json({
+          success: true,
+          message: '测试邮件发送成功',
+        });
       } catch (error) {
         console.error('发送测试邮件失败:', error);
         return NextResponse.json(
           { error: `发送失败: ${(error as Error).message}` },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -122,24 +122,29 @@ export async function POST(request: NextRequest) {
       if (!emailConfig) {
         return NextResponse.json(
           { error: '邮件配置不能为空' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
       // 验证配置
       if (emailConfig.enabled) {
         if (emailConfig.provider === 'smtp') {
-          if (!emailConfig.smtp?.host || !emailConfig.smtp?.port || !emailConfig.smtp?.user || !emailConfig.smtp?.from) {
+          if (
+            !emailConfig.smtp?.host ||
+            !emailConfig.smtp?.port ||
+            !emailConfig.smtp?.user ||
+            !emailConfig.smtp?.from
+          ) {
             return NextResponse.json(
               { error: 'SMTP配置不完整' },
-              { status: 400 }
+              { status: 400 },
             );
           }
         } else if (emailConfig.provider === 'resend') {
           if (!emailConfig.resend?.apiKey || !emailConfig.resend?.from) {
             return NextResponse.json(
               { error: 'Resend配置不完整' },
-              { status: 400 }
+              { status: 400 },
             );
           }
         }
@@ -150,7 +155,7 @@ export async function POST(request: NextRequest) {
       if (!adminConfig) {
         return NextResponse.json(
           { error: '管理员配置不存在' },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
@@ -176,15 +181,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '邮件配置保存成功' });
     }
 
-    return NextResponse.json(
-      { error: '无效的操作' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: '无效的操作' }, { status: 400 });
   } catch (error) {
     console.error('处理邮件配置失败:', error);
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

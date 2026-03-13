@@ -34,17 +34,21 @@ export async function GET(request: NextRequest) {
     if (!tmdbApiKey) {
       return NextResponse.json(
         { code: 400, message: 'TMDB API Key 未配置' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // 调用TMDB API获取数据
-    const result = await getTMDBUpcomingContent(tmdbApiKey, tmdbProxy, tmdbReverseProxy);
+    const result = await getTMDBUpcomingContent(
+      tmdbApiKey,
+      tmdbProxy,
+      tmdbReverseProxy,
+    );
 
     if (result.code !== 200) {
       return NextResponse.json(
         { code: result.code, message: '获取TMDB数据失败' },
-        { status: result.code === 401 ? 401 : 500 }
+        { status: result.code === 401 ? 401 : 500 },
       );
     }
 
@@ -63,7 +67,7 @@ export async function GET(request: NextRequest) {
     console.error('获取TMDB即将上映数据失败:', error);
     return NextResponse.json(
       { code: 500, message: '服务器内部错误' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

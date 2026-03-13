@@ -27,7 +27,8 @@ export async function GET(request: NextRequest) {
 
     // 过滤出电影和电视剧媒体库
     const filteredViews = views.filter(
-      (view) => view.CollectionType === 'movies' || view.CollectionType === 'tvshows'
+      (view) =>
+        view.CollectionType === 'movies' || view.CollectionType === 'tvshows',
     );
 
     const response = {

@@ -57,7 +57,7 @@ export async function GET() {
           headers: {
             'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
           },
-        }
+        },
       );
     }
 
@@ -141,51 +141,55 @@ export async function GET() {
     }
 
     // 处理视频数据
-    const videos: SearchResult[] = videoListData.list.map((item: ApiSearchItem) => {
-      let episodes: string[] = [];
-      let titles: string[] = [];
+    const videos: SearchResult[] = videoListData.list.map(
+      (item: ApiSearchItem) => {
+        let episodes: string[] = [];
+        let titles: string[] = [];
 
-      // 使用正则表达式从 vod_play_url 提取 m3u8 链接
-      if (item.vod_play_url) {
-        // 先用 $$$ 分割
-        const vod_play_url_array = item.vod_play_url.split('$$$');
-        // 分集之间#分割，标题和播放链接 $ 分割
-        vod_play_url_array.forEach((url: string) => {
-          const matchEpisodes: string[] = [];
-          const matchTitles: string[] = [];
-          const title_url_array = url.split('#');
-          title_url_array.forEach((title_url: string) => {
-            const episode_title_url = title_url.split('$');
-            if (
-              episode_title_url.length === 2 &&
-              episode_title_url[1].endsWith('.m3u8')
-            ) {
-              matchTitles.push(episode_title_url[0]);
-              matchEpisodes.push(episode_title_url[1]);
+        // 使用正则表达式从 vod_play_url 提取 m3u8 链接
+        if (item.vod_play_url) {
+          // 先用 $$$ 分割
+          const vod_play_url_array = item.vod_play_url.split('$$$');
+          // 分集之间#分割，标题和播放链接 $ 分割
+          vod_play_url_array.forEach((url: string) => {
+            const matchEpisodes: string[] = [];
+            const matchTitles: string[] = [];
+            const title_url_array = url.split('#');
+            title_url_array.forEach((title_url: string) => {
+              const episode_title_url = title_url.split('$');
+              if (
+                episode_title_url.length === 2 &&
+                episode_title_url[1].endsWith('.m3u8')
+              ) {
+                matchTitles.push(episode_title_url[0]);
+                matchEpisodes.push(episode_title_url[1]);
+              }
+            });
+            if (matchEpisodes.length > episodes.length) {
+              episodes = matchEpisodes;
+              titles = matchTitles;
             }
           });
-          if (matchEpisodes.length > episodes.length) {
-            episodes = matchEpisodes;
-            titles = matchTitles;
-          }
-        });
-      }
+        }
 
-      return {
-        id: item.vod_id.toString(),
-        title: item.vod_name.trim().replace(/\s+/g, ' '),
-        poster: item.vod_pic,
-        episodes,
-        episodes_titles: titles,
-        source: firstSource.key,
-        source_name: firstSource.name,
-        class: item.vod_class,
-        year: item.vod_year ? item.vod_year.match(/\d{4}/)?.[0] || '' : 'unknown',
-        desc: cleanHtmlTags(item.vod_content || ''),
-        type_name: item.type_name,
-        douban_id: item.vod_douban_id,
-      };
-    });
+        return {
+          id: item.vod_id.toString(),
+          title: item.vod_name.trim().replace(/\s+/g, ' '),
+          poster: item.vod_pic,
+          episodes,
+          episodes_titles: titles,
+          source: firstSource.key,
+          source_name: firstSource.name,
+          class: item.vod_class,
+          year: item.vod_year
+            ? item.vod_year.match(/\d{4}/)?.[0] || ''
+            : 'unknown',
+          desc: cleanHtmlTags(item.vod_content || ''),
+          type_name: item.type_name,
+          douban_id: item.vod_douban_id,
+        };
+      },
+    );
 
     // 过滤掉集数为 0 的结果，并限制返回数量
     const filteredVideos = videos
@@ -211,7 +215,7 @@ export async function GET() {
         headers: {
           'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
         },
-      }
+      },
     );
   } catch (error) {
     console.error('获取热播短剧推荐失败:', error);
@@ -221,7 +225,7 @@ export async function GET() {
         message: '获取热播短剧推荐失败',
         error: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

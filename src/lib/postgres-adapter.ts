@@ -9,7 +9,8 @@
  */
 
 import { sql } from '@vercel/postgres';
-import { DatabaseAdapter, D1PreparedStatement, D1Result } from './d1-adapter';
+
+import { D1PreparedStatement, D1Result, DatabaseAdapter } from './d1-adapter';
 
 /**
  * Vercel Postgres 适配器
@@ -26,7 +27,9 @@ export class PostgresAdapter implements DatabaseAdapter {
   batch(statements: D1PreparedStatement[]): Promise<D1Result[]> {
     // Postgres 使用事务模拟 batch
     return new Promise((resolve, reject) => {
-      Promise.all(statements.map((stmt) => (stmt as PostgresPreparedStatement).execute()))
+      Promise.all(
+        statements.map((stmt) => (stmt as PostgresPreparedStatement).execute()),
+      )
         .then((results) => resolve(results))
         .catch((err) => reject(err));
     });
@@ -34,7 +37,9 @@ export class PostgresAdapter implements DatabaseAdapter {
 
   exec(query: string): void {
     // Vercel Postgres 不支持直接 exec，需要使用 sql 模板
-    throw new Error('exec() is not supported for Vercel Postgres. Use prepare() instead.');
+    throw new Error(
+      'exec() is not supported for Vercel Postgres. Use prepare() instead.',
+    );
   }
 }
 

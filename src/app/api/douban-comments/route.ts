@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     if (!response.ok) {
       return NextResponse.json(
         { error: 'Failed to fetch douban page' },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -137,7 +137,9 @@ export async function GET(request: NextRequest) {
       commentsCount: comments.length,
       start,
       limit,
-      hasMore: parseInt(start) + comments.length < total || (total === 0 && comments.length >= parseInt(limit)),
+      hasMore:
+        parseInt(start) + comments.length < total ||
+        (total === 0 && comments.length >= parseInt(limit)),
     });
 
     return NextResponse.json(
@@ -147,21 +149,22 @@ export async function GET(request: NextRequest) {
         start: parseInt(start),
         limit: parseInt(limit),
         // 如果知道总数，就用总数判断；否则如果获取了完整页，假设还有更多
-        hasMore: total > 0
-          ? parseInt(start) + comments.length < total
-          : comments.length >= parseInt(limit),
+        hasMore:
+          total > 0
+            ? parseInt(start) + comments.length < total
+            : comments.length >= parseInt(limit),
       },
       {
         headers: {
           'Cache-Control': 'public, max-age=600, s-maxage=600',
         },
-      }
+      },
     );
   } catch (error) {
     console.error('Douban comments fetch error:', error);
     return NextResponse.json(
       { error: 'Failed to parse douban comments' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

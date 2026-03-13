@@ -31,7 +31,7 @@ interface ConfigFileStruct {
   }[];
   lives?: {
     [key: string]: LiveCfg;
-  }
+  };
 }
 
 export const API_CONFIG = {
@@ -58,7 +58,6 @@ export const API_CONFIG = {
 let cachedConfig: AdminConfig;
 let configInitPromise: Promise<AdminConfig> | null = null;
 
-
 // 从配置文件补充管理员配置
 export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   let fileConfig: ConfigFileStruct;
@@ -71,7 +70,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   // 合并文件中的源信息
   const apiSitesFromFile = Object.entries(fileConfig.api_site || []);
   const currentApiSites = new Map(
-    (adminConfig.SourceConfig || []).map((s) => [s.key, s])
+    (adminConfig.SourceConfig || []).map((s) => [s.key, s]),
   );
 
   apiSitesFromFile.forEach(([key, site]) => {
@@ -109,7 +108,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   // 覆盖 CustomCategories
   const customCategoriesFromFile = fileConfig.custom_category || [];
   const currentCustomCategories = new Map(
-    (adminConfig.CustomCategories || []).map((c) => [c.query + c.type, c])
+    (adminConfig.CustomCategories || []).map((c) => [c.query + c.type, c]),
   );
 
   customCategoriesFromFile.forEach((category) => {
@@ -133,7 +132,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
 
   // 检查现有 CustomCategories 是否在 fileConfig.custom_category 中，如果不在则标记为 custom
   const customCategoriesFromFileKeys = new Set(
-    customCategoriesFromFile.map((c) => c.query + c.type)
+    customCategoriesFromFile.map((c) => c.query + c.type),
   );
   currentCustomCategories.forEach((category) => {
     if (!customCategoriesFromFileKeys.has(category.query + category.type)) {
@@ -146,7 +145,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
 
   const livesFromFile = Object.entries(fileConfig.lives || []);
   const currentLives = new Map(
-    (adminConfig.LiveConfig || []).map((l) => [l.key, l])
+    (adminConfig.LiveConfig || []).map((l) => [l.key, l]),
   );
   livesFromFile.forEach(([key, site]) => {
     const existingLive = currentLives.get(key);
@@ -184,19 +183,22 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   return adminConfig;
 }
 
-async function getInitConfig(configFile: string, subConfig: {
-  URL: string;
-  AutoUpdate: boolean;
-  LastCheck: string;
-} = {
-    URL: "",
+async function getInitConfig(
+  configFile: string,
+  subConfig: {
+    URL: string;
+    AutoUpdate: boolean;
+    LastCheck: string;
+  } = {
+    URL: '',
     AutoUpdate: false,
-    LastCheck: "",
-  }): Promise<AdminConfig> {
+    LastCheck: '',
+  },
+): Promise<AdminConfig> {
   let cfgFile: ConfigFileStruct;
 
   // 优先从环境变量读取订阅 URL
-  const envSubUrl = process.env.CONFIG_SUBSCRIPTION_URL || "";
+  const envSubUrl = process.env.CONFIG_SUBSCRIPTION_URL || '';
 
   if (envSubUrl) {
     try {
@@ -215,7 +217,7 @@ async function getInitConfig(configFile: string, subConfig: {
   }
 
   // 优先从环境变量读取配置
-  const envConfig = process.env.INIT_CONFIG || "";
+  const envConfig = process.env.INIT_CONFIG || '';
   const configSource = envConfig || configFile;
 
   try {
@@ -238,12 +240,12 @@ async function getInitConfig(configFile: string, subConfig: {
         process.env.NEXT_PUBLIC_DOUBAN_PROXY_TYPE || 'cmliussss-cdn-tencent',
       DoubanProxy: process.env.NEXT_PUBLIC_DOUBAN_PROXY || '',
       DoubanImageProxyType:
-        process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE || 'cmliussss-cdn-tencent',
+        process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE ||
+        'cmliussss-cdn-tencent',
       DoubanImageProxy: process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY || '',
       DisableYellowFilter:
         process.env.NEXT_PUBLIC_DISABLE_YELLOW_FILTER === 'true',
-      FluidSearch:
-        process.env.NEXT_PUBLIC_FLUID_SEARCH !== 'false',
+      FluidSearch: process.env.NEXT_PUBLIC_FLUID_SEARCH !== 'false',
       // 弹幕配置
       DanmakuApiBase: process.env.DANMAKU_API_BASE || 'http://localhost:9321',
       DanmakuApiToken: process.env.DANMAKU_API_TOKEN || '87654321',
@@ -332,7 +334,7 @@ export async function getConfig(): Promise<AdminConfig> {
     // localStorage 模式下直接从环境变量初始化
     if (storageType === 'localstorage') {
       console.log('localStorage 模式：从环境变量初始化配置');
-      const adminConfig = await getInitConfig("");
+      const adminConfig = await getInitConfig('');
       cachedConfig = configSelfCheck(adminConfig);
       configInitPromise = null;
       return cachedConfig;
@@ -353,19 +355,20 @@ export async function getConfig(): Promise<AdminConfig> {
       if (dbReadFailed) {
         // 数据库读取失败，使用默认配置但不保存，避免覆盖数据库
         console.warn('数据库读取失败，使用临时默认配置（不会保存到数据库）');
-        adminConfig = await getInitConfig("");
+        adminConfig = await getInitConfig('');
       } else {
         // 数据库中确实没有配置，首次初始化并保存
         console.log('首次初始化配置');
-        adminConfig = await getInitConfig("");
+        adminConfig = await getInitConfig('');
         await db.saveAdminConfig(adminConfig);
       }
     }
 
     // 检查是否有旧格式Emby配置需要迁移
-    const needsEmbyMigration = adminConfig.EmbyConfig &&
-                                adminConfig.EmbyConfig.ServerURL &&
-                                !adminConfig.EmbyConfig.Sources;
+    const needsEmbyMigration =
+      adminConfig.EmbyConfig &&
+      adminConfig.EmbyConfig.ServerURL &&
+      !adminConfig.EmbyConfig.Sources;
 
     adminConfig = configSelfCheck(adminConfig);
     cachedConfig = adminConfig;
@@ -383,7 +386,7 @@ export async function getConfig(): Promise<AdminConfig> {
     // 自动迁移用户（如果配置中有用户且V2存储支持）
     // 过滤掉站长后检查是否有需要迁移的用户
     const nonOwnerUsers = adminConfig.UserConfig.Users.filter(
-      (u) => u.username !== process.env.USERNAME
+      (u) => u.username !== process.env.USERNAME,
     );
     if (!dbReadFailed && nonOwnerUsers.length > 0) {
       try {
@@ -452,13 +455,19 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (!adminConfig.UserConfig) {
     adminConfig.UserConfig = { Users: [] };
   }
-  if (!adminConfig.UserConfig.Users || !Array.isArray(adminConfig.UserConfig.Users)) {
+  if (
+    !adminConfig.UserConfig.Users ||
+    !Array.isArray(adminConfig.UserConfig.Users)
+  ) {
     adminConfig.UserConfig.Users = [];
   }
   if (!adminConfig.SourceConfig || !Array.isArray(adminConfig.SourceConfig)) {
     adminConfig.SourceConfig = [];
   }
-  if (!adminConfig.CustomCategories || !Array.isArray(adminConfig.CustomCategories)) {
+  if (
+    !adminConfig.CustomCategories ||
+    !Array.isArray(adminConfig.CustomCategories)
+  ) {
     adminConfig.CustomCategories = [];
   }
   if (!adminConfig.LiveConfig || !Array.isArray(adminConfig.LiveConfig)) {
@@ -468,11 +477,13 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   // 用户信息已迁移到新版数据库
   // 这里只保留站长用户用于兼容性，其他用户从数据库读取
   const ownerUser = process.env.USERNAME;
-  adminConfig.UserConfig.Users = [{
-    username: ownerUser!,
-    role: 'owner',
-    banned: false,
-  }];
+  adminConfig.UserConfig.Users = [
+    {
+      username: ownerUser!,
+      role: 'owner',
+      banned: false,
+    },
+  ];
 
   // 采集源去重
   const seenSourceKeys = new Set<string>();
@@ -486,13 +497,15 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
 
   // 自定义分类去重
   const seenCustomCategoryKeys = new Set<string>();
-  adminConfig.CustomCategories = adminConfig.CustomCategories.filter((category) => {
-    if (seenCustomCategoryKeys.has(category.query + category.type)) {
-      return false;
-    }
-    seenCustomCategoryKeys.add(category.query + category.type);
-    return true;
-  });
+  adminConfig.CustomCategories = adminConfig.CustomCategories.filter(
+    (category) => {
+      if (seenCustomCategoryKeys.has(category.query + category.type)) {
+        return false;
+      }
+      seenCustomCategoryKeys.add(category.query + category.type);
+      return true;
+    },
+  );
 
   // 直播源去重
   const seenLiveKeys = new Set<string>();
@@ -511,34 +524,38 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       console.log('[Config] 检测到旧格式Emby配置，自动迁移到新格式');
       const oldConfig = adminConfig.EmbyConfig;
       adminConfig.EmbyConfig = {
-        Sources: [{
-          key: 'default',
-          name: 'Emby',
-          enabled: oldConfig.Enabled ?? false,
-          ServerURL: oldConfig.ServerURL || '',
-          ApiKey: oldConfig.ApiKey,
-          Username: oldConfig.Username,
-          Password: oldConfig.Password,
-          UserId: oldConfig.UserId,
-          AuthToken: oldConfig.AuthToken,
-          Libraries: oldConfig.Libraries,
-          LastSyncTime: oldConfig.LastSyncTime,
-          ItemCount: oldConfig.ItemCount,
-          isDefault: true,
-        }],
+        Sources: [
+          {
+            key: 'default',
+            name: 'Emby',
+            enabled: oldConfig.Enabled ?? false,
+            ServerURL: oldConfig.ServerURL || '',
+            ApiKey: oldConfig.ApiKey,
+            Username: oldConfig.Username,
+            Password: oldConfig.Password,
+            UserId: oldConfig.UserId,
+            AuthToken: oldConfig.AuthToken,
+            Libraries: oldConfig.Libraries,
+            LastSyncTime: oldConfig.LastSyncTime,
+            ItemCount: oldConfig.ItemCount,
+            isDefault: true,
+          },
+        ],
       };
     }
 
     // Emby源去重
     if (adminConfig.EmbyConfig?.Sources) {
       const seenEmbyKeys = new Set<string>();
-      adminConfig.EmbyConfig.Sources = adminConfig.EmbyConfig.Sources.filter((source) => {
-        if (seenEmbyKeys.has(source.key)) {
-          return false;
-        }
-        seenEmbyKeys.add(source.key);
-        return true;
-      });
+      adminConfig.EmbyConfig.Sources = adminConfig.EmbyConfig.Sources.filter(
+        (source) => {
+          if (seenEmbyKeys.has(source.key)) {
+            return false;
+          }
+          seenEmbyKeys.add(source.key);
+          return true;
+        },
+      );
     }
   }
 
@@ -570,7 +587,10 @@ export async function resetConfig() {
   if (!originConfig) {
     originConfig = {} as AdminConfig;
   }
-  const adminConfig = await getInitConfig(originConfig.ConfigFile, originConfig.ConfigSubscribtion);
+  const adminConfig = await getInitConfig(
+    originConfig.ConfigFile,
+    originConfig.ConfigSubscribtion,
+  );
   cachedConfig = adminConfig;
   await db.saveAdminConfig(adminConfig);
 
@@ -605,13 +625,15 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
   // 优先根据用户自己的 enabledApis 配置查找
   if (userInfoV2.enabledApis && userInfoV2.enabledApis.length > 0) {
     const userApiSitesSet = new Set(userInfoV2.enabledApis);
-    return allApiSites.filter((s) => userApiSitesSet.has(s.key)).map((s) => ({
-      key: s.key,
-      name: s.name,
-      api: s.api,
-      detail: s.detail,
-      proxyMode: s.proxyMode,
-    }));
+    return allApiSites
+      .filter((s) => userApiSitesSet.has(s.key))
+      .map((s) => ({
+        key: s.key,
+        name: s.name,
+        api: s.api,
+        detail: s.detail,
+        proxyMode: s.proxyMode,
+      }));
   }
 
   // 如果没有 enabledApis 配置，则根据 tags 查找
@@ -619,21 +641,25 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
     const enabledApisFromTags = new Set<string>();
 
     // 遍历用户的所有 tags，收集对应的 enabledApis
-    userInfoV2.tags.forEach(tagName => {
-      const tagConfig = config.UserConfig.Tags?.find(t => t.name === tagName);
+    userInfoV2.tags.forEach((tagName) => {
+      const tagConfig = config.UserConfig.Tags?.find((t) => t.name === tagName);
       if (tagConfig && tagConfig.enabledApis) {
-        tagConfig.enabledApis.forEach(apiKey => enabledApisFromTags.add(apiKey));
+        tagConfig.enabledApis.forEach((apiKey) =>
+          enabledApisFromTags.add(apiKey),
+        );
       }
     });
 
     if (enabledApisFromTags.size > 0) {
-      return allApiSites.filter((s) => enabledApisFromTags.has(s.key)).map((s) => ({
-        key: s.key,
-        name: s.name,
-        api: s.api,
-        detail: s.detail,
-        proxyMode: s.proxyMode,
-      }));
+      return allApiSites
+        .filter((s) => enabledApisFromTags.has(s.key))
+        .map((s) => ({
+          key: s.key,
+          name: s.name,
+          api: s.api,
+          detail: s.detail,
+          proxyMode: s.proxyMode,
+        }));
     }
   }
 

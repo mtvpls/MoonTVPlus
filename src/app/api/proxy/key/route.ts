@@ -1,8 +1,8 @@
 /* eslint-disable no-console,@typescript-eslint/no-explicit-any */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-import { getConfig } from "@/lib/config";
+import { getConfig } from '@/lib/config';
 
 export const runtime = 'nodejs';
 
@@ -30,7 +30,10 @@ export async function GET(request: Request) {
       },
     });
     if (!response.ok) {
-      return NextResponse.json({ error: 'Failed to fetch key' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Failed to fetch key' },
+        { status: 500 },
+      );
     }
     const keyData = await response.arrayBuffer();
     return new Response(keyData, {
@@ -38,7 +41,7 @@ export async function GET(request: Request) {
         'Content-Type': 'application/octet-stream',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Cache-Control': 'public, max-age=3600'
+        'Cache-Control': 'public, max-age=3600',
       },
     });
   } catch (error) {

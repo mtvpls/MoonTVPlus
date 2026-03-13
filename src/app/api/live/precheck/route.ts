@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      return NextResponse.json({ error: 'Failed to fetch', message: response.statusText }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Failed to fetch', message: response.statusText },
+        { status: 500 },
+      );
     }
 
     const contentType = response.headers.get('Content-Type');
@@ -49,6 +52,9 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json({ success: true, type: 'm3u8' }, { status: 200 });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch', message: error }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to fetch', message: error },
+      { status: 500 },
+    );
   }
 }

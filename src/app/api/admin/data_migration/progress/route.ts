@@ -36,7 +36,10 @@ export async function GET(req: NextRequest) {
     start(controller) {
       const sendProgress = () => {
         try {
-          const progress = getProgress(username, operation as 'export' | 'import');
+          const progress = getProgress(
+            username,
+            operation as 'export' | 'import',
+          );
           if (progress) {
             const data = JSON.stringify(progress);
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
@@ -75,7 +78,7 @@ export async function GET(req: NextRequest) {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     },
   });
 }

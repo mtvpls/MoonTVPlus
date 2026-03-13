@@ -23,7 +23,12 @@ export async function GET() {
     const bannerDataSource = config.SiteConfig?.BannerDataSource || 'Douban';
 
     // 根据数据源选择对应的缓存
-    const cache = bannerDataSource === 'TX' ? txCache : bannerDataSource === 'Douban' ? doubanCache : tmdbCache;
+    const cache =
+      bannerDataSource === 'TX'
+        ? txCache
+        : bannerDataSource === 'Douban'
+          ? doubanCache
+          : tmdbCache;
 
     // 检查缓存
     if (cache && Date.now() - cache.timestamp < CACHE_DURATION) {
@@ -62,7 +67,7 @@ export async function GET() {
       if (!apiKey) {
         return NextResponse.json(
           { code: 400, message: 'TMDB API Key 未配置' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -73,9 +78,15 @@ export async function GET() {
       if (result.code === 200 && result.list) {
         const itemsWithVideos = await Promise.all(
           result.list.map(async (item: any) => {
-            const videoKey = await getTMDBVideos(apiKey, item.media_type, item.id, proxy, reverseProxy);
+            const videoKey = await getTMDBVideos(
+              apiKey,
+              item.media_type,
+              item.id,
+              proxy,
+              reverseProxy,
+            );
             return { ...item, video_key: videoKey };
-          })
+          }),
         );
         result.list = itemsWithVideos;
       }
@@ -94,7 +105,7 @@ export async function GET() {
     console.error('获取热门内容失败:', error);
     return NextResponse.json(
       { code: 500, message: '获取热门内容失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -105,7 +116,8 @@ export async function GET() {
 async function getTXBannerContent(): Promise<{ code: number; list: any[] }> {
   try {
     // TX API 配置
-    const txApiUrl = 'https://pbaccess.video.qq.com/trpc.vector_layout.page_view.PageService/getPage?video_appid=3000010&vversion_platform=2&vdevice_guid=a458b2024f8d6f14';
+    const txApiUrl =
+      'https://pbaccess.video.qq.com/trpc.vector_layout.page_view.PageService/getPage?video_appid=3000010&vversion_platform=2&vdevice_guid=a458b2024f8d6f14';
     const requestBody = {
       page_params: {
         page_type: 'channel',
@@ -115,8 +127,10 @@ async function getTXBannerContent(): Promise<{ code: number; list: any[] }> {
         vl_to_mvl: '',
         free_watch_trans_info: '{"ad_frequency_control_time_list":{}}',
         ad_exp_ids: '',
-        ams_cookies: 'lv_play_index=33; o_minduid=PBUiqKSklDHZsTs2JqmXhTsczQfz5uzY; appuser=CC19AC2067F39B71',
-        ad_trans_data: '{"ad_request_id":"uglfjd6-26n6yw4-gs9tlvy-k19l366","game_sessions":[]}',
+        ams_cookies:
+          'lv_play_index=33; o_minduid=PBUiqKSklDHZsTs2JqmXhTsczQfz5uzY; appuser=CC19AC2067F39B71',
+        ad_trans_data:
+          '{"ad_request_id":"uglfjd6-26n6yw4-gs9tlvy-k19l366","game_sessions":[]}',
         skip_privacy_types: '0',
         support_click_scan: '1',
       },
@@ -148,7 +162,7 @@ async function getTXBannerContent(): Promise<{ code: number; list: any[] }> {
       body: JSON.stringify(requestBody),
       signal: AbortSignal.timeout(15000),
     });
-	
+
     if (!response.ok) {
       console.error('TX API 请求失败:', response.status, response.statusText);
       return { code: response.status, list: [] };
@@ -180,7 +194,9 @@ function parseTXBannerData(data: any): any[] {
     }
 
     // 找到所有类型为 pc_shelves 的卡片
-    const pcShelvesCards = cardList.filter((card: any) => card.type === 'pc_shelves');
+    const pcShelvesCards = cardList.filter(
+      (card: any) => card.type === 'pc_shelves',
+    );
     if (pcShelvesCards.length === 0) {
       return [];
     }
@@ -194,17 +210,18 @@ function parseTXBannerData(data: any): any[] {
         continue;
       }
 
-    // 转换为统一格式
-    const cardsWithParams = cards.filter((card: any) => card.params);
+      // 转换为统一格式
+      const cardsWithParams = cards.filter((card: any) => card.params);
 
-    const mappedItems = cardsWithParams.map((card: any, index: number) => {
+      const mappedItems = cardsWithParams.map((card: any, index: number) => {
         const params = card.params;
 
         // 获取标题（优先使用title）
         const title = params.title || '';
 
         // 获取子标题（优先使用priority_sub_title，其次rec_normal_reason）
-        const subtitle = params.priority_sub_title || params.rec_normal_reason || '';
+        const subtitle =
+          params.priority_sub_title || params.rec_normal_reason || '';
 
         // 获取标签（用"|"分割）
         const topicLabel = params.topic_label || '';
@@ -252,10 +269,14 @@ function parseTXBannerData(data: any): any[] {
 /**
  * 获取豆瓣轮播图内容
  */
-async function getDoubanBannerContent(): Promise<{ code: number; list: any[] }> {
+async function getDoubanBannerContent(): Promise<{
+  code: number;
+  list: any[];
+}> {
   try {
     // 获取豆瓣热门电影
-    const hotMoviesUrl = 'https://m.douban.com/rexxar/api/v2/subject/recent_hot/movie?start=0&limit=10&category=热门&type=全部';
+    const hotMoviesUrl =
+      'https://m.douban.com/rexxar/api/v2/subject/recent_hot/movie?start=0&limit=10&category=热门&type=全部';
 
     interface DoubanHotMovie {
       id: string;
@@ -274,7 +295,8 @@ async function getDoubanBannerContent(): Promise<{ code: number; list: any[] }> 
       items: DoubanHotMovie[];
     }
 
-    const hotMoviesData = await fetchDoubanData<DoubanHotMoviesResponse>(hotMoviesUrl);
+    const hotMoviesData =
+      await fetchDoubanData<DoubanHotMoviesResponse>(hotMoviesUrl);
 
     if (!hotMoviesData.items || hotMoviesData.items.length === 0) {
       return { code: 200, list: [] };
@@ -310,22 +332,24 @@ async function getDoubanBannerContent(): Promise<{ code: number; list: any[] }> 
           const detail = await fetchDoubanData<DoubanDetailResponse>(detailUrl);
 
           // 获取横屏图片
-          const backdropPath = detail.cover_url || movie.pic?.large || movie.pic?.normal || '';
+          const backdropPath =
+            detail.cover_url || movie.pic?.large || movie.pic?.normal || '';
 
           // 提取年份
-          const year = detail.year || movie.card_subtitle?.match(/(\d{4})/)?.[1] || '';
+          const year =
+            detail.year || movie.card_subtitle?.match(/(\d{4})/)?.[1] || '';
 
           // 从card_subtitle提取标签（只读取第二个部分，通过空格分割）
           let tags: string[] = [];
           if (movie.card_subtitle) {
-            const parts = movie.card_subtitle.split('/').map(s => s.trim());
+            const parts = movie.card_subtitle.split('/').map((s) => s.trim());
             // 过滤掉年份（纯数字）和空字符串
-            const filteredParts = parts.filter(part =>
-              part && !/^\d{4}$/.test(part)
+            const filteredParts = parts.filter(
+              (part) => part && !/^\d{4}$/.test(part),
             );
             // 取第二个部分（类型），通过空格分割
             if (filteredParts.length >= 2) {
-              tags = filteredParts[1].split(/\s+/).filter(t => t);
+              tags = filteredParts[1].split(/\s+/).filter((t) => t);
             }
           }
 
@@ -348,14 +372,14 @@ async function getDoubanBannerContent(): Promise<{ code: number; list: any[] }> 
           // 从card_subtitle提取标签（只读取第二个部分，通过空格分割）
           let tags: string[] = [];
           if (movie.card_subtitle) {
-            const parts = movie.card_subtitle.split('/').map(s => s.trim());
+            const parts = movie.card_subtitle.split('/').map((s) => s.trim());
             // 过滤掉年份（纯数字）和空字符串
-            const filteredParts = parts.filter(part =>
-              part && !/^\d{4}$/.test(part)
+            const filteredParts = parts.filter(
+              (part) => part && !/^\d{4}$/.test(part),
             );
             // 取第二个部分（类型），通过空格分割
             if (filteredParts.length >= 2) {
-              tags = filteredParts[1].split(/\s+/).filter(t => t);
+              tags = filteredParts[1].split(/\s+/).filter((t) => t);
             }
           }
 
@@ -374,11 +398,11 @@ async function getDoubanBannerContent(): Promise<{ code: number; list: any[] }> 
             video_key: null,
           };
         }
-      })
+      }),
     );
 
     // 过滤掉没有图片的项目
-    const validBannerItems = bannerItems.filter(item => item.backdrop_path);
+    const validBannerItems = bannerItems.filter((item) => item.backdrop_path);
 
     return {
       code: 200,

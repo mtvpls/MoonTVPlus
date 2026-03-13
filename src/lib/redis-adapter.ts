@@ -49,7 +49,11 @@ export class StandardRedisAdapter implements RedisAdapter {
   constructor(private client: RedisClientType) {}
 
   // Hash 操作
-  async hSet(key: string, fieldOrData: string | Record<string, string>, value?: string): Promise<number> {
+  async hSet(
+    key: string,
+    fieldOrData: string | Record<string, string>,
+    value?: string,
+  ): Promise<number> {
     if (typeof fieldOrData === 'string') {
       return this.client.hSet(key, fieldOrData, value!);
     } else {
@@ -128,7 +132,10 @@ export class StandardRedisAdapter implements RedisAdapter {
   }
 
   // Sorted Set 操作
-  async zAdd(key: string, member: { score: number; value: string }): Promise<number> {
+  async zAdd(
+    key: string,
+    member: { score: number; value: string },
+  ): Promise<number> {
     return this.client.zAdd(key, member);
   }
 
@@ -153,7 +160,11 @@ export class UpstashRedisAdapter implements RedisAdapter {
   constructor(private client: Redis) {}
 
   // Hash 操作
-  async hSet(key: string, fieldOrData: string | Record<string, string>, value?: string): Promise<number> {
+  async hSet(
+    key: string,
+    fieldOrData: string | Record<string, string>,
+    value?: string,
+  ): Promise<number> {
     if (typeof fieldOrData === 'string') {
       // Upstash 会自动序列化，但我们传入的已经是字符串，所以直接存储
       return this.client.hset(key, { [fieldOrData]: value! });
@@ -223,7 +234,7 @@ export class UpstashRedisAdapter implements RedisAdapter {
 
   async mGet(keys: string[]): Promise<(string | null)[]> {
     const values = await this.client.mget(...keys);
-    return values.map(v => {
+    return values.map((v) => {
       if (v === null || v === undefined) return null;
       if (typeof v === 'string') return v;
       if (typeof v === 'object') return JSON.stringify(v);
@@ -238,7 +249,7 @@ export class UpstashRedisAdapter implements RedisAdapter {
 
   async lRange(key: string, start: number, stop: number): Promise<string[]> {
     const values = await this.client.lrange(key, start, stop);
-    return values.map(v => {
+    return values.map((v) => {
       if (typeof v === 'string') return v;
       if (typeof v === 'object') return JSON.stringify(v);
       return String(v);
@@ -261,7 +272,7 @@ export class UpstashRedisAdapter implements RedisAdapter {
 
   async sMembers(key: string): Promise<string[]> {
     const members = await this.client.smembers(key);
-    return members.map(m => {
+    return members.map((m) => {
       if (typeof m === 'string') return m;
       if (typeof m === 'object') return JSON.stringify(m);
       return String(m);
@@ -273,14 +284,20 @@ export class UpstashRedisAdapter implements RedisAdapter {
   }
 
   // Sorted Set 操作
-  async zAdd(key: string, member: { score: number; value: string }): Promise<number> {
-    const result = await this.client.zadd(key, { score: member.score, member: member.value });
+  async zAdd(
+    key: string,
+    member: { score: number; value: string },
+  ): Promise<number> {
+    const result = await this.client.zadd(key, {
+      score: member.score,
+      member: member.value,
+    });
     return result || 0;
   }
 
   async zRange(key: string, start: number, stop: number): Promise<string[]> {
     const values = await this.client.zrange(key, start, stop);
-    return values.map(v => {
+    return values.map((v) => {
       if (typeof v === 'string') return v;
       if (typeof v === 'object') return JSON.stringify(v);
       return String(v);

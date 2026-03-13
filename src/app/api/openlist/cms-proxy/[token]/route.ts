@@ -13,7 +13,7 @@ export const runtime = 'nodejs';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: { token: string } },
 ) {
   const { searchParams } = new URL(request.url);
   const ac = searchParams.get('ac');
@@ -24,7 +24,7 @@ export async function GET(
   if (ac !== 'videolist' && ac !== 'list' && ac !== 'detail') {
     return NextResponse.json(
       { code: 400, msg: '不支持的操作' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -61,7 +61,7 @@ export async function GET(
         total: 0,
         list: [],
       },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
@@ -91,7 +91,8 @@ export async function GET(
     const rootPath = openListConfig.RootPath || '/';
 
     // 读取元数据
-    const { getCachedMetaInfo, setCachedMetaInfo } = await import('@/lib/openlist-cache');
+    const { getCachedMetaInfo, setCachedMetaInfo } =
+      await import('@/lib/openlist-cache');
     const { db } = await import('@/lib/db');
 
     let metaInfo = getCachedMetaInfo();
@@ -106,7 +107,10 @@ export async function GET(
           }
         }
       } catch (error) {
-        console.error('[OpenList CMS Proxy] 从数据库读取 metainfo 失败:', error);
+        console.error(
+          '[OpenList CMS Proxy] 从数据库读取 metainfo 失败:',
+          error,
+        );
       }
     }
 
@@ -126,7 +130,14 @@ export async function GET(
     if (wd) {
       // 如果是 detail 模式且有搜索词，返回第一个匹配结果的详情
       if (ac === 'detail') {
-        return await handleDetailBySearch(metaInfo, wd, openListConfig, rootPath, requestToken, request);
+        return await handleDetailBySearch(
+          metaInfo,
+          wd,
+          openListConfig,
+          rootPath,
+          requestToken,
+          request,
+        );
       }
       return await handleSearch(metaInfo, wd, request);
     }
@@ -144,7 +155,14 @@ export async function GET(
           list: [],
         });
       }
-      return await handleDetail(metaInfo, ids, openListConfig, rootPath, requestToken, request);
+      return await handleDetail(
+        metaInfo,
+        ids,
+        openListConfig,
+        rootPath,
+        requestToken,
+        request,
+      );
     }
 
     // 列表模式（返回所有）
@@ -161,7 +179,7 @@ export async function GET(
         total: 0,
         list: [],
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -169,7 +187,11 @@ export async function GET(
 /**
  * 处理搜索请求
  */
-async function handleSearch(metaInfo: any, query: string, request: NextRequest) {
+async function handleSearch(
+  metaInfo: any,
+  query: string,
+  request: NextRequest,
+) {
   const { getTMDBImageUrl } = await import('@/lib/tmdb.search');
 
   const lowerQuery = query.toLowerCase();
@@ -213,16 +235,18 @@ async function handleDetailBySearch(
   openListConfig: any,
   rootPath: string,
   token: string,
-  request: NextRequest
+  request: NextRequest,
 ) {
   const lowerQuery = query.toLowerCase();
 
   // 搜索匹配的第一个文件夹
-  const matchedEntry = Object.entries(metaInfo.folders).find(([folderName, info]: [string, any]) => {
-    const matchFolder = folderName.toLowerCase().includes(lowerQuery);
-    const matchTitle = info.title.toLowerCase().includes(lowerQuery);
-    return matchFolder || matchTitle;
-  });
+  const matchedEntry = Object.entries(metaInfo.folders).find(
+    ([folderName, info]: [string, any]) => {
+      const matchFolder = folderName.toLowerCase().includes(lowerQuery);
+      const matchTitle = info.title.toLowerCase().includes(lowerQuery);
+      return matchFolder || matchTitle;
+    },
+  );
 
   if (!matchedEntry) {
     return NextResponse.json({
@@ -238,7 +262,14 @@ async function handleDetailBySearch(
 
   // 使用找到的 folderKey 调用详情处理函数
   const [folderKey] = matchedEntry;
-  return await handleDetail(metaInfo, folderKey, openListConfig, rootPath, token, request);
+  return await handleDetail(
+    metaInfo,
+    folderKey,
+    openListConfig,
+    rootPath,
+    token,
+    request,
+  );
 }
 
 /**
@@ -250,7 +281,7 @@ async function handleDetail(
   openListConfig: any,
   rootPath: string,
   token: string,
-  request: NextRequest
+  request: NextRequest,
 ) {
   const { getTMDBImageUrl } = await import('@/lib/tmdb.search');
 
@@ -274,13 +305,14 @@ async function handleDetail(
 
   // 调用 OpenList 客户端获取视频文件列表
   const { OpenListClient } = await import('@/lib/openlist.client');
-  const { getCachedVideoInfo, setCachedVideoInfo } = await import('@/lib/openlist-cache');
+  const { getCachedVideoInfo, setCachedVideoInfo } =
+    await import('@/lib/openlist-cache');
   const { parseVideoFileName } = await import('@/lib/video-parser');
 
   const client = new OpenListClient(
     openListConfig.URL,
     openListConfig.Username,
-    openListConfig.Password
+    openListConfig.Password,
   );
 
   let videoInfo = getCachedVideoInfo(folderPath);
@@ -292,7 +324,11 @@ async function handleDetail(
   let total = 0;
 
   while (true) {
-    const listResponse = await client.listDirectory(folderPath, currentPage, pageSize);
+    const listResponse = await client.listDirectory(
+      folderPath,
+      currentPage,
+      pageSize,
+    );
 
     if (listResponse.code !== 200) {
       return NextResponse.json({
@@ -316,10 +352,29 @@ async function handleDetail(
     currentPage++;
   }
 
-  const videoExtensions = ['.mp4', '.mkv', '.avi', '.m3u8', '.flv', '.ts', '.mov', '.wmv', '.webm', '.rmvb', '.rm', '.mpg', '.mpeg', '.3gp', '.f4v', '.m4v', '.vob'];
+  const videoExtensions = [
+    '.mp4',
+    '.mkv',
+    '.avi',
+    '.m3u8',
+    '.flv',
+    '.ts',
+    '.mov',
+    '.wmv',
+    '.webm',
+    '.rmvb',
+    '.rm',
+    '.mpg',
+    '.mpeg',
+    '.3gp',
+    '.f4v',
+    '.m4v',
+    '.vob',
+  ];
   const videoFiles = allFiles.filter((item) => {
-    if (item.is_dir || item.name.startsWith('.') || item.name.endsWith('.json')) return false;
-    return videoExtensions.some(ext => item.name.toLowerCase().endsWith(ext));
+    if (item.is_dir || item.name.startsWith('.') || item.name.endsWith('.json'))
+      return false;
+    return videoExtensions.some((ext) => item.name.toLowerCase().endsWith(ext));
   });
 
   if (!videoInfo) {
@@ -329,7 +384,7 @@ async function handleDetail(
       const file = videoFiles[i];
       const parsed = parseVideoFileName(file.name);
       videoInfo.episodes[file.name] = {
-        episode: parsed.episode || (i + 1),
+        episode: parsed.episode || i + 1,
         season: parsed.season,
         title: parsed.title,
         parsed_from: 'filename',
@@ -341,9 +396,13 @@ async function handleDetail(
 
   // 构建播放链接
   // 获取当前请求的 baseUrl
-  const host = request.headers.get('host') || request.headers.get('x-forwarded-host');
-  const proto = request.headers.get('x-forwarded-proto') ||
-    (host?.includes('localhost') || host?.includes('127.0.0.1') ? 'http' : 'https');
+  const host =
+    request.headers.get('host') || request.headers.get('x-forwarded-host');
+  const proto =
+    request.headers.get('x-forwarded-proto') ||
+    (host?.includes('localhost') || host?.includes('127.0.0.1')
+      ? 'http'
+      : 'https');
   const baseUrl = process.env.SITE_BASE || `${proto}://${host}`;
 
   const episodes = videoFiles
@@ -351,13 +410,26 @@ async function handleDetail(
       const parsed = parseVideoFileName(file.name);
       let episodeInfo;
       if (parsed.episode) {
-        episodeInfo = { episode: parsed.episode, season: parsed.season, title: parsed.title, parsed_from: 'filename', isOVA: parsed.isOVA };
+        episodeInfo = {
+          episode: parsed.episode,
+          season: parsed.season,
+          title: parsed.title,
+          parsed_from: 'filename',
+          isOVA: parsed.isOVA,
+        };
       } else {
-        episodeInfo = videoInfo!.episodes[file.name] || { episode: index + 1, season: undefined, title: undefined, parsed_from: 'filename' };
+        episodeInfo = videoInfo!.episodes[file.name] || {
+          episode: index + 1,
+          season: undefined,
+          title: undefined,
+          parsed_from: 'filename',
+        };
       }
       let displayTitle = episodeInfo.title;
       if (!displayTitle && episodeInfo.episode) {
-        displayTitle = episodeInfo.isOVA ? `OVA ${episodeInfo.episode}` : `第${episodeInfo.episode}集`;
+        displayTitle = episodeInfo.isOVA
+          ? `OVA ${episodeInfo.episode}`
+          : `第${episodeInfo.episode}集`;
       }
       if (!displayTitle) {
         displayTitle = file.name;
@@ -380,13 +452,15 @@ async function handleDetail(
       if (a.isOVA && !b.isOVA) return 1;
       if (!a.isOVA && b.isOVA) return -1;
       // 都是 OVA 或都不是 OVA，按集数排序
-      return a.episode !== b.episode ? a.episode - b.episode : a.fileName.localeCompare(b.fileName);
+      return a.episode !== b.episode
+        ? a.episode - b.episode
+        : a.fileName.localeCompare(b.fileName);
     });
 
   // 转换为 CMS vod_play_url 格式
   // 格式：第1集$url1#第2集$url2#第3集$url3
   const vodPlayUrl = episodes
-    .map(ep => `${ep.title}$${ep.playUrl}`)
+    .map((ep) => `${ep.title}$${ep.playUrl}`)
     .join('#');
 
   return NextResponse.json({
@@ -402,7 +476,9 @@ async function handleDetail(
         vod_name: folderMeta.title,
         vod_pic: getTMDBImageUrl(folderMeta.poster_path),
         vod_remarks: folderMeta.media_type === 'movie' ? '电影' : '剧集',
-        vod_year: folderMeta.release_date ? folderMeta.release_date.split('-')[0] : '',
+        vod_year: folderMeta.release_date
+          ? folderMeta.release_date.split('-')[0]
+          : '',
         vod_content: folderMeta.overview || '',
         type_name: folderMeta.media_type === 'movie' ? '电影' : '电视剧',
         vod_douban_id: 0,

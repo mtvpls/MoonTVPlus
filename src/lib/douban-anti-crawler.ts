@@ -88,7 +88,10 @@ function parseVerificationPage(html: string): {
  * @param forceRefresh 是否强制刷新 cookie
  * @returns cookie 字符串
  */
-export async function getDoubanCookie(url: string, forceRefresh = false): Promise<string> {
+export async function getDoubanCookie(
+  url: string,
+  forceRefresh = false,
+): Promise<string> {
   // 检查缓存
   if (!forceRefresh && isCookieCacheValid()) {
     console.log('Using cached douban cookie');
@@ -98,9 +101,9 @@ export async function getDoubanCookie(url: string, forceRefresh = false): Promis
   const headers = {
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    'Referer': 'https://movie.douban.com/',
+    Referer: 'https://movie.douban.com/',
   };
 
   try {
@@ -131,7 +134,9 @@ export async function getDoubanCookie(url: string, forceRefresh = false): Promis
       });
 
       if (!verifyResponse.ok) {
-        throw new Error(`Failed to fetch verification page: ${verifyResponse.status}`);
+        throw new Error(
+          `Failed to fetch verification page: ${verifyResponse.status}`,
+        );
       }
 
       const verifyHtml = await verifyResponse.text();
@@ -200,14 +205,14 @@ export async function getDoubanCookie(url: string, forceRefresh = false): Promis
  */
 export async function fetchDoubanWithVerification(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> {
   const headers = {
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    'Referer': 'https://movie.douban.com/',
+    Referer: 'https://movie.douban.com/',
     ...options.headers,
   };
 

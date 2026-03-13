@@ -22,7 +22,7 @@ export class XiaoyaClient {
     private baseURL: string,
     private username?: string,
     private password?: string,
-    private configToken?: string
+    private configToken?: string,
   ) {}
 
   /**
@@ -31,7 +31,7 @@ export class XiaoyaClient {
   static async login(
     baseURL: string,
     username: string,
-    password: string
+    password: string,
   ): Promise<string> {
     const response = await fetch(`${baseURL}/api/auth/login`, {
       method: 'POST',
@@ -84,7 +84,7 @@ export class XiaoyaClient {
     this.token = await XiaoyaClient.login(
       this.baseURL,
       this.username,
-      this.password
+      this.password,
     );
 
     // 缓存 Token，设置 1 小时过期
@@ -106,14 +106,19 @@ export class XiaoyaClient {
   /**
    * 列出目录内容
    */
-  async listDirectory(path: string, page = 1, perPage = 100, refresh = false): Promise<XiaoyaListResponse> {
+  async listDirectory(
+    path: string,
+    page = 1,
+    perPage = 100,
+    refresh = false,
+  ): Promise<XiaoyaListResponse> {
     const token = await this.getToken();
 
     const response = await fetch(`${this.baseURL}/api/fs/list`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': token,
+        Authorization: token,
       },
       body: JSON.stringify({
         path,
@@ -141,14 +146,18 @@ export class XiaoyaClient {
   /**
    * 搜索文件
    */
-  async search(keyword: string, page = 1, perPage = 100): Promise<XiaoyaListResponse> {
+  async search(
+    keyword: string,
+    page = 1,
+    perPage = 100,
+  ): Promise<XiaoyaListResponse> {
     const token = await this.getToken();
 
     const response = await fetch(`${this.baseURL}/api/fs/search`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': token,
+        Authorization: token,
       },
       body: JSON.stringify({
         parent: '/',
@@ -184,7 +193,7 @@ export class XiaoyaClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': token,
+        Authorization: token,
       },
       body: JSON.stringify({
         path,
@@ -219,7 +228,8 @@ export class XiaoyaClient {
 
     const response = await fetch(downloadUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
     });
 

@@ -32,13 +32,17 @@ const CLOUD_TYPE_NAMES: Record<string, string> = {
 // 网盘类型颜色
 const CLOUD_TYPE_COLORS: Record<string, string> = {
   baidu: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
-  aliyun: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200',
-  quark: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200',
+  aliyun:
+    'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200',
+  quark:
+    'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200',
   tianyi: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
   uc: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
   mobile: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-200',
-  '115': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
-  pikpak: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
+  '115':
+    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
+  pikpak:
+    'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
   xunlei: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200',
   '123': 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200',
   magnet: 'bg-gray-100 text-gray-800 dark:bg-gray-700/40 dark:text-gray-200',
@@ -157,12 +161,13 @@ export default function PansouSearch({
   const cloudTypes = Object.keys(results.merged_by_type || {});
 
   // 过滤显示的网盘类型
-  const filteredCloudTypes = selectedType === 'all'
-    ? cloudTypes
-    : cloudTypes.filter(type => type === selectedType);
+  const filteredCloudTypes =
+    selectedType === 'all'
+      ? cloudTypes
+      : cloudTypes.filter((type) => type === selectedType);
 
   // 计算每种网盘类型的数量
-  const typeStats = cloudTypes.map(type => ({
+  const typeStats = cloudTypes.map((type) => ({
     type,
     count: results.merged_by_type?.[type]?.length || 0,
   }));
@@ -171,7 +176,11 @@ export default function PansouSearch({
     <div className='space-y-6'>
       {/* 搜索结果统计 */}
       <div className='text-sm text-gray-600 dark:text-gray-400'>
-        找到 <span className='font-semibold text-green-600 dark:text-green-400'>{results.total}</span> 个资源
+        找到{' '}
+        <span className='font-semibold text-green-600 dark:text-green-400'>
+          {results.total}
+        </span>{' '}
+        个资源
       </div>
 
       {/* 网盘类型过滤器 */}
@@ -212,13 +221,16 @@ export default function PansouSearch({
         if (!links || links.length === 0) return null;
 
         const typeName = CLOUD_TYPE_NAMES[cloudType] || cloudType;
-        const typeColor = CLOUD_TYPE_COLORS[cloudType] || CLOUD_TYPE_COLORS.others;
+        const typeColor =
+          CLOUD_TYPE_COLORS[cloudType] || CLOUD_TYPE_COLORS.others;
 
         return (
           <div key={cloudType} className='space-y-3'>
             {/* 网盘类型标题 */}
             <div className='flex items-center gap-2'>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${typeColor}`}>
+              <span
+                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${typeColor}`}
+              >
                 {typeName}
               </span>
               <span className='text-xs text-gray-500 dark:text-gray-400'>
@@ -248,7 +260,10 @@ export default function PansouSearch({
                       </div>
                       {link.password && (
                         <div className='text-xs text-gray-600 dark:text-gray-400 mt-1'>
-                          提取码: <span className='font-mono font-semibold'>{link.password}</span>
+                          提取码:{' '}
+                          <span className='font-mono font-semibold'>
+                            {link.password}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -256,15 +271,21 @@ export default function PansouSearch({
                     {/* 操作按钮 */}
                     <div className='flex items-center gap-1 flex-shrink-0'>
                       <button
-                        onClick={() => handleCopy(
-                          link.password ? `${link.url}\n提取码: ${link.password}` : link.url,
-                          link.url
-                        )}
+                        onClick={() =>
+                          handleCopy(
+                            link.password
+                              ? `${link.url}\n提取码: ${link.password}`
+                              : link.url,
+                            link.url,
+                          )
+                        }
                         className='p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors'
                         title='复制链接'
                       >
                         {copiedUrl === link.url ? (
-                          <span className='text-xs text-green-600 dark:text-green-400'>已复制</span>
+                          <span className='text-xs text-green-600 dark:text-green-400'>
+                            已复制
+                          </span>
                         ) : (
                           <Copy className='h-4 w-4 text-gray-600 dark:text-gray-400' />
                         )}
@@ -281,11 +302,11 @@ export default function PansouSearch({
 
                   {/* 来源和时间 */}
                   <div className='flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400'>
-                    {link.source && (
-                      <span>来源: {link.source}</span>
-                    )}
+                    {link.source && <span>来源: {link.source}</span>}
                     {link.datetime && (
-                      <span>{new Date(link.datetime).toLocaleDateString()}</span>
+                      <span>
+                        {new Date(link.datetime).toLocaleDateString()}
+                      </span>
                     )}
                   </div>
 

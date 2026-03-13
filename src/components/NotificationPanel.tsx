@@ -52,9 +52,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
 
       if (response.ok) {
         setNotifications((prev) =>
-          prev.map((n) =>
-            n.id === notificationId ? { ...n, read: true } : n
-          )
+          prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
         );
         // 触发事件通知 UserMenu 更新未读计数
         window.dispatchEvent(new Event('notificationsUpdated'));
@@ -77,7 +75,9 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
       });
 
       if (response.ok) {
-        const deletedNotification = notifications.find((n) => n.id === notificationId);
+        const deletedNotification = notifications.find(
+          (n) => n.id === notificationId,
+        );
         setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
         // 如果删除的是未读通知，触发事件更新 UserMenu
         if (deletedNotification && !deletedNotification.read) {
@@ -120,7 +120,9 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
     // 根据通知类型跳转
     if (notification.type === 'favorite_update' && notification.metadata) {
       const { source, id, title } = notification.metadata;
-      router.push(`/play?source=${source}&id=${id}&title=${encodeURIComponent(title)}`);
+      router.push(
+        `/play?source=${source}&id=${id}&title=${encodeURIComponent(title)}`,
+      );
       onClose();
     } else if (notification.type === 'movie_request') {
       // 获取用户角色

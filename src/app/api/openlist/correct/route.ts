@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (!key || !title) {
       return NextResponse.json(
         { error: '缺少必要参数 (key 或 title)' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -61,14 +61,14 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: 'OpenList 未配置或未启用' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const client = new OpenListClient(
       openListConfig.URL,
       openListConfig.Username,
-      openListConfig.Password
+      openListConfig.Password,
     );
 
     // 读取现有 metainfo (从数据库或缓存)
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
         console.error('[OpenList Correct] 从数据库读取 metainfo 失败:', error);
         return NextResponse.json(
           { error: 'metainfo 读取失败' },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -94,16 +94,13 @@ export async function POST(request: NextRequest) {
     if (!metaInfo) {
       return NextResponse.json(
         { error: 'metainfo.json 不存在' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     // 检查 key 是否存在
     if (!metaInfo.folders[key]) {
-      return NextResponse.json(
-        { error: '视频不存在' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: '视频不存在' }, { status: 404 });
     }
 
     // 保留原始文件夹名称
@@ -142,7 +139,7 @@ export async function POST(request: NextRequest) {
     console.error('视频纠错失败:', error);
     return NextResponse.json(
       { error: '纠错失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

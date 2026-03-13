@@ -31,7 +31,12 @@ export const UpdateNotification: React.FC = () => {
   }, []);
 
   // 检查中、不是站长、是移动设备或没有更新时不渲染任何内容
-  if (isChecking || !isOwner || isMobile || updateStatus !== UpdateStatus.HAS_UPDATE) {
+  if (
+    isChecking ||
+    !isOwner ||
+    isMobile ||
+    updateStatus !== UpdateStatus.HAS_UPDATE
+  ) {
     return null;
   }
 

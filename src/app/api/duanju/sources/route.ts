@@ -25,7 +25,7 @@ export async function GET() {
         headers: {
           'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
         },
-      }
+      },
     );
   } catch (error) {
     console.error('获取短剧视频源失败:', error);
@@ -35,7 +35,7 @@ export async function GET() {
         message: '获取短剧视频源失败',
         error: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

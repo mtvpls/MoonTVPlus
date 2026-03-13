@@ -6,9 +6,9 @@ import { gzip } from 'zlib';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { SimpleCrypto } from '@/lib/crypto';
+import { clearProgress, updateProgress } from '@/lib/data-migration-progress';
 import { db } from '@/lib/db';
 import { CURRENT_VERSION } from '@/lib/version';
-import { updateProgress, clearProgress } from '@/lib/data-migration-progress';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     if (storageType === 'localstorage') {
       return NextResponse.json(
         { error: '不支持本地存储进行数据迁移' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -33,7 +33,10 @@ export async function POST(req: NextRequest) {
 
     // 检查用户权限（只有站长可以导出数据）
     if (authInfo.username !== process.env.USERNAME) {
-      return NextResponse.json({ error: '权限不足，只有站长可以导出数据' }, { status: 401 });
+      return NextResponse.json(
+        { error: '权限不足，只有站长可以导出数据' },
+        { status: 401 },
+      );
     }
 
     const username = authInfo.username; // 存储到局部变量以便 TypeScript 类型推断
@@ -59,12 +62,16 @@ export async function POST(req: NextRequest) {
         // 所有用户数据
         userData: {} as { [username: string]: any },
         // V2用户信息
-        usersV2: [] as any[]
-      }
+        usersV2: [] as any[],
+      },
     };
 
     // 获取所有V2用户
-    const usersV2Result = await db.getUserListV2(0, 1000000, process.env.USERNAME);
+    const usersV2Result = await db.getUserListV2(
+      0,
+      1000000,
+      process.env.USERNAME,
+    );
     exportData.data.usersV2 = usersV2Result.users;
     console.log(`从getUserListV2获取到 ${usersV2Result.users.length} 个用户`);
 
@@ -72,7 +79,7 @@ export async function POST(req: NextRequest) {
     let allUsers = await db.getAllUsers();
     allUsers.push(process.env.USERNAME); // 添加站长
     // 添加V2用户列表中的用户
-    usersV2Result.users.forEach(user => {
+    usersV2Result.users.forEach((user) => {
       if (!allUsers.includes(user.username)) {
         allUsers.push(user.username);
       }
@@ -82,21 +89,34 @@ export async function POST(req: NextRequest) {
 
     // 为每个用户收集数据（只导出V2用户）- 使用并行处理
     console.log(`开始并行导出 ${allUsers.length} 个用户的数据...`);
-    updateProgress(username, 'export', 'collecting', 0, allUsers.length, '开始收集用户数据...');
+    updateProgress(
+      username,
+      'export',
+      'collecting',
+      0,
+      allUsers.length,
+      '开始收集用户数据...',
+    );
 
     // 分块处理用户，每批处理数量可通过环境变量配置
-    const CHUNK_SIZE = parseInt(process.env.DATA_MIGRATION_CHUNK_SIZE || '10', 10);
+    const CHUNK_SIZE = parseInt(
+      process.env.DATA_MIGRATION_CHUNK_SIZE || '10',
+      10,
+    );
     let exportedCount = 0;
 
     for (let i = 0; i < allUsers.length; i += CHUNK_SIZE) {
       const chunk = allUsers.slice(i, i + CHUNK_SIZE);
-      console.log(`处理第 ${Math.floor(i / CHUNK_SIZE) + 1} 批用户 (${chunk.length} 个)`);
+      console.log(
+        `处理第 ${Math.floor(i / CHUNK_SIZE) + 1} 批用户 (${chunk.length} 个)`,
+      );
 
       // 并行处理当前批次的用户
       const userDataPromises = chunk.map(async (username) => {
         try {
           // 站长特殊处理：使用环境变量密码
-          let finalPasswordV2 = username === process.env.USERNAME ? process.env.PASSWORD : null;
+          let finalPasswordV2 =
+            username === process.env.USERNAME ? process.env.PASSWORD : null;
 
           // 如果不是站长，获取V2密码
           if (!finalPasswordV2) {
@@ -116,14 +136,14 @@ export async function POST(req: NextRequest) {
             searchHistory,
             skipConfigs,
             musicPlayRecords,
-            playlists
+            playlists,
           ] = await Promise.all([
             db.getAllPlayRecords(username),
             db.getAllFavorites(username),
             db.getSearchHistory(username),
             db.getAllSkipConfigs(username),
             db.getAllMusicPlayRecords(username),
-            db.getUserMusicPlaylists(username)
+            db.getUserMusicPlaylists(username),
           ]);
 
           // 并行获取所有歌单的歌曲
@@ -131,7 +151,7 @@ export async function POST(req: NextRequest) {
             playlists.map(async (playlist) => {
               const songs = await db.getPlaylistSongs(playlist.id);
               return { ...playlist, songs };
-            })
+            }),
           );
 
           return {
@@ -143,8 +163,8 @@ export async function POST(req: NextRequest) {
               skipConfigs,
               musicPlayRecords,
               musicPlaylists: playlistsWithSongs,
-              passwordV2: finalPasswordV2
-            }
+              passwordV2: finalPasswordV2,
+            },
           };
         } catch (error) {
           console.error(`导出用户 ${username} 数据失败:`, error);
@@ -167,7 +187,7 @@ export async function POST(req: NextRequest) {
             'collecting',
             exportedCount,
             allUsers.length,
-            `正在收集用户数据 (${exportedCount}/${allUsers.length})...`
+            `正在收集用户数据 (${exportedCount}/${allUsers.length})...`,
           );
         }
       }
@@ -178,16 +198,40 @@ export async function POST(req: NextRequest) {
     console.log(`成功导出 ${exportedCount} 个用户的数据`);
 
     // 将数据转换为JSON字符串
-    updateProgress(username, 'export', 'serializing', exportedCount, exportedCount, '正在序列化数据...');
+    updateProgress(
+      username,
+      'export',
+      'serializing',
+      exportedCount,
+      exportedCount,
+      '正在序列化数据...',
+    );
     const jsonData = JSON.stringify(exportData);
 
     // 先压缩数据
-    updateProgress(username, 'export', 'compressing', exportedCount, exportedCount, '正在压缩数据...');
+    updateProgress(
+      username,
+      'export',
+      'compressing',
+      exportedCount,
+      exportedCount,
+      '正在压缩数据...',
+    );
     const compressedData = await gzipAsync(jsonData);
 
     // 使用提供的密码加密压缩后的数据
-    updateProgress(username, 'export', 'encrypting', exportedCount, exportedCount, '正在加密数据...');
-    const encryptedData = SimpleCrypto.encrypt(compressedData.toString('base64'), password);
+    updateProgress(
+      username,
+      'export',
+      'encrypting',
+      exportedCount,
+      exportedCount,
+      '正在加密数据...',
+    );
+    const encryptedData = SimpleCrypto.encrypt(
+      compressedData.toString('base64'),
+      password,
+    );
 
     // 生成文件名
     const now = new Date();
@@ -195,7 +239,14 @@ export async function POST(req: NextRequest) {
     const filename = `moontv-backup-${timestamp}.dat`;
 
     // 清除进度信息
-    updateProgress(username, 'export', 'completed', exportedCount, exportedCount, '导出完成！');
+    updateProgress(
+      username,
+      'export',
+      'completed',
+      exportedCount,
+      exportedCount,
+      '导出完成！',
+    );
     setTimeout(() => clearProgress(username, 'export'), 3000);
 
     // 返回加密的数据作为文件下载
@@ -207,7 +258,6 @@ export async function POST(req: NextRequest) {
         'Content-Length': encryptedData.length.toString(),
       },
     });
-
   } catch (error) {
     console.error('数据导出失败:', error);
     // 清除进度信息
@@ -217,7 +267,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '导出失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -251,7 +301,9 @@ async function getUserPasswordV2(username: string): Promise<string | null> {
     const userInfoKey = `user:${username}:info`;
 
     if (typeof storage.withRetry === 'function' && storage.client?.hgetall) {
-      const userInfo = await storage.withRetry(() => storage.client.hgetall(userInfoKey));
+      const userInfo = await storage.withRetry(() =>
+        storage.client.hgetall(userInfoKey),
+      );
       if (userInfo && userInfo.password) {
         return userInfo.password;
       }

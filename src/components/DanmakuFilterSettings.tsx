@@ -1,10 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { Plus, ToggleLeft, ToggleRight,Trash2, X } from 'lucide-react';
-import { useEffect, useRef,useState } from 'react';
+import { Plus, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
-import { getDanmakuFilterConfig, saveDanmakuFilterConfig } from '@/lib/db.client';
+import {
+  getDanmakuFilterConfig,
+  saveDanmakuFilterConfig,
+} from '@/lib/db.client';
 import { DanmakuFilterConfig, DanmakuFilterRule } from '@/lib/types';
 
 interface DanmakuFilterSettingsProps {
@@ -188,7 +191,7 @@ export default function DanmakuFilterSettings({
         inputRef.current.value = ''; // 直接清空 DOM 值
         inputRef.current.blur(); // 失去焦点，阻止自动填充
       }
-      setInputKey(prev => prev + 1); // 强制重新渲染输入框
+      setInputKey((prev) => prev + 1); // 强制重新渲染输入框
     }, 0);
   };
 
@@ -205,7 +208,7 @@ export default function DanmakuFilterSettings({
     if (!id) return;
     setConfig((prev) => ({
       rules: prev.rules.map((rule) =>
-        rule.id === id ? { ...rule, enabled: !rule.enabled } : rule
+        rule.id === id ? { ...rule, enabled: !rule.enabled } : rule,
       ),
     }));
   };
@@ -214,7 +217,7 @@ export default function DanmakuFilterSettings({
 
   return (
     <div
-      className="fixed inset-0 z-[2000] flex items-end justify-center"
+      className='fixed inset-0 z-[2000] flex items-end justify-center'
       onTouchMove={(e) => {
         // 阻止最外层容器的触摸移动，防止背景滚动
         e.preventDefault();
@@ -247,7 +250,7 @@ export default function DanmakuFilterSettings({
 
       {/* 弹窗主体 */}
       <div
-        className="relative w-full bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl transition-all duration-300 ease-out max-h-[85vh]"
+        className='relative w-full bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl transition-all duration-300 ease-out max-h-[85vh]'
         onTouchMove={(e) => {
           // 允许弹窗内部滚动，阻止事件冒泡到外层
           e.stopPropagation();
@@ -264,134 +267,139 @@ export default function DanmakuFilterSettings({
         }}
       >
         {/* 顶部拖拽指示器 */}
-        <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 pt-3 pb-2">
-          <div className="flex justify-center">
-            <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
+        <div className='sticky top-0 z-10 bg-white dark:bg-gray-900 pt-3 pb-2'>
+          <div className='flex justify-center'>
+            <div className='w-12 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full'></div>
           </div>
         </div>
 
         {/* 头部 */}
-        <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <div className='flex items-center justify-between px-4 pb-3 border-b border-gray-100 dark:border-gray-800'>
+          <h2 className='text-lg font-semibold text-gray-900 dark:text-gray-100'>
             弹幕关键字屏蔽设置
           </h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-150"
+            className='p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-150'
           >
-            <X size={20} className="text-gray-500 dark:text-gray-400" />
+            <X size={20} className='text-gray-500 dark:text-gray-400' />
           </button>
         </div>
 
         {/* 内容区域 */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div className='flex-1 overflow-y-auto px-4 py-4 space-y-4'>
           {/* 添加规则 */}
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-3">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <div className='bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-3'>
+            <h3 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
               添加屏蔽规则
             </h3>
-            <div className="space-y-3">
+            <div className='space-y-3'>
               <input
                 key={inputKey}
                 ref={inputRef}
-                type="text"
+                type='text'
                 value={newKeyword}
                 onChange={(e) => setNewKeyword(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleAddRule()}
-                placeholder="输入要屏蔽的关键字"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck="false"
-                data-form-type="other"
-                data-lpignore="true"
-                className="w-full px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg border border-gray-200 dark:border-gray-600 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200"
+                placeholder='输入要屏蔽的关键字'
+                autoComplete='off'
+                autoCorrect='off'
+                autoCapitalize='off'
+                spellCheck='false'
+                data-form-type='other'
+                data-lpignore='true'
+                className='w-full px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg border border-gray-200 dark:border-gray-600 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200'
               />
-              <div className="flex gap-2">
+              <div className='flex gap-2'>
                 <select
                   value={newType}
-                  onChange={(e) => setNewType(e.target.value as 'normal' | 'regex')}
-                  className="flex-1 px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg border border-gray-200 dark:border-gray-600 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200"
+                  onChange={(e) =>
+                    setNewType(e.target.value as 'normal' | 'regex')
+                  }
+                  className='flex-1 px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg border border-gray-200 dark:border-gray-600 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200'
                 >
-                  <option value="normal">普通模式</option>
-                  <option value="regex">正则模式</option>
+                  <option value='normal'>普通模式</option>
+                  <option value='regex'>正则模式</option>
                 </select>
                 <button
                   onClick={handleAddRule}
-                  className="px-6 py-3 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white rounded-lg transition-all duration-200 flex items-center gap-2 active:scale-[0.98] shadow-sm hover:shadow-md"
+                  className='px-6 py-3 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white rounded-lg transition-all duration-200 flex items-center gap-2 active:scale-[0.98] shadow-sm hover:shadow-md'
                 >
                   <Plus size={18} />
-                  <span className="font-medium">添加</span>
+                  <span className='font-medium'>添加</span>
                 </button>
               </div>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-              💡 普通模式：包含关键字即屏蔽<br/>
+            <p className='text-xs text-gray-500 dark:text-gray-400 leading-relaxed'>
+              💡 普通模式：包含关键字即屏蔽
+              <br />
               🔧 正则模式：支持正则表达式匹配
             </p>
           </div>
 
           {/* 规则列表 */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <div className='space-y-3'>
+            <div className='flex items-center justify-between'>
+              <h3 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
                 当前规则
               </h3>
-              <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full">
+              <span className='text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full'>
                 {config.rules.length}
               </span>
             </div>
-            
+
             {loading ? (
-              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                <div className="inline-flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-gray-300 border-t-teal-500 rounded-full animate-spin"></div>
+              <div className='text-center py-12 text-gray-500 dark:text-gray-400'>
+                <div className='inline-flex items-center gap-2'>
+                  <div className='w-4 h-4 border-2 border-gray-300 border-t-teal-500 rounded-full animate-spin'></div>
                   <span>加载中...</span>
                 </div>
               </div>
             ) : config.rules.length === 0 ? (
-              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                <div className="inline-flex flex-col items-center gap-3">
-                  <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
-                    <Plus size={24} className="text-gray-400" />
+              <div className='text-center py-12 text-gray-500 dark:text-gray-400'>
+                <div className='inline-flex flex-col items-center gap-3'>
+                  <div className='w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center'>
+                    <Plus size={24} className='text-gray-400' />
                   </div>
                   <div>
-                    <p className="font-medium">暂无屏蔽规则</p>
-                    <p className="text-sm mt-1">点击上方添加关键字</p>
+                    <p className='font-medium'>暂无屏蔽规则</p>
+                    <p className='text-sm mt-1'>点击上方添加关键字</p>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className='space-y-2'>
                 {config.rules.map((rule) => (
                   <div
                     key={rule.id}
-                    className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 flex items-center gap-3 active:bg-gray-100 dark:active:bg-gray-750 transition-colors duration-150"
+                    className='bg-gray-50 dark:bg-gray-800 rounded-xl p-4 flex items-center gap-3 active:bg-gray-100 dark:active:bg-gray-750 transition-colors duration-150'
                   >
                     {/* 启用/禁用按钮 */}
                     <button
                       onClick={() => handleToggleRule(rule.id)}
-                      className="flex-shrink-0 active:scale-95 transition-transform duration-150"
+                      className='flex-shrink-0 active:scale-95 transition-transform duration-150'
                     >
                       {rule.enabled ? (
                         <ToggleRight
                           size={28}
-                          className="text-teal-500 hover:text-teal-400 transition-colors duration-150"
+                          className='text-teal-500 hover:text-teal-400 transition-colors duration-150'
                         />
                       ) : (
                         <ToggleLeft
                           size={28}
-                          className="text-gray-400 hover:text-gray-300 transition-colors duration-150"
+                          className='text-gray-400 hover:text-gray-300 transition-colors duration-150'
                         />
                       )}
                     </button>
 
                     {/* 关键字 */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-col gap-1.5">
+                    <div className='flex-1 min-w-0'>
+                      <div className='flex flex-col gap-1.5'>
                         <span
                           className={`font-mono text-sm break-all leading-relaxed ${
-                            rule.enabled ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'
+                            rule.enabled
+                              ? 'text-gray-900 dark:text-gray-100'
+                              : 'text-gray-500 dark:text-gray-400'
                           }`}
                         >
                           {rule.keyword}
@@ -411,7 +419,7 @@ export default function DanmakuFilterSettings({
                     {/* 删除按钮 */}
                     <button
                       onClick={() => handleDeleteRule(rule.id)}
-                      className="flex-shrink-0 p-2 text-red-500 hover:text-red-600 active:text-red-700 active:scale-90 transition-all duration-150"
+                      className='flex-shrink-0 p-2 text-red-500 hover:text-red-600 active:text-red-700 active:scale-90 transition-all duration-150'
                     >
                       <Trash2 size={18} />
                     </button>
@@ -423,22 +431,22 @@ export default function DanmakuFilterSettings({
         </div>
 
         {/* 底部按钮 */}
-        <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 px-4 py-4">
-          <div className="flex gap-3">
+        <div className='sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 px-4 py-4'>
+          <div className='flex gap-3'>
             <button
               onClick={onClose}
-              className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:active:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-all duration-200 active:scale-[0.98]"
+              className='flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:active:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-all duration-200 active:scale-[0.98]'
             >
               取消
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 px-4 py-3 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 disabled:bg-gray-300 disabled:cursor-not-allowed dark:disabled:bg-gray-700 text-white rounded-xl font-medium transition-all duration-200 active:scale-[0.98] shadow-sm hover:shadow-md disabled:shadow-none"
+              className='flex-1 px-4 py-3 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 disabled:bg-gray-300 disabled:cursor-not-allowed dark:disabled:bg-gray-700 text-white rounded-xl font-medium transition-all duration-200 active:scale-[0.98] shadow-sm hover:shadow-md disabled:shadow-none'
             >
               {saving ? (
-                <span className="inline-flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span className='inline-flex items-center gap-2'>
+                  <div className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></div>
                   保存中...
                 </span>
               ) : (

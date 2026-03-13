@@ -11,10 +11,7 @@ export async function GET(request: NextRequest) {
   // 验证用户登录
   const authInfo = getAuthInfoFromCookie(request);
   if (!authInfo || !authInfo.username) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   // 检查是否开启订阅功能
@@ -31,7 +28,7 @@ export async function GET(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store',
         },
-      }
+      },
     );
   }
 
@@ -56,6 +53,6 @@ export async function GET(request: NextRequest) {
       headers: {
         'Cache-Control': 'no-store',
       },
-    }
+    },
   );
 }

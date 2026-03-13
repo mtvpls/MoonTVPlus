@@ -94,9 +94,8 @@ export async function GET(request: NextRequest) {
   const target = `${baseUrl}?${params.toString()}`;
   console.log(target);
   try {
-    const doubanData = await fetchDoubanData<DoubanRecommendApiResponse>(
-      target
-    );
+    const doubanData =
+      await fetchDoubanData<DoubanRecommendApiResponse>(target);
     const list = doubanData.items
       .filter((item) => item.type == 'movie' || item.type == 'tv')
       .map((item) => ({
@@ -124,7 +123,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { error: '获取豆瓣数据失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

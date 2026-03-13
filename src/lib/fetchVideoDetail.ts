@@ -2,7 +2,10 @@ import { getAvailableApiSites } from '@/lib/config';
 import { SearchResult } from '@/lib/types';
 
 import { getDetailFromApi, searchFromApi } from './downstream';
-import { getSpecialSourceDetail, isSpecialSource } from './special-sources-detail';
+import {
+  getSpecialSourceDetail,
+  isSpecialSource,
+} from './special-sources-detail';
 
 interface FetchVideoDetailOptions {
   source: string;
@@ -42,7 +45,7 @@ export async function fetchVideoDetail({
       const exactMatch = searchData.find(
         (item: SearchResult) =>
           item.source.toString() === source.toString() &&
-          item.id.toString() === id.toString()
+          item.id.toString() === id.toString(),
       );
       if (exactMatch) {
         return exactMatch;

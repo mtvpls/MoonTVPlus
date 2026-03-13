@@ -51,7 +51,11 @@ export function getCachedSong(platform: string, id: string): SongInfo | null {
 /**
  * 设置缓存的歌曲信息
  */
-export function setCachedSong(platform: string, id: string, songInfo: SongInfo): void {
+export function setCachedSong(
+  platform: string,
+  id: string,
+  songInfo: SongInfo,
+): void {
   // 惰性清理：每次写入时检查是否需要清理
   const now = Date.now();
   if (now - lastCleanupTime > CACHE_CLEANUP_INTERVAL_MS) {
@@ -68,7 +72,9 @@ export function setCachedSong(platform: string, id: string, songInfo: SongInfo):
 /**
  * 批量获取缓存的歌曲信息
  */
-export function getCachedSongs(keys: Array<{ platform: string; id: string }>): Map<string, SongInfo> {
+export function getCachedSongs(
+  keys: Array<{ platform: string; id: string }>,
+): Map<string, SongInfo> {
   const result = new Map<string, SongInfo>();
   const now = Date.now();
 
@@ -87,7 +93,9 @@ export function getCachedSongs(keys: Array<{ platform: string; id: string }>): M
 /**
  * 批量设置缓存的歌曲信息
  */
-export function setCachedSongs(songs: Array<{ platform: string; id: string; songInfo: SongInfo }>): void {
+export function setCachedSongs(
+  songs: Array<{ platform: string; id: string; songInfo: SongInfo }>,
+): void {
   const now = Date.now();
 
   // 惰性清理
@@ -107,7 +115,11 @@ export function setCachedSongs(songs: Array<{ platform: string; id: string; song
 /**
  * 智能清理过期的缓存条目
  */
-function performCacheCleanup(): { expired: number; total: number; sizeLimited: number } {
+function performCacheCleanup(): {
+  expired: number;
+  total: number;
+  sizeLimited: number;
+} {
   const now = Date.now();
   const keysToDelete: string[] = [];
   let sizeLimitedDeleted = 0;
@@ -120,7 +132,7 @@ function performCacheCleanup(): { expired: number; total: number; sizeLimited: n
   });
 
   const expiredCount = keysToDelete.length;
-  keysToDelete.forEach(key => SONG_CACHE.delete(key));
+  keysToDelete.forEach((key) => SONG_CACHE.delete(key));
 
   // 2. 如果缓存大小超限，清理最老的条目（LRU策略）
   if (SONG_CACHE.size > MAX_CACHE_SIZE) {
@@ -140,7 +152,7 @@ function performCacheCleanup(): { expired: number; total: number; sizeLimited: n
   return {
     expired: expiredCount,
     total: SONG_CACHE.size,
-    sizeLimited: sizeLimitedDeleted
+    sizeLimited: sizeLimitedDeleted,
   };
 }
 

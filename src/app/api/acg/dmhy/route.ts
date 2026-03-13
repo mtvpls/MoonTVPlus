@@ -16,10 +16,7 @@ export async function POST(req: NextRequest) {
   try {
     const authInfo = getAuthInfoFromCookie(req);
     if (!authInfo || (authInfo.role !== 'admin' && authInfo.role !== 'owner')) {
-      return NextResponse.json(
-        { error: '无权限访问' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: '无权限访问' }, { status: 403 });
     }
 
     const { keyword, page = 1 } = await req.json();
@@ -27,7 +24,7 @@ export async function POST(req: NextRequest) {
     if (!keyword || typeof keyword !== 'string') {
       return NextResponse.json(
         { error: '搜索关键词不能为空' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -35,7 +32,7 @@ export async function POST(req: NextRequest) {
     if (!trimmedKeyword) {
       return NextResponse.json(
         { error: '搜索关键词不能为空' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -43,7 +40,7 @@ export async function POST(req: NextRequest) {
     if (isNaN(pageNum) || pageNum < 1) {
       return NextResponse.json(
         { error: '页码必须是大于0的整数' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -88,7 +85,8 @@ export async function POST(req: NextRequest) {
     const results = items.map((item: any) => {
       const title = item.title?.[0] || '';
       const link = item.link?.[0] || '';
-      const guid = item.guid?.[0] || link || `${title}-${item.pubDate?.[0] || ''}`;
+      const guid =
+        item.guid?.[0] || link || `${title}-${item.pubDate?.[0] || ''}`;
       const pubDate = item.pubDate?.[0] || '';
       const description = item.description?.[0] || '';
       const torrentUrl = item.enclosure?.[0]?.$?.url || '';
@@ -128,7 +126,7 @@ export async function POST(req: NextRequest) {
     console.error('DMHY 搜索失败:', error);
     return NextResponse.json(
       { error: error.message || '搜索失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

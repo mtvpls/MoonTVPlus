@@ -5,17 +5,25 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 
 import { WatchRoomServer } from '../src/lib/watch-room-server';
-import type { ClientToServerEvents, ServerToClientEvents } from '../src/types/watch-room';
+import type {
+  ClientToServerEvents,
+  ServerToClientEvents,
+} from '../src/types/watch-room';
 
 const args = process.argv.slice(2);
 const portIndex = args.indexOf('--port');
 const authIndex = args.indexOf('--auth');
-const port = Number.parseInt(portIndex >= 0 ? args[portIndex + 1] || '3001' : '3001', 10);
+const port = Number.parseInt(
+  portIndex >= 0 ? args[portIndex + 1] || '3001' : '3001',
+  10,
+);
 const authKey = authIndex >= 0 ? args[authIndex + 1] || '' : '';
 
 if (!authKey) {
   console.error('Error: --auth parameter is required');
-  console.log('Usage: tsx server/watch-room-standalone-server.ts --port 3001 --auth YOUR_SECRET_KEY');
+  console.log(
+    'Usage: tsx server/watch-room-standalone-server.ts --port 3001 --auth YOUR_SECRET_KEY',
+  );
   process.exit(1);
 }
 

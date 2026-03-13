@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { AdminConfig } from '@/lib/admin.types';
+
 import { AnimeSubscription } from '@/types/anime-subscription';
 
 interface AnimeSubscriptionComponentProps {
@@ -14,7 +15,15 @@ interface AnimeSubscriptionComponentProps {
 }
 
 // Switch 组件
-const Switch = ({ checked, onChange, disabled }: { checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }) => (
+const Switch = ({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) => (
   <button
     type='button'
     role='switch'
@@ -71,14 +80,14 @@ const AlertModal = ({
   if (!isOpen) return null;
 
   const icons = {
-    success: <AlertCircle className="w-12 h-12 text-green-500" />,
-    error: <AlertCircle className="w-12 h-12 text-red-500" />,
-    warning: <AlertCircle className="w-12 h-12 text-yellow-500" />,
-    info: <AlertCircle className="w-12 h-12 text-blue-500" />,
+    success: <AlertCircle className='w-12 h-12 text-green-500' />,
+    error: <AlertCircle className='w-12 h-12 text-red-500' />,
+    warning: <AlertCircle className='w-12 h-12 text-yellow-500' />,
+    info: <AlertCircle className='w-12 h-12 text-blue-500' />,
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    <div className='fixed inset-0 z-[9999] flex items-center justify-center'>
       <div
         className={`absolute inset-0 bg-black transition-opacity duration-300 ${
           isVisible ? 'opacity-50' : 'opacity-0'
@@ -90,23 +99,23 @@ const AlertModal = ({
           isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
         }`}
       >
-        <div className="flex flex-col items-center text-center">
+        <div className='flex flex-col items-center text-center'>
           {icons[type]}
-          <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
+          <h3 className='mt-4 text-lg font-semibold text-gray-900 dark:text-white'>
             {title}
           </h3>
           {message && (
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            <p className='mt-2 text-sm text-gray-600 dark:text-gray-400'>
               {message}
             </p>
           )}
 
-          <div className="flex justify-center space-x-3 mt-6">
+          <div className='flex justify-center space-x-3 mt-6'>
             {showConfirm && onConfirm ? (
               <>
                 <button
                   onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  className='px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors'
                 >
                   取消
                 </button>
@@ -115,7 +124,7 @@ const AlertModal = ({
                     onConfirm();
                     onClose();
                   }}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                  className='px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors'
                 >
                   {confirmText}
                 </button>
@@ -123,7 +132,7 @@ const AlertModal = ({
             ) : (
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                className='px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors'
               >
                 {confirmText}
               </button>
@@ -132,7 +141,7 @@ const AlertModal = ({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };
 
@@ -144,7 +153,8 @@ export default function AnimeSubscriptionComponent({
   const [subscriptions, setSubscriptions] = useState<AnimeSubscription[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingSubscription, setEditingSubscription] = useState<AnimeSubscription | null>(null);
+  const [editingSubscription, setEditingSubscription] =
+    useState<AnimeSubscription | null>(null);
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [alertModal, setAlertModal] = useState<{
     isOpen: boolean;
@@ -165,7 +175,7 @@ export default function AnimeSubscriptionComponent({
   };
 
   const hideAlert = () => {
-    setAlertModal(prev => ({ ...prev, isOpen: false }));
+    setAlertModal((prev) => ({ ...prev, isOpen: false }));
   };
 
   // 表单状态
@@ -260,11 +270,14 @@ export default function AnimeSubscriptionComponent({
 
       if (editingSubscription) {
         // 更新
-        const response = await fetch(`/api/admin/anime-subscription/${editingSubscription.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        });
+        const response = await fetch(
+          `/api/admin/anime-subscription/${editingSubscription.id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+          },
+        );
 
         if (!response.ok) {
           throw new Error('更新订阅失败');
@@ -340,9 +353,12 @@ export default function AnimeSubscriptionComponent({
   const handleCheckSubscription = async (id: string) => {
     try {
       setCheckingId(id);
-      const response = await fetch(`/api/admin/anime-subscription/${id}/check`, {
-        method: 'POST',
-      });
+      const response = await fetch(
+        `/api/admin/anime-subscription/${id}/check`,
+        {
+          method: 'POST',
+        },
+      );
 
       if (!response.ok) {
         throw new Error('检查失败');
@@ -413,7 +429,11 @@ export default function AnimeSubscriptionComponent({
           <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>
             启用追番功能
           </span>
-          <Switch checked={enabled} onChange={handleToggleEnabled} disabled={loading} />
+          <Switch
+            checked={enabled}
+            onChange={handleToggleEnabled}
+            disabled={loading}
+          />
         </div>
         <button
           onClick={handleAdd}
@@ -432,7 +452,10 @@ export default function AnimeSubscriptionComponent({
           <div className='text-sm text-blue-800 dark:text-blue-200 space-y-1'>
             <p>• 定时任务会自动检查订阅更新</p>
             <p>• 下载路径：OpenList离线下载根目录/番剧名称/</p>
-            <p>• 过滤关键词支持多个，用逗号分隔，只会下载包含这些关键字的资源，可以用来过滤字幕组或是字幕种类</p>
+            <p>
+              •
+              过滤关键词支持多个，用逗号分隔，只会下载包含这些关键字的资源，可以用来过滤字幕组或是字幕种类
+            </p>
             <p>• 当前集数：已看到第几集，只下载更新的集数</p>
           </div>
         </div>
@@ -461,7 +484,9 @@ export default function AnimeSubscriptionComponent({
                 <input
                   type='text'
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, title: e.target.value })
+                  }
                   placeholder='葬送的芙莉莲'
                   className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500'
                 />
@@ -473,7 +498,9 @@ export default function AnimeSubscriptionComponent({
                 <input
                   type='text'
                   value={formData.filterText}
-                  onChange={(e) => setFormData({ ...formData, filterText: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, filterText: e.target.value })
+                  }
                   placeholder='简体,喵萌奶茶屋'
                   className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500'
                 />
@@ -489,7 +516,9 @@ export default function AnimeSubscriptionComponent({
                 </label>
                 <select
                   value={formData.source}
-                  onChange={(e) => setFormData({ ...formData, source: e.target.value as any })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, source: e.target.value as any })
+                  }
                   className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500'
                 >
                   <option value='mikan'>蜜柑 (Mikan)</option>
@@ -505,7 +534,12 @@ export default function AnimeSubscriptionComponent({
                   type='number'
                   min='0'
                   value={formData.lastEpisode}
-                  onChange={(e) => setFormData({ ...formData, lastEpisode: parseInt(e.target.value) || 0 })}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      lastEpisode: parseInt(e.target.value) || 0,
+                    })
+                  }
                   className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500'
                 />
                 <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
@@ -519,7 +553,9 @@ export default function AnimeSubscriptionComponent({
               </span>
               <Switch
                 checked={formData.enabled}
-                onChange={(checked) => setFormData({ ...formData, enabled: checked })}
+                onChange={(checked) =>
+                  setFormData({ ...formData, enabled: checked })
+                }
               />
             </div>
             <div className='flex gap-2 justify-end pt-2'>
@@ -563,7 +599,11 @@ export default function AnimeSubscriptionComponent({
                       {sub.title}
                     </h3>
                     <span className='px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'>
-                      {sub.source === 'acgrip' ? 'ACG.RIP' : sub.source === 'mikan' ? '蜜柑' : '动漫花园'}
+                      {sub.source === 'acgrip'
+                        ? 'ACG.RIP'
+                        : sub.source === 'mikan'
+                          ? '蜜柑'
+                          : '动漫花园'}
                     </span>
                   </div>
                   <div className='text-sm text-gray-600 dark:text-gray-400 space-y-1'>
@@ -596,8 +636,18 @@ export default function AnimeSubscriptionComponent({
                     className='p-2 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 rounded-lg transition-colors disabled:opacity-50'
                     title='编辑'
                   >
-                    <svg className='w-[18px] h-[18px]' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' />
+                    <svg
+                      className='w-[18px] h-[18px]'
+                      fill='none'
+                      stroke='currentColor'
+                      viewBox='0 0 24 24'
+                    >
+                      <path
+                        strokeLinecap='round'
+                        strokeLinejoin='round'
+                        strokeWidth={2}
+                        d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
+                      />
                     </svg>
                   </button>
                   <button
@@ -619,7 +669,11 @@ export default function AnimeSubscriptionComponent({
                       {sub.title}
                     </h3>
                     <span className='inline-block mt-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'>
-                      {sub.source === 'acgrip' ? 'ACG.RIP' : sub.source === 'mikan' ? '蜜柑' : '动漫花园'}
+                      {sub.source === 'acgrip'
+                        ? 'ACG.RIP'
+                        : sub.source === 'mikan'
+                          ? '蜜柑'
+                          : '动漫花园'}
                     </span>
                   </div>
                   <Switch
@@ -630,7 +684,10 @@ export default function AnimeSubscriptionComponent({
                 </div>
                 <div className='text-sm text-gray-600 dark:text-gray-400 space-y-1'>
                   <p className='break-all'>过滤：{sub.filterText}</p>
-                  <p>集数：第 {sub.lastEpisode} 集 · {formatTime(sub.lastCheckTime)}</p>
+                  <p>
+                    集数：第 {sub.lastEpisode} 集 ·{' '}
+                    {formatTime(sub.lastCheckTime)}
+                  </p>
                 </div>
                 <div className='flex items-center gap-2 pt-1'>
                   <button
@@ -655,8 +712,18 @@ export default function AnimeSubscriptionComponent({
                     disabled={loading}
                     className='flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm text-green-600 bg-green-50 hover:bg-green-100 dark:text-green-400 dark:bg-green-900/20 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50'
                   >
-                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' />
+                    <svg
+                      className='w-4 h-4'
+                      fill='none'
+                      stroke='currentColor'
+                      viewBox='0 0 24 24'
+                    >
+                      <path
+                        strokeLinecap='round'
+                        strokeLinejoin='round'
+                        strokeWidth={2}
+                        d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
+                      />
                     </svg>
                     <span>编辑</span>
                   </button>

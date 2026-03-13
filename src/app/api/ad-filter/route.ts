@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     console.error('获取去广告代码配置失败:', error);
     return NextResponse.json(
       { error: '获取配置失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

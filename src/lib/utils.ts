@@ -5,13 +5,13 @@ import Hls from 'hls.js';
 
 function getDoubanImageProxyConfig(): {
   proxyType:
-  | 'direct'
-  | 'server'
-  | 'img3'
-  | 'cmliussss-cdn-tencent'
-  | 'cmliussss-cdn-ali'
-  | 'baidu'
-  | 'custom';
+    | 'direct'
+    | 'server'
+    | 'img3'
+    | 'cmliussss-cdn-tencent'
+    | 'cmliussss-cdn-ali'
+    | 'baidu'
+    | 'custom';
   proxyUrl: string;
 } {
   // 确保在浏览器环境中执行
@@ -50,7 +50,8 @@ export function processImageUrl(originalUrl: string): string {
   // 处理 TMDB 图片 URL 替换
   if (originalUrl.includes('image.tmdb.org')) {
     if (typeof window !== 'undefined') {
-      const tmdbImageBaseUrl = localStorage.getItem('tmdbImageBaseUrl') || 'https://image.tmdb.org';
+      const tmdbImageBaseUrl =
+        localStorage.getItem('tmdbImageBaseUrl') || 'https://image.tmdb.org';
       // 只有当用户设置了不同的 baseUrl 时才进行替换
       if (tmdbImageBaseUrl !== 'https://image.tmdb.org') {
         return originalUrl.replace('https://image.tmdb.org', tmdbImageBaseUrl);
@@ -73,12 +74,12 @@ export function processImageUrl(originalUrl: string): string {
     case 'cmliussss-cdn-tencent':
       return originalUrl.replace(
         /img\d+\.doubanio\.com/g,
-        'img.doubanio.cmliussss.net'
+        'img.doubanio.cmliussss.net',
       );
     case 'cmliussss-cdn-ali':
       return originalUrl.replace(
         /img\d+\.doubanio\.com/g,
-        'img.doubanio.cmliussss.com'
+        'img.doubanio.cmliussss.com',
       );
     case 'baidu':
       return `https://image.baidu.com/search/down?url=${encodeURIComponent(originalUrl)}`;
@@ -122,20 +123,23 @@ export function processVideoUrl(originalUrl: string): string {
       // 使用腾讯云CDN代理
       return originalUrl.replace(
         /https?:\/\/img\d\.doubanio\.com/g,
-        'https://douban-img.cmliussss.workers.dev'
+        'https://douban-img.cmliussss.workers.dev',
       );
 
     case 'cmliussss-cdn-ali':
       // 使用阿里云CDN代理
       return originalUrl.replace(
         /https?:\/\/img\d\.doubanio\.com/g,
-        'https://douban-img-ali.cmliussss.workers.dev'
+        'https://douban-img-ali.cmliussss.workers.dev',
       );
 
     case 'custom':
       // 使用自定义代理
       if (proxyUrl) {
-        return originalUrl.replace(/https?:\/\/img\d\.doubanio\.com/g, proxyUrl);
+        return originalUrl.replace(
+          /https?:\/\/img\d\.doubanio\.com/g,
+          proxyUrl,
+        );
       }
       return originalUrl;
 
@@ -143,7 +147,7 @@ export function processVideoUrl(originalUrl: string): string {
       // 默认使用腾讯云CDN代理
       return originalUrl.replace(
         /https?:\/\/img\d\.doubanio\.com/g,
-        'https://douban-img.cmliussss.workers.dev'
+        'https://douban-img.cmliussss.workers.dev',
       );
   }
 }
@@ -155,7 +159,7 @@ export function processVideoUrl(originalUrl: string): string {
  */
 export async function getVideoResolutionFromM3u8(
   m3u8Url: string,
-  timeoutMs = 4000
+  timeoutMs = 4000,
 ): Promise<{
   quality: string; // 如720p、1080p等
   loadSpeed: string; // 自动转换为KB/s或MB/s
@@ -233,11 +237,12 @@ export async function getVideoResolutionFromM3u8(
                         : 'SD'; // 480p: 854x480
 
             // 格式化码率
-            const bitrateStr = estimatedBitrate > 0
-              ? estimatedBitrate >= 1000000
-                ? `${(estimatedBitrate / 1000000).toFixed(1)} Mbps`
-                : `${Math.round(estimatedBitrate / 1000)} Kbps`
-              : '未知';
+            const bitrateStr =
+              estimatedBitrate > 0
+                ? estimatedBitrate >= 1000000
+                  ? `${(estimatedBitrate / 1000000).toFixed(1)} Mbps`
+                  : `${Math.round(estimatedBitrate / 1000)} Kbps`
+                : '未知';
 
             resolve({
               quality,
@@ -247,11 +252,12 @@ export async function getVideoResolutionFromM3u8(
             });
           } else {
             // webkit 无法获取尺寸，直接返回
-            const bitrateStr = estimatedBitrate > 0
-              ? estimatedBitrate >= 1000000
-                ? `${(estimatedBitrate / 1000000).toFixed(1)} Mbps`
-                : `${Math.round(estimatedBitrate / 1000)} Kbps`
-              : '未知';
+            const bitrateStr =
+              estimatedBitrate > 0
+                ? estimatedBitrate >= 1000000
+                  ? `${(estimatedBitrate / 1000000).toFixed(1)} Mbps`
+                  : `${Math.round(estimatedBitrate / 1000)} Kbps`
+                : '未知';
 
             resolve({
               quality: '未知',
@@ -298,9 +304,13 @@ export async function getVideoResolutionFromM3u8(
               const fragmentSize = size; // 分片大小（字节）
 
               // 码率 = (分片大小 × 8 bits) / 分片时长
-              estimatedBitrate = Math.round((fragmentSize * 8) / fragmentDuration);
+              estimatedBitrate = Math.round(
+                (fragmentSize * 8) / fragmentDuration,
+              );
 
-              console.log(`[测速] 估算码率: ${(estimatedBitrate / 1000000).toFixed(2)} Mbps (分片: ${(fragmentSize / 1024 / 1024).toFixed(2)} MB, 时长: ${fragmentDuration.toFixed(1)}s)`);
+              console.log(
+                `[测速] 估算码率: ${(estimatedBitrate / 1000000).toFixed(2)} Mbps (分片: ${(fragmentSize / 1024 / 1024).toFixed(2)} MB, 时长: ${fragmentDuration.toFixed(1)}s)`,
+              );
             }
 
             checkAndResolve(); // 尝试返回结果
@@ -309,7 +319,7 @@ export async function getVideoResolutionFromM3u8(
       });
 
       // 为分片请求添加时间戳参数破除浏览器缓存
-      hls.config.xhrSetup = function(xhr: XMLHttpRequest, url: string) {
+      hls.config.xhrSetup = function (xhr: XMLHttpRequest, url: string) {
         const urlWithTimestamp = url.includes('?')
           ? `${url}&_t=${Date.now()}`
           : `${url}?_t=${Date.now()}`;
@@ -338,8 +348,9 @@ export async function getVideoResolutionFromM3u8(
     });
   } catch (error) {
     throw new Error(
-      `Error getting video resolution: ${error instanceof Error ? error.message : String(error)
-      }`
+      `Error getting video resolution: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 }

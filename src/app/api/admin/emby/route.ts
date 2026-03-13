@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   if (storageType === 'localstorage') {
     return NextResponse.json(
       { error: '不支持本地存储进行管理员配置' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -49,13 +49,16 @@ export async function POST(request: NextRequest) {
     if (action === 'test') {
       // 测试连接
       if (!ServerURL) {
-        return NextResponse.json({ error: '请填写 Emby 服务器地址' }, { status: 400 });
+        return NextResponse.json(
+          { error: '请填写 Emby 服务器地址' },
+          { status: 400 },
+        );
       }
 
       if (!ApiKey && !Username) {
         return NextResponse.json(
           { error: '请填写 API Key 或用户名' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -74,8 +77,11 @@ export async function POST(request: NextRequest) {
           await client.authenticate(Username, Password || '');
         } catch (error) {
           return NextResponse.json(
-            { success: false, message: 'Emby 认证失败: ' + (error as Error).message },
-            { status: 200 }
+            {
+              success: false,
+              message: 'Emby 认证失败: ' + (error as Error).message,
+            },
+            { status: 200 },
           );
         }
       }
@@ -84,8 +90,11 @@ export async function POST(request: NextRequest) {
       const isConnected = await client.checkConnectivity();
       if (!isConnected) {
         return NextResponse.json(
-          { success: false, message: 'Emby 连接失败，请检查服务器地址和认证信息' },
-          { status: 200 }
+          {
+            success: false,
+            message: 'Emby 连接失败，请检查服务器地址和认证信息',
+          },
+          { status: 200 },
         );
       }
 
@@ -110,7 +119,7 @@ export async function POST(request: NextRequest) {
     console.error('Emby 配置保存失败:', error);
     return NextResponse.json(
       { error: 'Emby 配置保存失败: ' + (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -36,7 +36,7 @@ export interface IStorage {
   setPlayRecord(
     userName: string,
     key: string,
-    record: PlayRecord
+    record: PlayRecord,
   ): Promise<void>;
   getAllPlayRecords(userName: string): Promise<{ [key: string]: PlayRecord }>;
   deletePlayRecord(userName: string, key: string): Promise<void>;
@@ -56,7 +56,10 @@ export interface IStorage {
   // 音乐播放记录相关
   getMusicPlayRecord(userName: string, key: string): Promise<any | null>;
   setMusicPlayRecord(userName: string, key: string, record: any): Promise<void>;
-  batchSetMusicPlayRecords(userName: string, records: { key: string; record: any }[]): Promise<void>;
+  batchSetMusicPlayRecords(
+    userName: string,
+    records: { key: string; record: any }[],
+  ): Promise<void>;
   getAllMusicPlayRecords(userName: string): Promise<{ [key: string]: any }>;
   deleteMusicPlayRecord(userName: string, key: string): Promise<void>;
   clearAllMusicPlayRecords(userName: string): Promise<void>;
@@ -86,13 +89,13 @@ export interface IStorage {
   getSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<SkipConfig | null>;
   setSkipConfig(
     userName: string,
     source: string,
     id: string,
-    config: SkipConfig
+    config: SkipConfig,
   ): Promise<void>;
   deleteSkipConfig(userName: string, source: string, id: string): Promise<void>;
   getAllSkipConfigs(userName: string): Promise<{ [key: string]: SkipConfig }>;
@@ -103,7 +106,7 @@ export interface IStorage {
   getDanmakuFilterConfig(userName: string): Promise<DanmakuFilterConfig | null>;
   setDanmakuFilterConfig(
     userName: string,
-    config: DanmakuFilterConfig
+    config: DanmakuFilterConfig,
   ): Promise<void>;
   deleteDanmakuFilterConfig(userName: string): Promise<void>;
 
@@ -118,7 +121,10 @@ export interface IStorage {
   // 通知相关
   getNotifications(userName: string): Promise<Notification[]>;
   addNotification(userName: string, notification: Notification): Promise<void>;
-  markNotificationAsRead(userName: string, notificationId: string): Promise<void>;
+  markNotificationAsRead(
+    userName: string,
+    notificationId: string,
+  ): Promise<void>;
   deleteNotification(userName: string, notificationId: string): Promise<void>;
   clearAllNotifications(userName: string): Promise<void>;
   getUnreadNotificationCount(userName: string): Promise<number>;
@@ -128,13 +134,19 @@ export interface IStorage {
   setLastFavoriteCheckTime(userName: string, timestamp: number): Promise<void>;
 
   // 求片冷却时间
-  updateLastMovieRequestTime?(userName: string, timestamp: number): Promise<void>;
+  updateLastMovieRequestTime?(
+    userName: string,
+    timestamp: number,
+  ): Promise<void>;
 
   // 求片相关
   getAllMovieRequests(): Promise<MovieRequest[]>;
   getMovieRequest(requestId: string): Promise<MovieRequest | null>;
   createMovieRequest(request: MovieRequest): Promise<void>;
-  updateMovieRequest(requestId: string, updates: Partial<MovieRequest>): Promise<void>;
+  updateMovieRequest(
+    requestId: string,
+    updates: Partial<MovieRequest>,
+  ): Promise<void>;
   deleteMovieRequest(requestId: string): Promise<void>;
   getUserMovieRequests(userName: string): Promise<string[]>;
   addUserMovieRequest(userName: string, requestId: string): Promise<void>;
@@ -160,7 +172,10 @@ export interface IStorage {
   getUserEmail?(userName: string): Promise<string | null>;
   setUserEmail?(userName: string, email: string): Promise<void>;
   getEmailNotificationPreference?(userName: string): Promise<boolean>;
-  setEmailNotificationPreference?(userName: string, enabled: boolean): Promise<void>;
+  setEmailNotificationPreference?(
+    userName: string,
+    enabled: boolean,
+  ): Promise<void>;
 
   // TVBox订阅token相关
   getTvboxSubscribeToken?(userName: string): Promise<string | null>;

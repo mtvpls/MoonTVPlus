@@ -39,11 +39,16 @@ export async function GET(request: NextRequest) {
     if (!tmdbApiKey) {
       return NextResponse.json(
         { error: 'TMDB API Key 未配置' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const result = await getTVSeasons(tmdbApiKey, tvId, tmdbProxy, tmdbReverseProxy);
+    const result = await getTVSeasons(
+      tmdbApiKey,
+      tvId,
+      tmdbProxy,
+      tmdbReverseProxy,
+    );
 
     if (result.code === 200 && result.seasons) {
       return NextResponse.json({
@@ -53,14 +58,14 @@ export async function GET(request: NextRequest) {
     } else {
       return NextResponse.json(
         { error: '获取季度列表失败', code: result.code },
-        { status: result.code }
+        { status: result.code },
       );
     }
   } catch (error) {
     console.error('获取季度列表失败:', error);
     return NextResponse.json(
       { error: '获取失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

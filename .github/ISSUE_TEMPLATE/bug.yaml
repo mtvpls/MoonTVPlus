@@ -1,6 +1,6 @@
 name: Bug 报告 🐛
 description: 汇报一个BUG
-labels: [ "bug" ]
+labels: ['bug']
 assignees:
   - Mr-Quin
 body:
@@ -40,7 +40,7 @@ body:
 
   - type: markdown
     attributes:
-      value: "## 运行环境"
+      value: '## 运行环境'
 
   - type: dropdown
     attributes:

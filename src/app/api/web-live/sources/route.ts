@@ -11,12 +11,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
 
-    const sources = config.WebLiveConfig.filter(s => !s.disabled);
+    const sources = config.WebLiveConfig.filter((s) => !s.disabled);
     return NextResponse.json(sources);
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '获取失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

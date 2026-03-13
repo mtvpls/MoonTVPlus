@@ -63,9 +63,14 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: '源不存在' }, { status: 404 });
         }
         if (source.from === 'config') {
-          return NextResponse.json({ error: '无法删除配置文件中的源' }, { status: 400 });
+          return NextResponse.json(
+            { error: '无法删除配置文件中的源' },
+            { status: 400 },
+          );
         }
-        config.WebLiveConfig = config.WebLiveConfig.filter((s) => s.key !== key);
+        config.WebLiveConfig = config.WebLiveConfig.filter(
+          (s) => s.key !== key,
+        );
         break;
       }
 
@@ -96,7 +101,10 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: '源不存在' }, { status: 404 });
         }
         if (source.from === 'config') {
-          return NextResponse.json({ error: '无法编辑配置文件中的源' }, { status: 400 });
+          return NextResponse.json(
+            { error: '无法编辑配置文件中的源' },
+            { status: 400 },
+          );
         }
         source.name = name;
         source.platform = platform;
@@ -107,7 +115,10 @@ export async function POST(request: NextRequest) {
       case 'sort': {
         const { keys } = body;
         if (!Array.isArray(keys)) {
-          return NextResponse.json({ error: '无效的排序数据' }, { status: 400 });
+          return NextResponse.json(
+            { error: '无效的排序数据' },
+            { status: 400 },
+          );
         }
         const sortedSources = keys
           .map((key) => config.WebLiveConfig!.find((s) => s.key === key))
@@ -125,7 +136,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '操作失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

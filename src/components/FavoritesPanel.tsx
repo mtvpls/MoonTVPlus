@@ -2,7 +2,7 @@
 
 'use client';
 
-import { AlertTriangle,Star, X } from 'lucide-react';
+import { AlertTriangle, Star, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -101,20 +101,23 @@ export const FavoritesPanel: React.FC<FavoritesPanelProps> = ({
 
   // 监听收藏变化,实时移除已取消收藏的项目
   useEffect(() => {
-    const unsubscribe = subscribeToDataUpdates('favoritesUpdated', async (newFavorites: Record<string, any>) => {
-      if (isOpen) {
-        // 获取最新的收藏列表的键
-        const currentKeys = Object.keys(newFavorites);
+    const unsubscribe = subscribeToDataUpdates(
+      'favoritesUpdated',
+      async (newFavorites: Record<string, any>) => {
+        if (isOpen) {
+          // 获取最新的收藏列表的键
+          const currentKeys = Object.keys(newFavorites);
 
-        // 过滤掉已经不在收藏中的项目
-        setFavoriteItems((prevItems) =>
-          prevItems.filter((item) => {
-            const key = `${item.source}+${item.id}`;
-            return currentKeys.includes(key);
-          })
-        );
-      }
-    });
+          // 过滤掉已经不在收藏中的项目
+          setFavoriteItems((prevItems) =>
+            prevItems.filter((item) => {
+              const key = `${item.source}+${item.id}`;
+              return currentKeys.includes(key);
+            }),
+          );
+        }
+      },
+    );
 
     return () => {
       unsubscribe();
@@ -192,51 +195,52 @@ export const FavoritesPanel: React.FC<FavoritesPanelProps> = ({
       </div>
 
       {/* 确认对话框 */}
-      {showConfirmDialog && createPortal(
-        <div
-          className='fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4 transition-opacity duration-300'
-          onClick={() => setShowConfirmDialog(false)}
-        >
+      {showConfirmDialog &&
+        createPortal(
           <div
-            className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-red-200 dark:border-red-800 transition-all duration-300'
-            onClick={(e) => e.stopPropagation()}
+            className='fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4 transition-opacity duration-300'
+            onClick={() => setShowConfirmDialog(false)}
           >
-            <div className="p-6">
-              {/* 图标和标题 */}
-              <div className="flex items-start gap-4 mb-4">
-                <div className="flex-shrink-0">
-                  <AlertTriangle className="w-8 h-8 text-red-500" />
+            <div
+              className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-red-200 dark:border-red-800 transition-all duration-300'
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className='p-6'>
+                {/* 图标和标题 */}
+                <div className='flex items-start gap-4 mb-4'>
+                  <div className='flex-shrink-0'>
+                    <AlertTriangle className='w-8 h-8 text-red-500' />
+                  </div>
+                  <div className='flex-1'>
+                    <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2'>
+                      清空收藏
+                    </h3>
+                    <p className='text-sm text-gray-600 dark:text-gray-400'>
+                      确定要清空所有收藏吗？此操作不可恢复。
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                    清空收藏
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    确定要清空所有收藏吗？此操作不可恢复。
-                  </p>
-                </div>
-              </div>
 
-              {/* 按钮组 */}
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={() => setShowConfirmDialog(false)}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleClearAll}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-                >
-                  确定清空
-                </button>
+                {/* 按钮组 */}
+                <div className='flex gap-3 mt-6'>
+                  <button
+                    onClick={() => setShowConfirmDialog(false)}
+                    className='flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors'
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleClearAll}
+                    className='flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors'
+                  >
+                    确定清空
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 };

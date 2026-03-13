@@ -19,7 +19,10 @@ const db = new Database(dbPath);
 console.log('📦 Initializing SQLite database for development...');
 console.log('📍 Database location:', dbPath);
 
-const migrationPath = path.join(process.cwd(), 'migrations/001_initial_schema.sql');
+const migrationPath = path.join(
+  process.cwd(),
+  'migrations/001_initial_schema.sql',
+);
 if (!fs.existsSync(migrationPath)) {
   console.error('❌ Migration file not found:', migrationPath);
   process.exit(1);

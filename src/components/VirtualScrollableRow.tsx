@@ -17,7 +17,10 @@ export default function VirtualScrollableRow({
   const containerRef = useRef<HTMLDivElement>(null);
   const [showLeftScroll, setShowLeftScroll] = useState(false);
   const [showRightScroll, setShowRightScroll] = useState(false);
-  const [visibleRange, setVisibleRange] = useState({ start: 0, end: maxVisible });
+  const [visibleRange, setVisibleRange] = useState({
+    start: 0,
+    end: maxVisible,
+  });
 
   // 检查滚动状态
   const checkScroll = () => {
@@ -38,7 +41,10 @@ export default function VirtualScrollableRow({
     // 扩展渲染范围（当前可见 + 前后缓冲）
     const bufferSize = 5;
     const newStart = Math.max(0, scrolledItems - bufferSize);
-    const newEnd = Math.min(children.length, scrolledItems + visibleItems + bufferSize);
+    const newEnd = Math.min(
+      children.length,
+      scrolledItems + visibleItems + bufferSize,
+    );
 
     setVisibleRange({ start: newStart, end: newEnd });
   };
@@ -81,15 +87,15 @@ export default function VirtualScrollableRow({
   const visibleChildren = children.slice(visibleRange.start, visibleRange.end);
 
   return (
-    <div className="relative group">
+    <div className='relative group'>
       {/* 左侧滚动按钮 */}
       {showLeftScroll && (
         <button
           onClick={scrollLeft}
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-[600] bg-white/90 dark:bg-gray-800/90 p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-gray-700"
-          aria-label="向左滚动"
+          className='absolute left-0 top-1/2 -translate-y-1/2 z-[600] bg-white/90 dark:bg-gray-800/90 p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-gray-700'
+          aria-label='向左滚动'
         >
-          <ChevronLeft className="w-6 h-6 text-gray-700 dark:text-gray-200" />
+          <ChevronLeft className='w-6 h-6 text-gray-700 dark:text-gray-200' />
         </button>
       )}
 
@@ -97,7 +103,13 @@ export default function VirtualScrollableRow({
       <div
         ref={containerRef}
         className={`flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth ${className}`}
-        style={{ scrollBehavior: 'smooth', paddingTop: '20px', paddingBottom: '20px', marginTop: '-20px', marginBottom: '-20px' }}
+        style={{
+          scrollBehavior: 'smooth',
+          paddingTop: '20px',
+          paddingBottom: '20px',
+          marginTop: '-20px',
+          marginBottom: '-20px',
+        }}
       >
         {/* 左侧占位符（用于保持滚动位置） */}
         {visibleRange.start > 0 && (
@@ -109,7 +121,12 @@ export default function VirtualScrollableRow({
 
         {/* 右侧占位符 */}
         {visibleRange.end < children.length && (
-          <div style={{ minWidth: (children.length - visibleRange.end) * 208, flexShrink: 0 }} />
+          <div
+            style={{
+              minWidth: (children.length - visibleRange.end) * 208,
+              flexShrink: 0,
+            }}
+          />
         )}
       </div>
 
@@ -117,10 +134,10 @@ export default function VirtualScrollableRow({
       {showRightScroll && (
         <button
           onClick={scrollRight}
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-[600] bg-white/90 dark:bg-gray-800/90 p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-gray-700"
-          aria-label="向右滚动"
+          className='absolute right-0 top-1/2 -translate-y-1/2 z-[600] bg-white/90 dark:bg-gray-800/90 p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-gray-700'
+          aria-label='向右滚动'
         >
-          <ChevronRight className="w-6 h-6 text-gray-700 dark:text-gray-200" />
+          <ChevronRight className='w-6 h-6 text-gray-700 dark:text-gray-200' />
         </button>
       )}
     </div>

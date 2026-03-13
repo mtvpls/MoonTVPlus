@@ -38,7 +38,10 @@ export async function POST(request: NextRequest) {
       case 'add':
         // 检查是否已存在相同的 key
         if (config.LiveConfig.some((l) => l.key === key)) {
-          return NextResponse.json({ error: '直播源 key 已存在' }, { status: 400 });
+          return NextResponse.json(
+            { error: '直播源 key 已存在' },
+            { status: 400 },
+          );
         }
 
         const liveInfo = {
@@ -50,7 +53,7 @@ export async function POST(request: NextRequest) {
           from: 'custom' as 'custom' | 'config',
           channelNumber: 0,
           disabled: false,
-        }
+        };
 
         try {
           const nums = await refreshLiveChannels(liveInfo);
@@ -73,7 +76,10 @@ export async function POST(request: NextRequest) {
 
         const liveSource = config.LiveConfig[deleteIndex];
         if (liveSource.from === 'config') {
-          return NextResponse.json({ error: '不能删除配置文件中的直播源' }, { status: 400 });
+          return NextResponse.json(
+            { error: '不能删除配置文件中的直播源' },
+            { status: 400 },
+          );
         }
 
         deleteCachedLiveChannels(key);
@@ -108,7 +114,10 @@ export async function POST(request: NextRequest) {
 
         // 配置文件中的直播源不允许编辑
         if (editSource.from === 'config') {
-          return NextResponse.json({ error: '不能编辑配置文件中的直播源' }, { status: 400 });
+          return NextResponse.json(
+            { error: '不能编辑配置文件中的直播源' },
+            { status: 400 },
+          );
         }
 
         // 更新字段（除了 key 和 from）
@@ -131,7 +140,10 @@ export async function POST(request: NextRequest) {
         // 排序直播源
         const { order } = body;
         if (!Array.isArray(order)) {
-          return NextResponse.json({ error: '排序数据格式错误' }, { status: 400 });
+          return NextResponse.json(
+            { error: '排序数据格式错误' },
+            { status: 400 },
+          );
         }
 
         // 创建新的排序后的数组
@@ -164,7 +176,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '操作失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

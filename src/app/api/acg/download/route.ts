@@ -16,26 +16,17 @@ export async function POST(req: NextRequest) {
     // 检查权限
     const authInfo = getAuthInfoFromCookie(req);
     if (!authInfo || (authInfo.role !== 'admin' && authInfo.role !== 'owner')) {
-      return NextResponse.json(
-        { error: '无权限访问' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: '无权限访问' }, { status: 403 });
     }
 
     const { url, name } = await req.json();
 
     if (!url || typeof url !== 'string') {
-      return NextResponse.json(
-        { error: '下载链接不能为空' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '下载链接不能为空' }, { status: 400 });
     }
 
     if (!name || typeof name !== 'string') {
-      return NextResponse.json(
-        { error: '资源名称不能为空' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '资源名称不能为空' }, { status: 400 });
     }
 
     // 获取 OpenList 配置
@@ -45,14 +36,18 @@ export async function POST(req: NextRequest) {
     if (!openlistConfig?.Enabled) {
       return NextResponse.json(
         { error: '私人影库功能未启用' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    if (!openlistConfig.URL || !openlistConfig.Username || !openlistConfig.Password) {
+    if (
+      !openlistConfig.URL ||
+      !openlistConfig.Username ||
+      !openlistConfig.Password
+    ) {
       return NextResponse.json(
         { error: 'OpenList 配置不完整' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -64,7 +59,7 @@ export async function POST(req: NextRequest) {
     const client = new OpenListClient(
       openlistConfig.URL,
       openlistConfig.Username,
-      openlistConfig.Password
+      openlistConfig.Password,
     );
 
     // 获取 Token 并调用 API
@@ -75,7 +70,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': token,
+        Authorization: token,
       },
       body: JSON.stringify({
         path: downloadPath,
@@ -96,12 +91,11 @@ export async function POST(req: NextRequest) {
       message: '已添加到离线下载队列',
       path: downloadPath,
     });
-
   } catch (error: any) {
     console.error('添加离线下载任务失败:', error);
     return NextResponse.json(
       { error: error.message || '添加离线下载任务失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

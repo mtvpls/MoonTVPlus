@@ -29,12 +29,11 @@ export async function GET(request: NextRequest) {
     const config = await getConfig();
     const xiaoyaConfig = config.XiaoyaConfig;
 
-    if (
-      !xiaoyaConfig ||
-      !xiaoyaConfig.Enabled ||
-      !xiaoyaConfig.ServerURL
-    ) {
-      return NextResponse.json({ error: '小雅未配置或未启用' }, { status: 400 });
+    if (!xiaoyaConfig || !xiaoyaConfig.Enabled || !xiaoyaConfig.ServerURL) {
+      return NextResponse.json(
+        { error: '小雅未配置或未启用' },
+        { status: 400 },
+      );
     }
 
     // 使用小雅的搜索引擎
@@ -42,7 +41,8 @@ export async function GET(request: NextRequest) {
 
     const response = await fetch(searchUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
     });
 
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     console.error('小雅搜索失败:', error);
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -224,7 +224,9 @@ const CapsuleSwitch: React.FC<CapsuleSwitchProps> = ({
                   : 'text-gray-700 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
               }`}
             >
-              {opt.icon && <span className='inline-flex items-center'>{opt.icon}</span>}
+              {opt.icon && (
+                <span className='inline-flex items-center'>{opt.icon}</span>
+              )}
               {opt.label}
             </button>
           );

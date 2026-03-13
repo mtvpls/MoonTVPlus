@@ -20,7 +20,7 @@ import {
   updateScanTaskProgress,
 } from '@/lib/scan-task';
 import { parseSeasonFromTitle } from '@/lib/season-parser';
-import { getTVSeasonDetails,searchTMDB } from '@/lib/tmdb.search';
+import { getTVSeasonDetails, searchTMDB } from '@/lib/tmdb.search';
 
 /**
  * 获取根目录列表（兼容新旧配置）
@@ -59,7 +59,9 @@ function getRootPaths(openListConfig: AdminConfig['OpenListConfig']): string[] {
 /**
  * 迁移旧版单根目录配置到多根目录
  */
-async function migrateToMultiRoot(openListConfig: NonNullable<AdminConfig['OpenListConfig']>): Promise<void> {
+async function migrateToMultiRoot(
+  openListConfig: NonNullable<AdminConfig['OpenListConfig']>,
+): Promise<void> {
   const oldRootPath = openListConfig.RootPath!;
 
   console.log('[OpenList Migration] 检测到旧版配置，开始迁移...');
@@ -95,7 +97,9 @@ async function migrateToMultiRoot(openListConfig: NonNullable<AdminConfig['OpenL
 /**
  * 启动 OpenList 刷新任务
  */
-export async function startOpenListRefresh(clearMetaInfo = false): Promise<{ taskId: string }> {
+export async function startOpenListRefresh(
+  clearMetaInfo = false,
+): Promise<{ taskId: string }> {
   const config = await getConfig();
   const openListConfig = config.OpenListConfig;
 
@@ -141,7 +145,7 @@ export async function startOpenListRefresh(clearMetaInfo = false): Promise<{ tas
     openListConfig.Username,
     openListConfig.Password,
     clearMetaInfo,
-    openListConfig.ScanMode || 'hybrid'
+    openListConfig.ScanMode || 'hybrid',
   ).catch((error) => {
     console.error('[OpenList Refresh] 后台扫描失败:', error);
     failScanTask(taskId, (error as Error).message);
@@ -163,12 +167,14 @@ async function performMultiRootScan(
   username: string,
   password: string,
   clearMetaInfo: boolean,
-  scanMode: 'torrent' | 'name' | 'hybrid'
+  scanMode: 'torrent' | 'name' | 'hybrid',
 ): Promise<void> {
   for (let i = 0; i < rootPaths.length; i++) {
     const rootPath = rootPaths[i];
 
-    console.log(`[OpenList Refresh] 扫描根目录 (${i + 1}/${rootPaths.length}): ${rootPath}`);
+    console.log(
+      `[OpenList Refresh] 扫描根目录 (${i + 1}/${rootPaths.length}): ${rootPath}`,
+    );
     try {
       await performScan(
         taskId,
@@ -180,7 +186,7 @@ async function performMultiRootScan(
         username,
         password,
         clearMetaInfo && i === 0, // 只在第一个根目录时清除
-        scanMode
+        scanMode,
       );
     } catch (error) {
       console.error(`[OpenList Refresh] 根目录 ${rootPath} 扫描失败:`, error);
@@ -202,7 +208,7 @@ async function performScan(
   username?: string,
   password?: string,
   clearMetaInfo?: boolean,
-  scanMode: 'torrent' | 'name' | 'hybrid' = 'hybrid'
+  scanMode: 'torrent' | 'name' | 'hybrid' = 'hybrid',
 ): Promise<void> {
   const client = new OpenListClient(url, username!, password!);
 
@@ -244,18 +250,28 @@ async function performScan(
     let total = 0;
 
     while (true) {
-      const listResponse = await client.listDirectory(rootPath, currentPage, pageSize, true);
-	  console.log(listResponse);
+      const listResponse = await client.listDirectory(
+        rootPath,
+        currentPage,
+        pageSize,
+        true,
+      );
+      console.log(listResponse);
       if (listResponse.code !== 200) {
         throw new Error('OpenList 列表获取失败5');
       }
 
       total = listResponse.data.total;
-      const pageFolders = listResponse.data.content.filter((item) => item.is_dir);
+      const pageFolders = listResponse.data.content.filter(
+        (item) => item.is_dir,
+      );
       folders.push(...pageFolders);
 
       // 判断是否还有更多数据：当前页为 null 或数据量小于 pageSize 说明已经是最后一页
-      if (!listResponse.data.content || listResponse.data.content.length < pageSize) {
+      if (
+        !listResponse.data.content ||
+        listResponse.data.content.length < pageSize
+      ) {
         break;
       }
 
@@ -304,21 +320,45 @@ async function performScan(
           year = torrentInfo.year || null;
 
           console.log(`[OpenList Refresh] 种子库模式 - 文件夹: ${folder.name}`);
-          console.log(`[OpenList Refresh] 解析结果 - 标题: ${searchQuery}, 季度: ${seasonNumber}, 年份: ${year}`);
+          console.log(
+            `[OpenList Refresh] 解析结果 - 标题: ${searchQuery}, 季度: ${seasonNumber}, 年份: ${year}`,
+          );
 
-          searchResult = await searchTMDB(tmdbApiKey, searchQuery, tmdbProxy, year || undefined, tmdbReverseProxy);
+          searchResult = await searchTMDB(
+            tmdbApiKey,
+            searchQuery,
+            tmdbProxy,
+            year || undefined,
+            tmdbReverseProxy,
+          );
         }
 
-        if (scanMode === 'name' || (scanMode === 'hybrid' && (!searchResult || searchResult.code !== 200 || !searchResult.result))) {
+        if (
+          scanMode === 'name' ||
+          (scanMode === 'hybrid' &&
+            (!searchResult ||
+              searchResult.code !== 200 ||
+              !searchResult.result))
+        ) {
           const seasonInfo = parseSeasonFromTitle(folder.name);
           searchQuery = seasonInfo.cleanTitle || folder.name;
           seasonNumber = seasonInfo.seasonNumber;
           year = seasonInfo.year;
 
-          console.log(`[OpenList Refresh] 名字匹配模式 - 文件夹: ${folder.name}`);
-          console.log(`[OpenList Refresh] 清理后标题: ${searchQuery}, 季度: ${seasonNumber}, 年份: ${year}`);
+          console.log(
+            `[OpenList Refresh] 名字匹配模式 - 文件夹: ${folder.name}`,
+          );
+          console.log(
+            `[OpenList Refresh] 清理后标题: ${searchQuery}, 季度: ${seasonNumber}, 年份: ${year}`,
+          );
 
-          searchResult = await searchTMDB(tmdbApiKey, searchQuery, tmdbProxy, year || undefined, tmdbReverseProxy);
+          searchResult = await searchTMDB(
+            tmdbApiKey,
+            searchQuery,
+            tmdbProxy,
+            year || undefined,
+            tmdbReverseProxy,
+          );
         }
 
         if (searchResult.code === 200 && searchResult.result) {
@@ -344,7 +384,7 @@ async function performScan(
                 result.id,
                 seasonNumber,
                 tmdbProxy,
-                tmdbReverseProxy
+                tmdbReverseProxy,
               );
 
               if (seasonDetails.code === 200 && seasonDetails.season) {
@@ -365,7 +405,9 @@ async function performScan(
                   folderInfo.release_date = seasonDetails.season.air_date;
                 }
               } else {
-                console.warn(`[OpenList Refresh] 获取季度 ${seasonNumber} 详情失败`);
+                console.warn(
+                  `[OpenList Refresh] 获取季度 ${seasonNumber} 详情失败`,
+                );
                 folderInfo.season_number = seasonNumber;
               }
             } catch (error) {
@@ -394,7 +436,10 @@ async function performScan(
 
         await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (error) {
-        console.error(`[OpenList Refresh] 处理文件夹失败: ${folder.name}`, error);
+        console.error(
+          `[OpenList Refresh] 处理文件夹失败: ${folder.name}`,
+          error,
+        );
         metaInfo.folders[folderKey] = {
           folderName: fullFolderPath,
           tmdb_id: 0,

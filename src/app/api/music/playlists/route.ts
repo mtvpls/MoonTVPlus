@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 
-import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
+import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     console.error('GET /api/music/playlists error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -64,10 +64,7 @@ export async function POST(request: NextRequest) {
     const { name, description } = body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      return NextResponse.json(
-        { error: '歌单名称不能为空' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '歌单名称不能为空' }, { status: 400 });
     }
 
     const playlistId = randomUUID();
@@ -85,7 +82,7 @@ export async function POST(request: NextRequest) {
     console.error('POST /api/music/playlists error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -114,10 +111,7 @@ export async function PUT(request: NextRequest) {
     const { playlistId, name, description, cover } = body;
 
     if (!playlistId) {
-      return NextResponse.json(
-        { error: '歌单ID不能为空' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '歌单ID不能为空' }, { status: 400 });
     }
 
     // 检查歌单是否存在且属于当前用户
@@ -143,7 +137,7 @@ export async function PUT(request: NextRequest) {
     console.error('PUT /api/music/playlists error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -172,10 +166,7 @@ export async function DELETE(request: NextRequest) {
     const playlistId = searchParams.get('playlistId');
 
     if (!playlistId) {
-      return NextResponse.json(
-        { error: '歌单ID不能为空' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '歌单ID不能为空' }, { status: 400 });
     }
 
     // 检查歌单是否存在且属于当前用户
@@ -194,7 +185,7 @@ export async function DELETE(request: NextRequest) {
     console.error('DELETE /api/music/playlists error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       {
         error: '不支持本地存储模式修改密码',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (username === process.env.USERNAME) {
       return NextResponse.json(
         { error: '站长不能通过此接口修改密码' },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -58,13 +58,20 @@ export async function POST(request: NextRequest) {
       for (const device of devices) {
         if (device.tokenId !== currentTokenId) {
           await revokeRefreshToken(username, device.tokenId);
-          console.log(`Revoked token ${device.tokenId} for ${username} after password change`);
+          console.log(
+            `Revoked token ${device.tokenId} for ${username} after password change`,
+          );
         }
       }
 
-      console.log(`Password changed for ${username}, revoked ${devices.length - 1} other devices`);
+      console.log(
+        `Password changed for ${username}, revoked ${devices.length - 1} other devices`,
+      );
     } catch (error) {
-      console.error('Failed to revoke other devices after password change:', error);
+      console.error(
+        'Failed to revoke other devices after password change:',
+        error,
+      );
       // 不影响密码修改的成功，只记录错误
     }
 
@@ -76,7 +83,7 @@ export async function POST(request: NextRequest) {
         error: '修改密码失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

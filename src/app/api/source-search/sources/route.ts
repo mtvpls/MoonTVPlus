@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     console.error('Failed to get available API sites:', error);
     return NextResponse.json(
       { error: 'Failed to load sources' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useDownload } from '@/contexts/DownloadContext';
 
@@ -17,7 +17,7 @@ export function DownloadBubble() {
     const initPosition = () => {
       setPosition({
         x: window.innerWidth - 80,
-        y: window.innerHeight - 80
+        y: window.innerHeight - 80,
       });
     };
 
@@ -40,7 +40,7 @@ export function DownloadBubble() {
 
       setPosition({
         x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
+        y: Math.max(0, Math.min(newY, maxY)),
       });
     };
 
@@ -58,7 +58,7 @@ export function DownloadBubble() {
 
       setPosition({
         x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
+        y: Math.max(0, Math.min(newY, maxY)),
       });
     };
 
@@ -69,7 +69,9 @@ export function DownloadBubble() {
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleEnd);
-      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchmove', handleTouchMove, {
+        passive: false,
+      });
       document.addEventListener('touchend', handleEnd);
     }
 
@@ -87,7 +89,7 @@ export function DownloadBubble() {
     const rect = e.currentTarget.getBoundingClientRect();
     setDragOffset({
       x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      y: e.clientY - rect.top,
     });
   };
 
@@ -97,7 +99,7 @@ export function DownloadBubble() {
     const rect = e.currentTarget.getBoundingClientRect();
     setDragOffset({
       x: touch.clientX - rect.left,
-      y: touch.clientY - rect.top
+      y: touch.clientY - rect.top,
     });
   };
 
@@ -153,7 +155,9 @@ export function DownloadBubble() {
         {/* 悬停提示 */}
         <div className='absolute bottom-full right-0 mb-2 hidden group-hover:block'>
           <div className='bg-gray-900 text-white text-sm rounded-lg py-2 px-3 whitespace-nowrap'>
-            {downloadingCount > 0 ? `${downloadingCount} 个任务下载中` : '查看下载任务'}
+            {downloadingCount > 0
+              ? `${downloadingCount} 个任务下载中`
+              : '查看下载任务'}
             <div className='absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900'></div>
           </div>
         </div>

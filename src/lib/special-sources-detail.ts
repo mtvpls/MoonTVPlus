@@ -9,7 +9,7 @@ import { SearchResult } from '@/lib/types';
 export async function getEmbyDetail(
   source: string,
   id: string,
-  proxyToken?: string | null
+  proxyToken?: string | null,
 ): Promise<SearchResult> {
   const config = await getConfig();
 
@@ -45,7 +45,12 @@ export async function getEmbyDetail(
       source_name: sourceName,
       id: item.Id,
       title: item.Name,
-      poster: client.getImageUrl(item.Id, 'Primary', undefined, client.isProxyEnabled() ? proxyToken || undefined : undefined),
+      poster: client.getImageUrl(
+        item.Id,
+        'Primary',
+        undefined,
+        client.isProxyEnabled() ? proxyToken || undefined : undefined,
+      ),
       year: item.ProductionYear?.toString() || '',
       douban_id: 0,
       desc: item.Overview || '',
@@ -77,12 +82,17 @@ export async function getEmbyDetail(
       source_name: sourceName,
       id: item.Id,
       title: item.Name,
-      poster: client.getImageUrl(item.Id, 'Primary', undefined, client.isProxyEnabled() ? proxyToken || undefined : undefined),
+      poster: client.getImageUrl(
+        item.Id,
+        'Primary',
+        undefined,
+        client.isProxyEnabled() ? proxyToken || undefined : undefined,
+      ),
       year: item.ProductionYear?.toString() || '',
       douban_id: 0,
       desc: item.Overview || '',
       episodes: await Promise.all(
-        allEpisodes.map((ep) => client.getStreamUrl(ep.Id))
+        allEpisodes.map((ep) => client.getStreamUrl(ep.Id)),
       ),
       episodes_titles: allEpisodes.map((ep) => {
         const seasonNum = ep.ParentIndexNumber || 1;
@@ -100,9 +110,7 @@ export async function getEmbyDetail(
 /**
  * 获取 OpenList 源的视频详情
  */
-export async function getOpenListDetail(
-  id: string
-): Promise<SearchResult> {
+export async function getOpenListDetail(id: string): Promise<SearchResult> {
   const config = await getConfig();
   const openListConfig = config.OpenListConfig;
 
@@ -122,9 +130,8 @@ export async function getOpenListDetail(
   let metaInfo: any = null;
   let folderMeta: any = null;
   try {
-    const { getCachedMetaInfo, setCachedMetaInfo } = await import(
-      '@/lib/openlist-cache'
-    );
+    const { getCachedMetaInfo, setCachedMetaInfo } =
+      await import('@/lib/openlist-cache');
     const { db } = await import('@/lib/db');
 
     metaInfo = getCachedMetaInfo();
@@ -152,15 +159,14 @@ export async function getOpenListDetail(
 
   // 2. 直接调用 OpenList 客户端获取视频列表
   const { OpenListClient } = await import('@/lib/openlist.client');
-  const { getCachedVideoInfo, setCachedVideoInfo } = await import(
-    '@/lib/openlist-cache'
-  );
+  const { getCachedVideoInfo, setCachedVideoInfo } =
+    await import('@/lib/openlist-cache');
   const { parseVideoFileName } = await import('@/lib/video-parser');
 
   const client = new OpenListClient(
     openListConfig.URL,
     openListConfig.Username,
-    openListConfig.Password
+    openListConfig.Password,
   );
 
   let videoInfo = getCachedVideoInfo(folderPath);
@@ -175,7 +181,7 @@ export async function getOpenListDetail(
     const listResponse = await client.listDirectory(
       folderPath,
       currentPage,
-      pageSize
+      pageSize,
     );
 
     if (listResponse.code !== 200) {
@@ -214,9 +220,7 @@ export async function getOpenListDetail(
   const videoFiles = allFiles.filter((item) => {
     if (item.is_dir || item.name.startsWith('.') || item.name.endsWith('.json'))
       return false;
-    return videoExtensions.some((ext) =>
-      item.name.toLowerCase().endsWith(ext)
-    );
+    return videoExtensions.some((ext) => item.name.toLowerCase().endsWith(ext));
   });
 
   if (!videoInfo) {
@@ -249,13 +253,12 @@ export async function getOpenListDetail(
           isOVA: parsed.isOVA,
         };
       } else {
-        episodeInfo =
-          videoInfo!.episodes[file.name] || {
-            episode: index + 1,
-            season: undefined,
-            title: undefined,
-            parsed_from: 'filename',
-          };
+        episodeInfo = videoInfo!.episodes[file.name] || {
+          episode: index + 1,
+          season: undefined,
+          title: undefined,
+          parsed_from: 'filename',
+        };
       }
       let displayTitle = episodeInfo.title;
       if (!displayTitle && episodeInfo.episode) {
@@ -295,14 +298,12 @@ export async function getOpenListDetail(
     poster: folderMeta?.poster_path
       ? getTMDBImageUrl(folderMeta.poster_path)
       : '',
-    year: folderMeta?.release_date
-      ? folderMeta.release_date.split('-')[0]
-      : '',
+    year: folderMeta?.release_date ? folderMeta.release_date.split('-')[0] : '',
     douban_id: 0,
     desc: folderMeta?.overview || '',
     episodes: episodes.map(
       (ep) =>
-        `/api/openlist/play?folder=${encodeURIComponent(folderName)}&fileName=${encodeURIComponent(ep.fileName)}`
+        `/api/openlist/play?folder=${encodeURIComponent(folderName)}&fileName=${encodeURIComponent(ep.fileName)}`,
     ),
     episodes_titles: episodes.map((ep) => ep.title!),
     proxyMode: false, // openlist 源不使用代理模式
@@ -316,25 +317,20 @@ export async function getXiaoyaDetail(id: string): Promise<SearchResult> {
   const config = await getConfig();
   const xiaoyaConfig = config.XiaoyaConfig;
 
-  if (
-    !xiaoyaConfig ||
-    !xiaoyaConfig.Enabled ||
-    !xiaoyaConfig.ServerURL
-  ) {
+  if (!xiaoyaConfig || !xiaoyaConfig.Enabled || !xiaoyaConfig.ServerURL) {
     throw new Error('小雅未配置或未启用');
   }
 
   const { XiaoyaClient } = await import('@/lib/xiaoya.client');
-  const { getXiaoyaMetadata, getXiaoyaEpisodes } = await import(
-    '@/lib/xiaoya-metadata'
-  );
+  const { getXiaoyaMetadata, getXiaoyaEpisodes } =
+    await import('@/lib/xiaoya-metadata');
   const { base58Decode, base58Encode } = await import('@/lib/utils');
 
   const client = new XiaoyaClient(
     xiaoyaConfig.ServerURL,
     xiaoyaConfig.Username,
     xiaoyaConfig.Password,
-    xiaoyaConfig.Token
+    xiaoyaConfig.Token,
   );
 
   // 对id进行base58解码得到目录路径
@@ -356,7 +352,7 @@ export async function getXiaoyaDetail(id: string): Promise<SearchResult> {
     decodedDirPath,
     config.SiteConfig.TMDBApiKey,
     config.SiteConfig.TMDBProxy,
-    config.SiteConfig.TMDBReverseProxy
+    config.SiteConfig.TMDBReverseProxy,
   );
 
   // 获取集数列表
@@ -373,7 +369,7 @@ export async function getXiaoyaDetail(id: string): Promise<SearchResult> {
     desc: metadata.plot || '',
     episodes: episodes.map(
       (ep) =>
-        `/api/xiaoya/play?path=${encodeURIComponent(base58Encode(ep.path))}`
+        `/api/xiaoya/play?path=${encodeURIComponent(base58Encode(ep.path))}`,
     ),
     episodes_titles: episodes.map((ep) => ep.title!),
     subtitles: [],
@@ -388,7 +384,7 @@ export async function getXiaoyaDetail(id: string): Promise<SearchResult> {
  */
 export async function getSpecialSourceDetail(
   source: string,
-  id: string
+  id: string,
 ): Promise<SearchResult | null> {
   try {
     // Emby 源（包括 emby 和 emby_xxx）

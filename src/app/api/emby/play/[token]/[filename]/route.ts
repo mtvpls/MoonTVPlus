@@ -30,7 +30,7 @@ async function getEmbyClient(embyKey?: string) {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string; filename: string } }
+  { params }: { params: { token: string; filename: string } },
 ) {
   try {
     const { searchParams } = new URL(request.url);
@@ -81,7 +81,7 @@ export async function GET(
 
     // 构建 Emby 原始播放链接（强制获取直接URL，避免代理循环）
     let embyStreamUrl = await client.getStreamUrl(itemId, true, true);
-	console.log(embyStreamUrl)
+    console.log(embyStreamUrl);
 
     // 构建请求头，转发 Range 请求，并添加自定义 User-Agent
     const requestHeaders: HeadersInit = {
@@ -115,14 +115,12 @@ export async function GET(
         status: videoResponse.status,
         statusText: videoResponse.statusText,
       });
-      return NextResponse.json(
-        { error: '获取视频流失败' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: '获取视频流失败' }, { status: 500 });
     }
 
     // 获取 Content-Type
-    const contentType = videoResponse.headers.get('content-type') || 'video/mp4';
+    const contentType =
+      videoResponse.headers.get('content-type') || 'video/mp4';
 
     // 构建响应头
     const headers = new Headers();
@@ -156,7 +154,7 @@ export async function GET(
     console.error('[Emby Play] 错误:', error);
     return NextResponse.json(
       { error: '播放失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

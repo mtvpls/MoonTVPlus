@@ -2,7 +2,10 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 
 // 检测是否为 Cloudflare Pages 构建
-const isCloudflare = process.env.CF_PAGES === '1' || process.env.BUILD_TARGET === 'cloudflare';
+const isCloudflare =
+  process.env.CF_PAGES === '1' || process.env.BUILD_TARGET === 'cloudflare';
+const isLintRun =
+  process.argv.includes('lint') || process.env.NEXT_DISABLE_PWA === '1';
 
 const nextConfig = {
   // Cloudflare Pages 不支持 standalone，使用默认输出
@@ -38,7 +41,7 @@ const nextConfig = {
   webpack(config, { isServer }) {
     // Grab the existing rule that handles SVG imports
     const fileLoaderRule = config.module.rules.find((rule) =>
-      rule.test?.test?.('.svg')
+      rule.test?.test?.('.svg'),
     );
 
     config.module.rules.push(
@@ -58,7 +61,7 @@ const nextConfig = {
           dimensions: false,
           titleProp: true,
         },
-      }
+      },
     );
 
     // Modify the file loader rule to ignore *.svg, since we have it handled now.
@@ -77,7 +80,7 @@ const nextConfig = {
       config.externals.push({
         'better-sqlite3': 'commonjs better-sqlite3',
         '@vercel/postgres': 'commonjs @vercel/postgres',
-        'pg': 'commonjs pg',
+        pg: 'commonjs pg',
       });
 
       config.resolve.alias = {
@@ -94,11 +97,15 @@ const nextConfig = {
   },
 };
 
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  disable: process.env.NODE_ENV === 'development',
-  register: true,
-  skipWaiting: true,
-});
+if (isLintRun) {
+  module.exports = nextConfig;
+} else {
+  const withPWA = require('next-pwa')({
+    dest: 'public',
+    disable: process.env.NODE_ENV === 'development',
+    register: true,
+    skipWaiting: true,
+  });
 
-module.exports = withPWA(nextConfig);
+  module.exports = withPWA(nextConfig);
+}

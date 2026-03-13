@@ -35,7 +35,9 @@ function findExactMatch(results: any[], originalTitle: string): any | null {
 
   // 尝试精确匹配
   for (const result of results) {
-    const resultTitle = (result.title || result.name || '').toLowerCase().trim();
+    const resultTitle = (result.title || result.name || '')
+      .toLowerCase()
+      .trim();
     if (resultTitle === cleanTitle) {
       return result;
     }
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
     if (!title && !cachedId) {
       return NextResponse.json(
         { error: '缺少 title 或 cachedId 参数' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
     if (!tmdbApiKey) {
       return NextResponse.json(
         { error: '未配置 TMDB API Key' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -97,13 +99,13 @@ export async function GET(request: NextRequest) {
           tmdbApiKey,
           cleanedTitle,
           tmdbProxy,
-          tmdbReverseProxy
+          tmdbReverseProxy,
         );
 
         if (searchResult.code !== 200 || !searchResult.results.length) {
           return NextResponse.json(
             { error: '未找到匹配的内容' },
-            { status: 404 }
+            { status: 404 },
           );
         }
 
@@ -112,7 +114,7 @@ export async function GET(request: NextRequest) {
         if (!match) {
           return NextResponse.json(
             { error: '未找到匹配的内容' },
-            { status: 404 }
+            { status: 404 },
           );
         }
 
@@ -137,15 +139,25 @@ export async function GET(request: NextRequest) {
     // 获取详情
     let detailsResult;
     if (mediaType === 'movie') {
-      detailsResult = await getTMDBMovieDetails(tmdbApiKey, tmdbId, tmdbProxy, tmdbReverseProxy);
+      detailsResult = await getTMDBMovieDetails(
+        tmdbApiKey,
+        tmdbId,
+        tmdbProxy,
+        tmdbReverseProxy,
+      );
     } else {
-      detailsResult = await getTMDBTVDetails(tmdbApiKey, tmdbId, tmdbProxy, tmdbReverseProxy);
+      detailsResult = await getTMDBTVDetails(
+        tmdbApiKey,
+        tmdbId,
+        tmdbProxy,
+        tmdbReverseProxy,
+      );
     }
 
     if (detailsResult.code !== 200 || !detailsResult.details) {
       return NextResponse.json(
         { error: '获取详情失败' },
-        { status: detailsResult.code }
+        { status: detailsResult.code },
       );
     }
 
@@ -176,9 +188,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('获取 TMDB 详情失败:', error);
-    return NextResponse.json(
-      { error: '获取详情失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '获取详情失败' }, { status: 500 });
   }
 }

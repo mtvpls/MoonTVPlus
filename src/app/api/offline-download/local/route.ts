@@ -9,7 +9,8 @@ import * as path from 'path';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 
 // 检查是否启用离线下载功能
-const OFFLINE_DOWNLOAD_ENABLED = process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true';
+const OFFLINE_DOWNLOAD_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true';
 const OFFLINE_DOWNLOAD_DIR = process.env.OFFLINE_DOWNLOAD_DIR || '/data';
 
 /**
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
       OFFLINE_DOWNLOAD_DIR,
       source,
       videoId,
-      `ep${parseInt(episodeIndex) + 1}`
+      `ep${parseInt(episodeIndex) + 1}`,
     );
     const filePath = path.join(downloadDir, file);
 
@@ -85,14 +86,14 @@ export async function GET(request: NextRequest) {
         if (trimmedLine.startsWith('#EXT-X-KEY:')) {
           const modifiedLine = trimmedLine.replace(
             /URI="([^"]+)"/,
-            `URI="/api/offline-download/local?source=${source}&videoId=${videoId}&episodeIndex=${episodeIndex}&file=$1"`
+            `URI="/api/offline-download/local?source=${source}&videoId=${videoId}&episodeIndex=${episodeIndex}&file=$1"`,
           );
           modifiedLines.push(modifiedLine);
         }
         // 处理 ts 片段
         else if (trimmedLine && !trimmedLine.startsWith('#')) {
           modifiedLines.push(
-            `/api/offline-download/local?source=${source}&videoId=${videoId}&episodeIndex=${episodeIndex}&file=${trimmedLine}`
+            `/api/offline-download/local?source=${source}&videoId=${videoId}&episodeIndex=${episodeIndex}&file=${trimmedLine}`,
           );
         } else {
           modifiedLines.push(line);
@@ -127,7 +128,7 @@ export async function GET(request: NextRequest) {
     console.error('代理本地文件失败:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '代理失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
           configData.ServerURL,
           configData.Username,
           configData.Password,
-          configData.Token
+          configData.Token,
         );
 
         // 尝试列出根目录
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         return NextResponse.json(
           { success: false, message: (error as Error).message },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

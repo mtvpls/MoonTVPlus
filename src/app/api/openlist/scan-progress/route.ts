@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     console.error('获取扫描进度失败:', error);
     return NextResponse.json(
       { error: '获取失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

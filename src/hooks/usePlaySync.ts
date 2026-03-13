@@ -2,7 +2,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback,useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
 
@@ -17,7 +17,7 @@ interface UsePlaySyncOptions {
   currentEpisode?: number;
   currentSource: string;
   videoUrl: string;
-  playerReady: boolean;  // 播放器是否就绪
+  playerReady: boolean; // 播放器是否就绪
 }
 
 export function usePlaySync({
@@ -68,12 +68,28 @@ export function usePlaySync({
     lastSyncTimeRef.current = now;
 
     watchRoom.updatePlayState(state);
-  }, [socket, videoUrl, videoId, videoName, videoYear, searchTitle, currentEpisode, currentSource, watchRoom, artPlayerRef, isInRoom]);
+  }, [
+    socket,
+    videoUrl,
+    videoId,
+    videoName,
+    videoYear,
+    searchTitle,
+    currentEpisode,
+    currentSource,
+    watchRoom,
+    artPlayerRef,
+    isInRoom,
+  ]);
 
   // 接收并同步其他成员的播放状态
   useEffect(() => {
     if (!socket || !currentRoom || !isInRoom) {
-      console.log('[PlaySync] Skip setup:', { hasSocket: !!socket, hasRoom: !!currentRoom, isInRoom });
+      console.log('[PlaySync] Skip setup:', {
+        hasSocket: !!socket,
+        hasRoom: !!currentRoom,
+        isInRoom,
+      });
       return;
     }
 
@@ -92,7 +108,7 @@ export function usePlaySync({
         playerPlaying: player.playing,
         statePlaying: state.isPlaying,
         playerTime: player.currentTime,
-        stateTime: state.currentTime
+        stateTime: state.currentTime,
       });
 
       // 标记正在处理远程命令
@@ -102,7 +118,13 @@ export function usePlaySync({
       // 播放/暂停状态由 play:play 和 play:pause 命令控制
       const timeDiff = Math.abs(player.currentTime - state.currentTime);
       if (timeDiff > 2) {
-        console.log('[PlaySync] Seeking to:', state.currentTime, '(diff:', timeDiff, 's)');
+        console.log(
+          '[PlaySync] Seeking to:',
+          state.currentTime,
+          '(diff:',
+          timeDiff,
+          's)',
+        );
         player.currentTime = state.currentTime;
         // 延迟重置标记，确保 seeked 事件已处理完毕
         setTimeout(() => {
@@ -118,7 +140,10 @@ export function usePlaySync({
 
     const handlePlayCommand = () => {
       console.log('[PlaySync] ========== Received play:play event ==========');
-      console.log('[PlaySync] isHandlingRemoteCommandRef:', isHandlingRemoteCommandRef.current);
+      console.log(
+        '[PlaySync] isHandlingRemoteCommandRef:',
+        isHandlingRemoteCommandRef.current,
+      );
       const player = artPlayerRef.current;
 
       if (!player) {
@@ -138,8 +163,11 @@ export function usePlaySync({
 
       // 只有在暂停状态时才执行播放
       if (!player.playing) {
-        console.log('[PlaySync] Executing play command - calling player.play()');
-        player.play()
+        console.log(
+          '[PlaySync] Executing play command - calling player.play()',
+        );
+        player
+          .play()
           .then(() => {
             console.log('[PlaySync] Play command completed successfully');
             console.log('[PlaySync] Player state after play:', {
@@ -165,7 +193,10 @@ export function usePlaySync({
 
     const handlePauseCommand = () => {
       console.log('[PlaySync] ========== Received play:pause event ==========');
-      console.log('[PlaySync] isHandlingRemoteCommandRef:', isHandlingRemoteCommandRef.current);
+      console.log(
+        '[PlaySync] isHandlingRemoteCommandRef:',
+        isHandlingRemoteCommandRef.current,
+      );
       const player = artPlayerRef.current;
 
       if (!player) {
@@ -184,7 +215,9 @@ export function usePlaySync({
 
       // 只有在播放状态时才执行暂停
       if (player.playing) {
-        console.log('[PlaySync] Executing pause command - calling player.pause()');
+        console.log(
+          '[PlaySync] Executing pause command - calling player.pause()',
+        );
         player.pause();
         console.log('[PlaySync] Player state after pause:', {
           playing: player.playing,
@@ -275,7 +308,12 @@ export function usePlaySync({
   // 监听播放器事件并广播（所有成员都可以触发同步）
   useEffect(() => {
     if (!socket || !currentRoom || !isInRoom || !watchRoom) {
-      console.log('[PlaySync] Skip player setup:', { hasSocket: !!socket, hasRoom: !!currentRoom, isInRoom, hasWatchRoom: !!watchRoom });
+      console.log('[PlaySync] Skip player setup:', {
+        hasSocket: !!socket,
+        hasRoom: !!currentRoom,
+        isInRoom,
+        hasWatchRoom: !!watchRoom,
+      });
       return;
     }
 
@@ -295,7 +333,9 @@ export function usePlaySync({
     const handlePlay = () => {
       // 如果正在处理远程命令，不要广播（避免循环）
       if (isHandlingRemoteCommandRef.current) {
-        console.log('[PlaySync] Play event triggered by remote command, not broadcasting');
+        console.log(
+          '[PlaySync] Play event triggered by remote command, not broadcasting',
+        );
         return;
       }
 
@@ -304,18 +344,24 @@ export function usePlaySync({
 
       // 确认播放器确实在播放状态才广播
       if (player.playing) {
-        console.log('[PlaySync] Play event detected, player is playing, broadcasting...');
+        console.log(
+          '[PlaySync] Play event detected, player is playing, broadcasting...',
+        );
         // 只发送 play 命令，不发送完整状态（避免重复）
         watchRoom.play();
       } else {
-        console.log('[PlaySync] Play event detected but player is paused, not broadcasting');
+        console.log(
+          '[PlaySync] Play event detected but player is paused, not broadcasting',
+        );
       }
     };
 
     const handlePause = () => {
       // 如果正在处理远程命令，不要广播（避免循环）
       if (isHandlingRemoteCommandRef.current) {
-        console.log('[PlaySync] Pause event triggered by remote command, not broadcasting');
+        console.log(
+          '[PlaySync] Pause event triggered by remote command, not broadcasting',
+        );
         return;
       }
 
@@ -324,25 +370,34 @@ export function usePlaySync({
 
       // 确认播放器确实在暂停状态才广播
       if (!player.playing) {
-        console.log('[PlaySync] Pause event detected, player is paused, broadcasting...');
+        console.log(
+          '[PlaySync] Pause event detected, player is paused, broadcasting...',
+        );
         // 只发送 pause 命令，不发送完整状态（避免重复）
         watchRoom.pause();
       } else {
-        console.log('[PlaySync] Pause event detected but player is playing, not broadcasting');
+        console.log(
+          '[PlaySync] Pause event detected but player is playing, not broadcasting',
+        );
       }
     };
 
     const handleSeeked = () => {
       // 如果正在处理远程命令，不要广播（避免循环）
       if (isHandlingRemoteCommandRef.current) {
-        console.log('[PlaySync] Seeked event triggered by remote command, not broadcasting');
+        console.log(
+          '[PlaySync] Seeked event triggered by remote command, not broadcasting',
+        );
         return;
       }
 
       const player = artPlayerRef.current;
       if (!player) return;
 
-      console.log('[PlaySync] Seeked event detected, broadcasting time:', player.currentTime);
+      console.log(
+        '[PlaySync] Seeked event detected, broadcasting time:',
+        player.currentTime,
+      );
       watchRoom.seekPlayback(player.currentTime);
     };
 
@@ -358,7 +413,9 @@ export function usePlaySync({
       broadcastPlayState();
     }, 5000);
 
-    console.log('[PlaySync] Player event listeners registered with periodic sync');
+    console.log(
+      '[PlaySync] Player event listeners registered with periodic sync',
+    );
 
     return () => {
       console.log('[PlaySync] Cleaning up player event listeners');
@@ -367,7 +424,15 @@ export function usePlaySync({
       player.off('seeked', handleSeeked);
       clearInterval(syncInterval);
     };
-  }, [socket, currentRoom, artPlayerRef, watchRoom, broadcastPlayState, isInRoom, playerReady]);
+  }, [
+    socket,
+    currentRoom,
+    artPlayerRef,
+    watchRoom,
+    broadcastPlayState,
+    isInRoom,
+    playerReady,
+  ]);
 
   // 使用ref跟踪上一次的值，用于检测真正的变化
   const lastBroadcastRef = useRef<{
@@ -392,7 +457,8 @@ export function usePlaySync({
     };
 
     // 检查是否需要广播
-    const shouldBroadcast = !lastBroadcastRef.current ||
+    const shouldBroadcast =
+      !lastBroadcastRef.current ||
       lastBroadcastRef.current.videoId !== currentState.videoId ||
       lastBroadcastRef.current.source !== currentState.source ||
       lastBroadcastRef.current.episode !== currentState.episode;
@@ -404,7 +470,7 @@ export function usePlaySync({
 
     console.log('[PlaySync] Detected change, will broadcast:', {
       from: lastBroadcastRef.current,
-      to: currentState
+      to: currentState,
     });
 
     // 延迟广播，确保页面已经稳定
@@ -430,10 +496,27 @@ export function usePlaySync({
     }, 500); // 减少延迟到500ms
 
     return () => clearTimeout(timer);
-  }, [isOwner, socket, currentRoom, isInRoom, watchRoom, videoId, currentEpisode, currentSource, videoUrl, videoName, videoYear, searchTitle, artPlayerRef]);
+  }, [
+    isOwner,
+    socket,
+    currentRoom,
+    isInRoom,
+    watchRoom,
+    videoId,
+    currentEpisode,
+    currentSource,
+    videoUrl,
+    videoName,
+    videoYear,
+    searchTitle,
+    artPlayerRef,
+  ]);
 
   // 房主：加入房间时立即广播当前播放状态
-  const lastRoomStateRef = useRef<{ isOwner: boolean; roomId: string | null }>({ isOwner: false, roomId: null });
+  const lastRoomStateRef = useRef<{ isOwner: boolean; roomId: string | null }>({
+    isOwner: false,
+    roomId: null,
+  });
 
   useEffect(() => {
     const currentRoomId = currentRoom?.id || null;
@@ -450,10 +533,13 @@ export function usePlaySync({
     if (!videoId || !videoUrl) return;
     if (!justBecameOwner && !justJoinedRoom) return;
 
-    console.log('[PlaySync] Owner joined room, broadcasting current state immediately:', {
-      justBecameOwner,
-      justJoinedRoom
-    });
+    console.log(
+      '[PlaySync] Owner joined room, broadcasting current state immediately:',
+      {
+        justBecameOwner,
+        justJoinedRoom,
+      },
+    );
 
     // 立即广播当前状态
     const state: PlayState = {
@@ -483,7 +569,21 @@ export function usePlaySync({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [isOwner, currentRoom, socket, isInRoom, watchRoom, videoId, videoUrl, videoName, videoYear, searchTitle, currentEpisode, currentSource, artPlayerRef]);
+  }, [
+    isOwner,
+    currentRoom,
+    socket,
+    isInRoom,
+    watchRoom,
+    videoId,
+    videoUrl,
+    videoName,
+    videoYear,
+    searchTitle,
+    currentEpisode,
+    currentSource,
+    artPlayerRef,
+  ]);
 
   return {
     isInRoom,

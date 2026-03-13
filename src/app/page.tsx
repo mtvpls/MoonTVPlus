@@ -2,7 +2,13 @@
 
 'use client';
 
-import { Bot, ChevronRight, Link as LinkIcon, ListVideo, Music } from 'lucide-react';
+import {
+  Bot,
+  ChevronRight,
+  Link as LinkIcon,
+  ListVideo,
+  Music,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
@@ -58,13 +64,16 @@ function HomeClient() {
     { id: 'upcomingContent', name: '即将上映', enabled: true, order: 5 },
   ]);
   const [homeBannerEnabled, setHomeBannerEnabled] = useState(true);
-  const [homeContinueWatchingEnabled, setHomeContinueWatchingEnabled] = useState(true);
+  const [homeContinueWatchingEnabled, setHomeContinueWatchingEnabled] =
+    useState(true);
 
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [showHttpWarning, setShowHttpWarning] = useState(true);
   const [showAIChat, setShowAIChat] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
-  const [aiDefaultMessageNoVideo, setAiDefaultMessageNoVideo] = useState('你好！我是MoonTVPlus的AI影视助手。想看什么电影或剧集？需要推荐吗？');
+  const [aiDefaultMessageNoVideo, setAiDefaultMessageNoVideo] = useState(
+    '你好！我是MoonTVPlus的AI影视助手。想看什么电影或剧集？需要推荐吗？',
+  );
   const [sourceSearchEnabled, setSourceSearchEnabled] = useState(true);
   const [musicEnabled, setMusicEnabled] = useState(false);
   const [showDirectPlayDialog, setShowDirectPlayDialog] = useState(false);
@@ -102,9 +111,13 @@ function HomeClient() {
       setHomeBannerEnabled(savedHomeBannerEnabled === 'true');
     }
 
-    const savedHomeContinueWatchingEnabled = localStorage.getItem('homeContinueWatchingEnabled');
+    const savedHomeContinueWatchingEnabled = localStorage.getItem(
+      'homeContinueWatchingEnabled',
+    );
     if (savedHomeContinueWatchingEnabled !== null) {
-      setHomeContinueWatchingEnabled(savedHomeContinueWatchingEnabled === 'true');
+      setHomeContinueWatchingEnabled(
+        savedHomeContinueWatchingEnabled === 'true',
+      );
     }
   };
 
@@ -121,7 +134,10 @@ function HomeClient() {
 
     window.addEventListener('homeModulesUpdated', handleHomeModulesUpdated);
     return () => {
-      window.removeEventListener('homeModulesUpdated', handleHomeModulesUpdated);
+      window.removeEventListener(
+        'homeModulesUpdated',
+        handleHomeModulesUpdated,
+      );
     };
   }, []);
 
@@ -134,7 +150,8 @@ function HomeClient() {
       setAiEnabled(enabled);
 
       // 加载AI默认消息配置
-      const defaultMsg = (window as any).RUNTIME_CONFIG?.AI_DEFAULT_MESSAGE_NO_VIDEO;
+      const defaultMsg = (window as any).RUNTIME_CONFIG
+        ?.AI_DEFAULT_MESSAGE_NO_VIDEO;
       if (defaultMsg) {
         setAiDefaultMessageNoVideo(defaultMsg);
       }
@@ -144,7 +161,8 @@ function HomeClient() {
   // 检查源站寻片功能是否启用
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const enabled = (window as any).RUNTIME_CONFIG?.ENABLE_SOURCE_SEARCH !== false;
+      const enabled =
+        (window as any).RUNTIME_CONFIG?.ENABLE_SOURCE_SEARCH !== false;
       setSourceSearchEnabled(enabled);
     }
   }, []);
@@ -185,7 +203,10 @@ function HomeClient() {
 
     const setCache = (key: string, data: any) => {
       try {
-        localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
+        localStorage.setItem(
+          key,
+          JSON.stringify({ data, timestamp: Date.now() }),
+        );
       } catch {
         // Ignore localStorage errors
       }
@@ -205,18 +226,43 @@ function HomeClient() {
     if (duanjuCache?.data) setHotDuanju(duanjuCache.data);
     if (upcomingCache?.data) setUpcomingContent(upcomingCache.data);
 
-    const hasCache = moviesCache || tvShowsCache || varietyCache || bangumiCache || duanjuCache || upcomingCache;
+    const hasCache =
+      moviesCache ||
+      tvShowsCache ||
+      varietyCache ||
+      bangumiCache ||
+      duanjuCache ||
+      upcomingCache;
     if (hasCache) setLoading(false);
 
-    const needsRefresh = !moviesCache || moviesCache.expired || !tvShowsCache || tvShowsCache.expired ||
-                         !varietyCache || varietyCache.expired || !bangumiCache || bangumiCache.expired ||
-                         !duanjuCache || duanjuCache.expired || !upcomingCache || upcomingCache.expired;
+    const needsRefresh =
+      !moviesCache ||
+      moviesCache.expired ||
+      !tvShowsCache ||
+      tvShowsCache.expired ||
+      !varietyCache ||
+      varietyCache.expired ||
+      !bangumiCache ||
+      bangumiCache.expired ||
+      !duanjuCache ||
+      duanjuCache.expired ||
+      !upcomingCache ||
+      upcomingCache.expired;
 
     if (needsRefresh) {
       (async () => {
         try {
-          const [moviesData, tvShowsData, varietyShowsData, bangumiCalendarData] = await Promise.all([
-            getDoubanCategories({ kind: 'movie', category: '热门', type: '全部' }),
+          const [
+            moviesData,
+            tvShowsData,
+            varietyShowsData,
+            bangumiCalendarData,
+          ] = await Promise.all([
+            getDoubanCategories({
+              kind: 'movie',
+              category: '热门',
+              type: '全部',
+            }),
             getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
             getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
             GetBangumiCalendarData(),
@@ -249,7 +295,11 @@ function HomeClient() {
             const duanjuResponse = await fetch('/api/duanju/recommends');
             if (duanjuResponse.ok) {
               const duanjuResult = await duanjuResponse.json();
-              if (duanjuResult.code === 200 && duanjuResult.data && duanjuResult.data.length > 0) {
+              if (
+                duanjuResult.code === 200 &&
+                duanjuResult.data &&
+                duanjuResult.data.length > 0
+              ) {
                 setHotDuanju(duanjuResult.data);
                 setCache('homepage_duanju', duanjuResult.data);
               }
@@ -262,10 +312,18 @@ function HomeClient() {
             const response = await fetch('/api/tmdb/upcoming');
             if (response.ok) {
               const result = await response.json();
-              if (result.code === 200 && result.data && result.data.length > 0) {
+              if (
+                result.code === 200 &&
+                result.data &&
+                result.data.length > 0
+              ) {
                 const sorted = [...result.data].sort((a, b) => {
-                  const dateA = new Date(a.release_date || '9999-12-31').getTime();
-                  const dateB = new Date(b.release_date || '9999-12-31').getTime();
+                  const dateA = new Date(
+                    a.release_date || '9999-12-31',
+                  ).getTime();
+                  const dateB = new Date(
+                    b.release_date || '9999-12-31',
+                  ).getTime();
                   return dateA - dateB;
                 });
                 setUpcomingContent(sorted);
@@ -285,8 +343,6 @@ function HomeClient() {
     }
   }, []);
 
-
-
   const handleCloseAnnouncement = (announcement: string) => {
     setShowAnnouncement(false);
     localStorage.setItem('hasSeenAnnouncement', announcement); // 记录已查看弹窗
@@ -297,7 +353,7 @@ function HomeClient() {
     switch (moduleId) {
       case 'hotMovies':
         return (
-          <section key="hotMovies" className='mb-8'>
+          <section key='hotMovies' className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
               <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                 热门电影
@@ -345,7 +401,7 @@ function HomeClient() {
       case 'hotDuanju':
         if (hotDuanju.length === 0) return null;
         return (
-          <section key="hotDuanju" className='mb-8'>
+          <section key='hotDuanju' className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
               <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                 热播短剧
@@ -392,7 +448,7 @@ function HomeClient() {
 
       case 'bangumiCalendar':
         return (
-          <section key="bangumiCalendar" className='mb-8'>
+          <section key='bangumiCalendar' className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
               <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                 新番放送
@@ -420,7 +476,15 @@ function HomeClient() {
                   ))
                 : (() => {
                     const today = new Date();
-                    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    const weekdays = [
+                      'Sun',
+                      'Mon',
+                      'Tue',
+                      'Wed',
+                      'Thu',
+                      'Fri',
+                      'Sat',
+                    ];
                     const currentWeekday = weekdays[today.getDay()];
                     const todayAnimes =
                       bangumiCalendarData
@@ -457,7 +521,7 @@ function HomeClient() {
 
       case 'hotTvShows':
         return (
-          <section key="hotTvShows" className='mb-8'>
+          <section key='hotTvShows' className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
               <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                 热门剧集
@@ -504,7 +568,7 @@ function HomeClient() {
 
       case 'hotVarietyShows':
         return (
-          <section key="hotVarietyShows" className='mb-8'>
+          <section key='hotVarietyShows' className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
               <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                 热门综艺
@@ -541,7 +605,9 @@ function HomeClient() {
                         rate={varietyShow.rate}
                         type='tv'
                         from='douban'
-                        douban_id={varietyShow.id ? parseInt(varietyShow.id) : undefined}
+                        douban_id={
+                          varietyShow.id ? parseInt(varietyShow.id) : undefined
+                        }
                       />
                     </div>
                   ))}
@@ -552,7 +618,7 @@ function HomeClient() {
       case 'upcomingContent':
         if (upcomingContent.length === 0) return null;
         return (
-          <section key="upcomingContent" className='mb-8'>
+          <section key='upcomingContent' className='mb-8'>
             <div className='mb-4 flex items-center justify-between'>
               <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                 即将上映
@@ -604,7 +670,9 @@ function HomeClient() {
           {/* 首页内容 */}
           <>
             {/* 源站寻片和AI问片入口 */}
-            <div className={`flex items-center justify-end gap-2 mb-4 ${homeBannerEnabled ? '' : 'mt-[30px]'}`}>
+            <div
+              className={`flex items-center justify-end gap-2 mb-4 ${homeBannerEnabled ? '' : 'mt-[30px]'}`}
+            >
               <button
                 onClick={handleDirectPlay}
                 className='p-1.5 rounded-lg text-blue-500 hover:text-blue-600 transition-colors'
@@ -654,9 +722,9 @@ function HomeClient() {
 
             {/* 根据配置动态渲染首页模块 */}
             {homeModules
-              .filter(module => module.enabled)
+              .filter((module) => module.enabled)
               .sort((a, b) => a.order - b.order)
-              .map(module => renderModule(module.id))}
+              .map((module) => renderModule(module.id))}
           </>
         </div>
       </div>

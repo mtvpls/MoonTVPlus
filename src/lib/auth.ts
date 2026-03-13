@@ -86,20 +86,23 @@ export function getAuthInfoFromBrowserCookie(): AuthInfo | null {
 
   try {
     // 解析 document.cookie
-    const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-      const trimmed = cookie.trim();
-      const firstEqualIndex = trimmed.indexOf('=');
+    const cookies = document.cookie.split(';').reduce(
+      (acc, cookie) => {
+        const trimmed = cookie.trim();
+        const firstEqualIndex = trimmed.indexOf('=');
 
-      if (firstEqualIndex > 0) {
-        const key = trimmed.substring(0, firstEqualIndex);
-        const value = trimmed.substring(firstEqualIndex + 1);
-        if (key && value) {
-          acc[key] = value;
+        if (firstEqualIndex > 0) {
+          const key = trimmed.substring(0, firstEqualIndex);
+          const value = trimmed.substring(firstEqualIndex + 1);
+          if (key && value) {
+            acc[key] = value;
+          }
         }
-      }
 
-      return acc;
-    }, {} as Record<string, string>);
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
 
     const authCookie = cookies['auth'];
     if (!authCookie) {
@@ -120,9 +123,13 @@ export function clearAuthCookie(): void {
 
   try {
     // 清除 auth cookie，设置过期时间为过去
-    document.cookie = 'auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+    document.cookie =
+      'auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     // 如果有其他域名或路径的cookie，也尝试清除
-    document.cookie = 'auth=; path=/; domain=' + window.location.hostname + '; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+    document.cookie =
+      'auth=; path=/; domain=' +
+      window.location.hostname +
+      '; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
   } catch (error) {
     console.error('[Auth] Failed to clear cookie:', error);
   }

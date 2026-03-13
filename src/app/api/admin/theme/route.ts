@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       {
         error: '不支持本地存储进行管理员配置',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -73,8 +73,10 @@ export async function POST(request: NextRequest) {
       for (const url of urls) {
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
           return NextResponse.json(
-            { error: `登录界面背景图URL格式错误：${url}，每个URL必须以http://或https://开头` },
-            { status: 400 }
+            {
+              error: `登录界面背景图URL格式错误：${url}，每个URL必须以http://或https://开头`,
+            },
+            { status: 400 },
           );
         }
       }
@@ -89,8 +91,10 @@ export async function POST(request: NextRequest) {
       for (const url of urls) {
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
           return NextResponse.json(
-            { error: `注册界面背景图URL格式错误：${url}，每个URL必须以http://或https://开头` },
-            { status: 400 }
+            {
+              error: `注册界面背景图URL格式错误：${url}，每个URL必须以http://或https://开头`,
+            },
+            { status: 400 },
           );
         }
       }
@@ -141,7 +145,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store',
         },
-      }
+      },
     );
   } catch (error) {
     console.error('更新主题配置失败:', error);
@@ -150,7 +154,7 @@ export async function POST(request: NextRequest) {
         error: '更新主题配置失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

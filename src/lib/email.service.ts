@@ -14,7 +14,7 @@ export class EmailService {
    */
   static async sendViaSMTP(
     config: NonNullable<AdminConfig['EmailConfig']>['smtp'],
-    options: EmailOptions
+    options: EmailOptions,
   ): Promise<void> {
     if (!config) {
       throw new Error('SMTP配置不存在');
@@ -43,7 +43,7 @@ export class EmailService {
    */
   static async sendViaResend(
     config: NonNullable<AdminConfig['EmailConfig']>['resend'],
-    options: EmailOptions
+    options: EmailOptions,
   ): Promise<void> {
     if (!config) {
       throw new Error('Resend配置不存在');
@@ -74,7 +74,7 @@ export class EmailService {
    */
   static async send(
     emailConfig: AdminConfig['EmailConfig'],
-    options: EmailOptions
+    options: EmailOptions,
   ): Promise<void> {
     if (!emailConfig || !emailConfig.enabled) {
       console.log('邮件通知未启用，跳过发送');
@@ -103,7 +103,7 @@ export class EmailService {
   static async sendTestEmail(
     emailConfig: AdminConfig['EmailConfig'],
     toEmail: string,
-    siteName?: string
+    siteName?: string,
   ): Promise<void> {
     const displayName = siteName || 'MoonTVPlus';
     await this.send(emailConfig, {

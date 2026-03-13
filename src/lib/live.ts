@@ -32,7 +32,7 @@ export function deleteCachedLiveChannels(key: string) {
 }
 
 export async function getCachedLiveChannels(
-  key: string
+  key: string,
 ): Promise<LiveChannels | null> {
   if (!cachedLiveChannels[key]) {
     const config = await getConfig();
@@ -90,7 +90,7 @@ export async function refreshLiveChannels(liveInfo: {
 async function parseEpg(
   epgUrl: string,
   ua: string,
-  tvgIds: string[]
+  tvgIds: string[],
 ): Promise<{
   [key: string]: {
     start: string;
@@ -132,7 +132,7 @@ async function parseEpg(
         return {};
       }
       const decompressedStream = response.body.pipeThrough(
-        new DecompressionStream('gzip')
+        new DecompressionStream('gzip'),
       );
       reader = decompressedStream.getReader();
     } else if (isGzip) {
@@ -209,7 +209,7 @@ async function parseEpg(
         // 解析 <display-name> 标签，获取频道名称
         if (trimmedLine.includes('<display-name') && currentChannelId) {
           const displayNameMatch = trimmedLine.match(
-            /<display-name(?:\s+[^>]*)?>(.*?)<\/display-name>/
+            /<display-name(?:\s+[^>]*)?>(.*?)<\/display-name>/,
           );
           if (displayNameMatch) {
             const displayName = displayNameMatch[1];
@@ -251,7 +251,7 @@ async function parseEpg(
         ) {
           // 处理带有语言属性的title标签，如 <title lang="zh">远方的家2025-60</title>
           const titleMatch = trimmedLine.match(
-            /<title(?:\s+[^>]*)?>(.*?)<\/title>/
+            /<title(?:\s+[^>]*)?>(.*?)<\/title>/,
           );
           if (titleMatch && currentProgram) {
             currentProgram.title = titleMatch[1];
@@ -277,7 +277,7 @@ async function parseEpg(
 // 辅助函数：解析 EPG 行
 function parseEpgLines(
   lines: string[],
-  tvgs: Set<string>
+  tvgs: Set<string>,
 ): {
   [key: string]: {
     start: string;
@@ -308,7 +308,7 @@ function parseEpgLines(
     // 解析 <display-name> 标签，获取频道名称
     if (trimmedLine.includes('<display-name') && currentChannelId) {
       const displayNameMatch = trimmedLine.match(
-        /<display-name(?:\s+[^>]*)?>(.*?)<\/display-name>/
+        /<display-name(?:\s+[^>]*)?>(.*?)<\/display-name>/,
       );
       if (displayNameMatch) {
         const displayName = displayNameMatch[1];
@@ -350,7 +350,7 @@ function parseEpgLines(
     ) {
       // 处理带有语言属性的title标签，如 <title lang="zh">远方的家2025-60</title>
       const titleMatch = trimmedLine.match(
-        /<title(?:\s+[^>]*)?>(.*?)<\/title>/
+        /<title(?:\s+[^>]*)?>(.*?)<\/title>/,
       );
       if (titleMatch && currentProgram) {
         currentProgram.title = titleMatch[1];
@@ -384,7 +384,7 @@ function isHttpUrl(value: string) {
 
 function parseTxtLive(
   sourceKey: string,
-  txtContent: string
+  txtContent: string,
 ): {
   tvgUrl: string;
   channels: {
@@ -456,7 +456,7 @@ function parseTxtLive(
  */
 function parseM3U(
   sourceKey: string,
-  m3uContent: string
+  m3uContent: string,
 ): {
   tvgUrl: string;
   channels: {
@@ -623,7 +623,7 @@ export function getBaseUrl(m3u8Url: string) {
     if (url.pathname.endsWith('.m3u8')) {
       url.pathname = url.pathname.substring(
         0,
-        url.pathname.lastIndexOf('/') + 1
+        url.pathname.lastIndexOf('/') + 1,
       );
     } else if (!url.pathname.endsWith('/')) {
       url.pathname += '/';

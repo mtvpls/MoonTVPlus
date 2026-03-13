@@ -59,7 +59,7 @@ export const useLongPress = ({
         onLongPress();
       }, longPressDelay);
     },
-    [onLongPress, longPressDelay]
+    [onLongPress, longPressDelay],
   );
 
   const handleMove = useCallback(
@@ -68,7 +68,7 @@ export const useLongPress = ({
 
       const distance = Math.sqrt(
         Math.pow(clientX - startPosition.current.x, 2) +
-        Math.pow(clientY - startPosition.current.y, 2)
+          Math.pow(clientY - startPosition.current.y, 2),
       );
 
       // 如果移动距离超过阈值，取消长按
@@ -77,7 +77,7 @@ export const useLongPress = ({
         isActive.current = false;
       }
     },
-    [clearTimer, moveThreshold]
+    [clearTimer, moveThreshold],
   );
 
   const handleEnd = useCallback(() => {
@@ -87,7 +87,8 @@ export const useLongPress = ({
     // 1. 如果是长按，不触发点击
     // 2. 如果不是长按且触摸开始时是按钮，不触发点击
     // 3. 否则触发点击
-    const shouldClick = !isLongPress.current && !wasButton.current && onClick && isActive.current;
+    const shouldClick =
+      !isLongPress.current && !wasButton.current && onClick && isActive.current;
 
     if (shouldClick) {
       onClick();
@@ -115,7 +116,7 @@ export const useLongPress = ({
       const touch = e.touches[0];
       handleStart(touch.clientX, touch.clientY, !!isButton);
     },
-    [handleStart]
+    [handleStart],
   );
 
   const onTouchMove = useCallback(
@@ -123,7 +124,7 @@ export const useLongPress = ({
       const touch = e.touches[0];
       handleMove(touch.clientX, touch.clientY);
     },
-    [handleMove]
+    [handleMove],
   );
 
   const onTouchEnd = useCallback(
@@ -133,10 +134,8 @@ export const useLongPress = ({
       e.stopPropagation();
       handleEnd();
     },
-    [handleEnd]
+    [handleEnd],
   );
-
-
 
   return {
     onTouchStart,

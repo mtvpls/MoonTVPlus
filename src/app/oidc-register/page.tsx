@@ -27,7 +27,9 @@ function OIDCRegisterPageClient() {
           setOidcInfo(data);
         } else {
           // session无效,跳转到登录页
-          router.replace('/login?error=' + encodeURIComponent('OIDC会话已过期'));
+          router.replace(
+            '/login?error=' + encodeURIComponent('OIDC会话已过期'),
+          );
         }
       } catch (error) {
         console.error('检查session失败:', error);
@@ -117,7 +119,10 @@ function OIDCRegisterPageClient() {
 
         <form onSubmit={handleSubmit} className='space-y-6'>
           <div>
-            <label htmlFor='username' className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+            <label
+              htmlFor='username'
+              className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'
+            >
               选择用户名
             </label>
             <input

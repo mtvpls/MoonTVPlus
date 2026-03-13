@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     console.error('获取弹幕过滤配置失败:', error);
     return NextResponse.json(
       { error: '获取弹幕过滤配置失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
     // 验证每个规则的格式
     const validatedRules = config.rules.map((rule) => ({
       keyword: String(rule.keyword || ''),
-      type: (rule.type === 'regex' || rule.type === 'normal') ? rule.type : 'normal',
+      type:
+        rule.type === 'regex' || rule.type === 'normal' ? rule.type : 'normal',
       enabled: Boolean(rule.enabled),
       id: rule.id || undefined,
     }));
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     console.error('保存弹幕过滤配置失败:', error);
     return NextResponse.json(
       { error: '保存弹幕过滤配置失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 
-import React, { useMemo,useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 interface DownloadEpisodeSelectorProps {
   /** 是否显示弹窗 */
@@ -39,7 +39,7 @@ const DownloadEpisodeSelector: React.FC<DownloadEpisodeSelectorProps> = ({
 }) => {
   // 多选状态 - 使用 Set 存储选中的集数索引
   const [selectedEpisodes, setSelectedEpisodes] = useState<Set<number>>(
-    new Set([currentEpisodeIndex])
+    new Set([currentEpisodeIndex]),
   );
 
   // 离线下载模式
@@ -119,7 +119,10 @@ const DownloadEpisodeSelector: React.FC<DownloadEpisodeSelectorProps> = ({
   };
 
   const currentStart = currentPage * episodesPerPage;
-  const currentEnd = Math.min(currentStart + episodesPerPage - 1, totalEpisodes - 1);
+  const currentEnd = Math.min(
+    currentStart + episodesPerPage - 1,
+    totalEpisodes - 1,
+  );
 
   if (!isOpen) return null;
 
@@ -176,8 +179,18 @@ const DownloadEpisodeSelector: React.FC<DownloadEpisodeSelectorProps> = ({
             <div className='flex items-center gap-3'>
               {/* 服务器图标 */}
               <div className='flex-shrink-0 w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center'>
-                <svg className='w-5 h-5 text-blue-600 dark:text-blue-400' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01' />
+                <svg
+                  className='w-5 h-5 text-blue-600 dark:text-blue-400'
+                  fill='none'
+                  stroke='currentColor'
+                  viewBox='0 0 24 24'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth='2'
+                    d='M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01'
+                  />
                 </svg>
               </div>
               <div className='flex-1'>
@@ -200,9 +213,7 @@ const DownloadEpisodeSelector: React.FC<DownloadEpisodeSelectorProps> = ({
             <button
               onClick={() => setOfflineMode(!offlineMode)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                offlineMode
-                  ? 'bg-blue-600'
-                  : 'bg-gray-300 dark:bg-gray-600'
+                offlineMode ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
               }`}
             >
               <span
@@ -267,7 +278,7 @@ const DownloadEpisodeSelector: React.FC<DownloadEpisodeSelectorProps> = ({
             {(() => {
               const len = currentEnd - currentStart + 1;
               const episodes = Array.from({ length: len }, (_, i) =>
-                descending ? currentEnd - i : currentStart + i
+                descending ? currentEnd - i : currentStart + i,
               );
               return episodes;
             })().map((episodeIndex) => {
@@ -316,12 +327,16 @@ const DownloadEpisodeSelector: React.FC<DownloadEpisodeSelectorProps> = ({
           <div className='text-sm text-gray-600 dark:text-gray-400'>
             已选择：
             {selectedEpisodes.size === 0 ? (
-              <span className='text-red-500 dark:text-red-400'>未选择任何集数</span>
+              <span className='text-red-500 dark:text-red-400'>
+                未选择任何集数
+              </span>
             ) : selectedEpisodes.size === 1 ? (
               <>
                 第 {Array.from(selectedEpisodes)[0] + 1} 集
                 {Array.from(selectedEpisodes)[0] === currentEpisodeIndex && (
-                  <span className='ml-2 text-blue-500 dark:text-blue-400'>(当前播放)</span>
+                  <span className='ml-2 text-blue-500 dark:text-blue-400'>
+                    (当前播放)
+                  </span>
                 )}
               </>
             ) : (
@@ -346,7 +361,10 @@ const DownloadEpisodeSelector: React.FC<DownloadEpisodeSelectorProps> = ({
                   : 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 disabled:hover:bg-green-500'
               }`}
             >
-              {offlineMode && enableOfflineDownload && hasOfflinePermission ? '离线' : ''}下载 {selectedEpisodes.size > 0 && `(${selectedEpisodes.size})`}
+              {offlineMode && enableOfflineDownload && hasOfflinePermission
+                ? '离线'
+                : ''}
+              下载 {selectedEpisodes.size > 0 && `(${selectedEpisodes.size})`}
             </button>
           </div>
         </div>

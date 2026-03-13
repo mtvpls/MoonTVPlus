@@ -24,10 +24,7 @@ export async function POST(request: NextRequest) {
     const { url, username, password } = body;
 
     if (!url || !username || !password) {
-      return NextResponse.json(
-        { error: '缺少必要参数' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
     }
 
     // 创建客户端并检查连通性
@@ -45,7 +42,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: result.message,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
   } catch (error) {
@@ -55,7 +52,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : '检查失败',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

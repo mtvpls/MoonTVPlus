@@ -20,18 +20,12 @@ export async function GET(request: Request) {
     const envToken = process.env.NEXT_PUBLIC_PROXY_M3U8_TOKEN;
     if (envToken && envToken.trim() !== '') {
       if (!token || token !== envToken) {
-        return NextResponse.json(
-          { error: '无效的访问令牌' },
-          { status: 401 }
-        );
+        return NextResponse.json({ error: '无效的访问令牌' }, { status: 401 });
       }
     }
 
     if (!m3u8Url) {
-      return NextResponse.json(
-        { error: '缺少必要参数: url' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '缺少必要参数: url' }, { status: 400 });
     }
 
     // 获取当前请求的 origin
@@ -46,18 +40,19 @@ export async function GET(request: Request) {
     const m3u8UrlObj = new URL(m3u8Url);
     const response = await fetch(m3u8Url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': '*/*',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: '*/*',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': `${m3u8UrlObj.protocol}//${m3u8UrlObj.host}/`,
+        Referer: `${m3u8UrlObj.protocol}//${m3u8UrlObj.host}/`,
       },
     });
 
     if (!response.ok) {
       return NextResponse.json(
         { error: '获取 m3u8 文件失败' },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -71,13 +66,24 @@ export async function GET(request: Request) {
       try {
         // 移除 TypeScript 类型注解,转换为纯 JavaScript
         const jsCode = customAdFilterCode
-          .replace(/(\w+)\s*:\s*(string|number|boolean|any|void|never|unknown|object)\s*([,)])/g, '$1$3')
-          .replace(/\)\s*:\s*(string|number|boolean|any|void|never|unknown|object)\s*\{/g, ') {')
-          .replace(/(const|let|var)\s+(\w+)\s*:\s*(string|number|boolean|any|void|never|unknown|object)\s*=/g, '$1 $2 =');
+          .replace(
+            /(\w+)\s*:\s*(string|number|boolean|any|void|never|unknown|object)\s*([,)])/g,
+            '$1$3',
+          )
+          .replace(
+            /\)\s*:\s*(string|number|boolean|any|void|never|unknown|object)\s*\{/g,
+            ') {',
+          )
+          .replace(
+            /(const|let|var)\s+(\w+)\s*:\s*(string|number|boolean|any|void|never|unknown|object)\s*=/g,
+            '$1 $2 =',
+          );
 
         // 创建并执行自定义函数
-        const customFunction = new Function('type', 'm3u8Content',
-          jsCode + '\nreturn filterAdsFromM3U8(type, m3u8Content);'
+        const customFunction = new Function(
+          'type',
+          'm3u8Content',
+          jsCode + '\nreturn filterAdsFromM3U8(type, m3u8Content);',
         );
         m3u8Content = customFunction(source, m3u8Content);
       } catch (err) {
@@ -91,7 +97,13 @@ export async function GET(request: Request) {
     }
 
     // 处理 m3u8 中的相对链接
-    m3u8Content = resolveM3u8Links(m3u8Content, m3u8Url, source, origin, token || '');
+    m3u8Content = resolveM3u8Links(
+      m3u8Content,
+      m3u8Url,
+      source,
+      origin,
+      token || '',
+    );
 
     // 返回处理后的 m3u8 内容
     return new NextResponse(m3u8Content, {
@@ -105,7 +117,7 @@ export async function GET(request: Request) {
     console.error('代理 m3u8 失败:', error);
     return NextResponse.json(
       { error: '代理失败', details: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -124,7 +136,7 @@ function filterAdsFromM3U8Default(type: string, m3u8Content: string): string {
     'advert',
     'advertisement',
     '/adjump',
-    'redtraffic'
+    'redtraffic',
   ];
 
   // 按行分割M3U8内容
@@ -146,8 +158,8 @@ function filterAdsFromM3U8Default(type: string, m3u8Content: string): string {
       // 检查下一行 URL 是否包含广告关键字
       if (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
-        const containsAdKeyword = adKeywords.some(keyword =>
-          nextLine.toLowerCase().includes(keyword.toLowerCase())
+        const containsAdKeyword = adKeywords.some((keyword) =>
+          nextLine.toLowerCase().includes(keyword.toLowerCase()),
         );
 
         if (containsAdKeyword) {
@@ -169,7 +181,13 @@ function filterAdsFromM3U8Default(type: string, m3u8Content: string): string {
 /**
  * 将 m3u8 中的相对链接转换为绝对链接，并将子 m3u8 链接转为代理链接
  */
-function resolveM3u8Links(m3u8Content: string, baseUrl: string, source: string, proxyOrigin: string, token: string): string {
+function resolveM3u8Links(
+  m3u8Content: string,
+  baseUrl: string,
+  source: string,
+  proxyOrigin: string,
+  token: string,
+): string {
   const lines = m3u8Content.split('\n');
   const resolvedLines = [];
 

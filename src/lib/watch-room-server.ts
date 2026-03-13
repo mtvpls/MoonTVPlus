@@ -18,7 +18,9 @@ export class WatchRoomServer {
   private socketToRoom: Map<string, RoomMemberInfo> = new Map(); // socketId -> RoomMemberInfo
   private cleanupInterval: NodeJS.Timeout | null = null;
 
-  constructor(private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>) {
+  constructor(
+    private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>,
+  ) {
     this.setupEventHandlers();
     this.startCleanupTimer();
   }
@@ -67,7 +69,9 @@ export class WatchRoomServer {
 
           socket.join(roomId);
 
-          console.log(`[WatchRoom] Room created: ${roomId} by ${data.userName}`);
+          console.log(
+            `[WatchRoom] Room created: ${roomId} by ${data.userName}`,
+          );
           callback({ success: true, room });
         } catch (error) {
           console.error('[WatchRoom] Error creating room:', error);
@@ -115,7 +119,9 @@ export class WatchRoomServer {
           // 通知房间内其他成员
           socket.to(data.roomId).emit('room:member-joined', member);
 
-          console.log(`[WatchRoom] User ${data.userName} joined room ${data.roomId}`);
+          console.log(
+            `[WatchRoom] User ${data.userName} joined room ${data.roomId}`,
+          );
 
           const members = Array.from(roomMembers?.values() || []);
           callback({ success: true, room, members });
@@ -132,7 +138,9 @@ export class WatchRoomServer {
 
       // 获取房间列表
       socket.on('room:list', (callback) => {
-        const publicRooms = Array.from(this.rooms.values()).filter((room) => room.isPublic);
+        const publicRooms = Array.from(this.rooms.values()).filter(
+          (room) => room.isPublic,
+        );
         callback(publicRooms);
       });
 
@@ -330,7 +338,9 @@ export class WatchRoomServer {
 
       // 如果是房主离开，记录时间但不立即删除房间
       if (isOwner) {
-        console.log(`[WatchRoom] Owner left room ${roomId}, will auto-delete after 5 minutes`);
+        console.log(
+          `[WatchRoom] Owner left room ${roomId}, will auto-delete after 5 minutes`,
+        );
       }
 
       // 如果房间没人了，立即删除
@@ -361,8 +371,13 @@ export class WatchRoomServer {
         const timeSinceHeartbeat = now - room.lastOwnerHeartbeat;
 
         // 如果房主心跳超过30秒，清除播放状态
-        if (timeSinceHeartbeat > clearStateTimeout && room.currentState !== null) {
-          console.log(`[WatchRoom] Room ${roomId} owner inactive for 30s, clearing play state`);
+        if (
+          timeSinceHeartbeat > clearStateTimeout &&
+          room.currentState !== null
+        ) {
+          console.log(
+            `[WatchRoom] Room ${roomId} owner inactive for 30s, clearing play state`,
+          );
           room.currentState = null;
           this.rooms.set(roomId, room);
           // 通知房间内所有成员状态已清除

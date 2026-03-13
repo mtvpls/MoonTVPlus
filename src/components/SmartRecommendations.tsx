@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback,useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useEnableComments } from '@/hooks/useEnableComments';
 import { useRecommendationDataSource } from '@/hooks/useRecommendationDataSource';
@@ -84,7 +84,9 @@ export default function SmartRecommendations({
         }
       }
 
-      const response = await fetch(`/api/douban-recommendations?id=${doubanId}`);
+      const response = await fetch(
+        `/api/douban-recommendations?id=${doubanId}`,
+      );
 
       if (!response.ok) {
         throw new Error('获取豆瓣推荐失败');
@@ -101,7 +103,7 @@ export default function SmartRecommendations({
           JSON.stringify({
             data: recommendationsData,
             timestamp: Date.now(),
-          })
+          }),
         );
       } catch (e) {
         console.error('保存缓存失败:', e);
@@ -139,11 +141,14 @@ export default function SmartRecommendations({
 
             // 检查TMDB推荐数据缓存（1天）
             const recommendationsCacheKey = `tmdb_recommendations_${tmdbId}`;
-            const recommendationsCache = localStorage.getItem(recommendationsCacheKey);
+            const recommendationsCache = localStorage.getItem(
+              recommendationsCacheKey,
+            );
 
             if (recommendationsCache) {
               try {
-                const { data, timestamp: recTimestamp } = JSON.parse(recommendationsCache);
+                const { data, timestamp: recTimestamp } =
+                  JSON.parse(recommendationsCache);
                 const recCacheAge = Date.now() - recTimestamp;
                 const recCacheMaxAge = 24 * 60 * 60 * 1000; // 1天
 
@@ -186,7 +191,7 @@ export default function SmartRecommendations({
             JSON.stringify({
               tmdbId: result.tmdbId,
               timestamp: Date.now(),
-            })
+            }),
           );
 
           // 保存TMDB推荐数据到localStorage（1天）
@@ -196,7 +201,7 @@ export default function SmartRecommendations({
             JSON.stringify({
               data: recommendationsData,
               timestamp: Date.now(),
-            })
+            }),
           );
         } catch (e) {
           console.error('保存缓存失败:', e);
@@ -251,7 +256,7 @@ export default function SmartRecommendations({
         <div className='px-3 md:px-6 py-4 border-b border-gray-200 dark:border-gray-700'>
           <h3 className='text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2'>
             <svg className='w-5 h-5' fill='currentColor' viewBox='0 0 24 24'>
-              <path d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z'/>
+              <path d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' />
             </svg>
             更多推荐
           </h3>

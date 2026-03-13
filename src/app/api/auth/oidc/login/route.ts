@@ -12,17 +12,14 @@ export async function GET(request: NextRequest) {
 
     // 检查是否启用OIDC登录
     if (!siteConfig.EnableOIDCLogin) {
-      return NextResponse.json(
-        { error: 'OIDC登录未启用' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: 'OIDC登录未启用' }, { status: 403 });
     }
 
     // 检查OIDC配置
     if (!siteConfig.OIDCAuthorizationEndpoint || !siteConfig.OIDCClientId) {
       return NextResponse.json(
         { error: 'OIDC配置不完整，请配置Authorization Endpoint和Client ID' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -54,9 +51,6 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('OIDC登录发起失败:', error);
-    return NextResponse.json(
-      { error: '服务器错误' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
   }
 }

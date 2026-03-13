@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       {
         error: '不支持本地存储进行用户列表查询',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
           headers: {
             'Cache-Control': 'no-store',
           },
-        }
+        },
       );
     }
 
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store',
         },
-      }
+      },
     );
   } catch (error) {
     console.error('获取用户列表失败:', error);
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
         error: '获取用户列表失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

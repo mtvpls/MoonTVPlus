@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
           errorMessage: '缺少关键词参数',
           animes: [],
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
         errorMessage: error instanceof Error ? error.message : '搜索失败',
         animes: [],
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

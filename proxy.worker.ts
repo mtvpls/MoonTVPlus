@@ -28,7 +28,10 @@ async function handleRequest(request: Request): Promise<Response> {
     actualUrl = ensureProtocol(actualUrl, url.protocol);
     actualUrl += url.search;
 
-    const newHeaders = filterHeaders(request.headers, (name) => !name.startsWith('cf-'));
+    const newHeaders = filterHeaders(
+      request.headers,
+      (name) => !name.startsWith('cf-'),
+    );
     const modifiedRequest = new Request(actualUrl, {
       headers: newHeaders,
       method: request.method,
@@ -44,7 +47,12 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     if (response.headers.get('Content-Type')?.includes('text/html')) {
-      body = await handleHtmlContent(response, url.protocol, url.host, actualUrl);
+      body = await handleHtmlContent(
+        response,
+        url.protocol,
+        url.host,
+        actualUrl,
+      );
     }
 
     const modifiedResponse = new Response(body, {
@@ -64,12 +72,14 @@ async function handleRequest(request: Request): Promise<Response> {
 }
 
 function ensureProtocol(url: string, defaultProtocol: string): string {
-  return url.startsWith('http://') || url.startsWith('https://') ? url : `${defaultProtocol}//${url}`;
+  return url.startsWith('http://') || url.startsWith('https://')
+    ? url
+    : `${defaultProtocol}//${url}`;
 }
 
 function handleRedirect(
   response: Response,
-  body: BodyInit | ReadableStream<Uint8Array> | null
+  body: BodyInit | ReadableStream<Uint8Array> | null,
 ): Response {
   const locationHeader = response.headers.get('location');
   if (!locationHeader) {
@@ -96,13 +106,23 @@ async function handleHtmlContent(
   response: Response,
   protocol: string,
   host: string,
-  actualUrl: string
+  actualUrl: string,
 ): Promise<string> {
   const originalText = await response.text();
-  return replaceRelativePaths(originalText, protocol, host, new URL(actualUrl).origin);
+  return replaceRelativePaths(
+    originalText,
+    protocol,
+    host,
+    new URL(actualUrl).origin,
+  );
 }
 
-function replaceRelativePaths(text: string, protocol: string, host: string, origin: string): string {
+function replaceRelativePaths(
+  text: string,
+  protocol: string,
+  host: string,
+  origin: string,
+): string {
   const regex = new RegExp('((href|src|action)=["\'])/(?!/)', 'g');
   return text.replace(regex, `$1${protocol}//${host}/${origin}/`);
 }
@@ -116,7 +136,10 @@ function jsonResponse(data: Record<string, string>, status: number): Response {
   });
 }
 
-function filterHeaders(headers: Headers, filterFunc: (name: string) => boolean): Headers {
+function filterHeaders(
+  headers: Headers,
+  filterFunc: (name: string) => boolean,
+): Headers {
   return new Headers([...headers].filter(([name]) => filterFunc(name)));
 }
 

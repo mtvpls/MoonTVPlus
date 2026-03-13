@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback,useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 interface DanmakuData {
   time: number;
@@ -85,7 +85,7 @@ const CustomHeatmap: React.FC<CustomHeatmapProps> = ({
       const y = height - barHeight;
 
       // 判断是否已播放
-      const isPlayed = (index / heatmapData.length) <= progressRatio;
+      const isPlayed = index / heatmapData.length <= progressRatio;
 
       // 使用灰色透明，已播放的部分深色一点
       const opacity = isPlayed ? 0.5 + value * 0.3 : 0.2 + value * 0.3;

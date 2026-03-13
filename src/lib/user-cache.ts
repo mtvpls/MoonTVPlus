@@ -118,7 +118,9 @@ if (!_userInfoCache) {
 export const userInfoCache = _userInfoCache as UserInfoCache;
 
 const ownerExistenceGlobalKey = Symbol.for('__MOONTV_OWNER_EXISTENCE_CACHE__');
-let _ownerExistenceCache: OwnerExistenceCache | undefined = (global as any)[ownerExistenceGlobalKey];
+let _ownerExistenceCache: OwnerExistenceCache | undefined = (global as any)[
+  ownerExistenceGlobalKey
+];
 
 if (!_ownerExistenceCache) {
   _ownerExistenceCache = new OwnerExistenceCache();

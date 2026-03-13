@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { NFOMetadata,parseNFO } from './nfo-parser';
+import { NFOMetadata, parseNFO } from './nfo-parser';
 import { parseVideoFileName } from './video-parser';
 import { XiaoyaClient } from './xiaoya.client';
 
@@ -45,13 +45,25 @@ function parseFolderName(folderName: string | undefined): {
  */
 async function findNFO(
   xiaoyaClient: XiaoyaClient,
-  videoPath: string
+  videoPath: string,
 ): Promise<NFOMetadata | null> {
   const pathParts = videoPath.split('/').filter(Boolean);
 
   // 判断是否为文件路径
-  const videoExtensions = ['.mp4', '.mkv', '.avi', '.m3u8', '.flv', '.ts', '.mov', '.wmv', '.webm'];
-  const isFilePath = videoExtensions.some(ext => videoPath.toLowerCase().endsWith(ext));
+  const videoExtensions = [
+    '.mp4',
+    '.mkv',
+    '.avi',
+    '.m3u8',
+    '.flv',
+    '.ts',
+    '.mov',
+    '.wmv',
+    '.webm',
+  ];
+  const isFilePath = videoExtensions.some((ext) =>
+    videoPath.toLowerCase().endsWith(ext),
+  );
 
   let isInSeasonDir = false;
 
@@ -73,7 +85,9 @@ async function findNFO(
     nfoSearchPaths.push(`/${grandParentDir}/tvshow.nfo`);
   } else {
     // 电影：查同级的 movie.nfo
-    const parentDir = pathParts.slice(0, isFilePath ? -1 : pathParts.length).join('/');
+    const parentDir = pathParts
+      .slice(0, isFilePath ? -1 : pathParts.length)
+      .join('/');
     nfoSearchPaths.push(`/${parentDir}/movie.nfo`);
   }
 
@@ -100,7 +114,7 @@ export async function getXiaoyaMetadata(
   videoPath: string,
   tmdbApiKey?: string,
   tmdbProxy?: string,
-  tmdbReverseProxy?: string
+  tmdbReverseProxy?: string,
 ): Promise<XiaoyaMetadata> {
   const pathParts = videoPath.split('/').filter(Boolean);
 
@@ -110,11 +124,26 @@ export async function getXiaoyaMetadata(
   }
 
   // 判断是否为文件路径（包含视频扩展名）
-  const videoExtensions = ['.mp4', '.mkv', '.avi', '.m3u8', '.flv', '.ts', '.mov', '.wmv', '.webm'];
-  const isFilePath = videoExtensions.some(ext => videoPath.toLowerCase().endsWith(ext));
+  const videoExtensions = [
+    '.mp4',
+    '.mkv',
+    '.avi',
+    '.m3u8',
+    '.flv',
+    '.ts',
+    '.mov',
+    '.wmv',
+    '.webm',
+  ];
+  const isFilePath = videoExtensions.some((ext) =>
+    videoPath.toLowerCase().endsWith(ext),
+  );
 
   // 如果是文件路径，检查是否在季度目录中
-  const isInSeasonDir = isFilePath && pathParts.length >= 2 && /(season\s*\d+|s\d+)/i.test(pathParts[pathParts.length - 2]);
+  const isInSeasonDir =
+    isFilePath &&
+    pathParts.length >= 2 &&
+    /(season\s*\d+|s\d+)/i.test(pathParts[pathParts.length - 2]);
 
   // 验证路径长度是否足够
   if (isInSeasonDir && pathParts.length < 3) {
@@ -130,7 +159,8 @@ export async function getXiaoyaMetadata(
     metadataDir = isInSeasonDir
       ? pathParts.slice(0, -2).join('/')
       : pathParts.slice(0, -1).join('/');
-    folderName = pathParts[isInSeasonDir ? pathParts.length - 3 : pathParts.length - 2];
+    folderName =
+      pathParts[isInSeasonDir ? pathParts.length - 3 : pathParts.length - 2];
   } else {
     // 目录路径
     if (pathParts.length === 1) {
@@ -178,7 +208,7 @@ export async function getXiaoyaMetadata(
       poster: posterUrl,
       background: backgroundUrl,
       mediaType: isInSeasonDir ? 'tv' : 'movie',
-      source: nfoData ? 'nfo' : (isFilePath ? 'file' : 'folder'),
+      source: nfoData ? 'nfo' : isFilePath ? 'file' : 'folder',
     };
   }
 
@@ -217,14 +247,22 @@ export async function getXiaoyaMetadata(
 
     if (!isPureNumber && !isSeasonEpisode) {
       const { searchTMDB, getTMDBImageUrl } = await import('./tmdb.search');
-      const tmdbResult = await searchTMDB(tmdbApiKey, searchQuery, tmdbProxy, undefined, tmdbReverseProxy);
+      const tmdbResult = await searchTMDB(
+        tmdbApiKey,
+        searchQuery,
+        tmdbProxy,
+        undefined,
+        tmdbReverseProxy,
+      );
 
       if (tmdbResult.code === 200 && tmdbResult.result) {
         return {
           tmdbId: tmdbResult.result.id,
-          title: tmdbResult.result.title || tmdbResult.result.name || folderName,
-          year: tmdbResult.result.release_date?.substring(0, 4) ||
-                tmdbResult.result.first_air_date?.substring(0, 4),
+          title:
+            tmdbResult.result.title || tmdbResult.result.name || folderName,
+          year:
+            tmdbResult.result.release_date?.substring(0, 4) ||
+            tmdbResult.result.first_air_date?.substring(0, 4),
           rating: tmdbResult.result.vote_average,
           plot: tmdbResult.result.overview,
           poster: tmdbResult.result.poster_path
@@ -245,14 +283,21 @@ export async function getXiaoyaMetadata(
       .trim();
 
     const { searchTMDB, getTMDBImageUrl } = await import('./tmdb.search');
-    const tmdbResult = await searchTMDB(tmdbApiKey, searchQuery, tmdbProxy, undefined, tmdbReverseProxy);
+    const tmdbResult = await searchTMDB(
+      tmdbApiKey,
+      searchQuery,
+      tmdbProxy,
+      undefined,
+      tmdbReverseProxy,
+    );
 
     if (tmdbResult.code === 200 && tmdbResult.result) {
       return {
         tmdbId: tmdbResult.result.id,
         title: tmdbResult.result.title || tmdbResult.result.name || folderName,
-        year: tmdbResult.result.release_date?.substring(0, 4) ||
-              tmdbResult.result.first_air_date?.substring(0, 4),
+        year:
+          tmdbResult.result.release_date?.substring(0, 4) ||
+          tmdbResult.result.first_air_date?.substring(0, 4),
         rating: tmdbResult.result.vote_average,
         plot: tmdbResult.result.overview,
         poster: tmdbResult.result.poster_path
@@ -277,30 +322,49 @@ export async function getXiaoyaMetadata(
  */
 export async function getXiaoyaEpisodes(
   xiaoyaClient: XiaoyaClient,
-  videoPath: string
+  videoPath: string,
 ): Promise<Array<{ path: string; title: string }>> {
   const pathParts = videoPath.split('/').filter(Boolean);
 
   // 判断是否为文件路径（包含视频扩展名）
-  const videoExtensions = ['.mp4', '.mkv', '.avi', '.m3u8', '.flv', '.ts', '.mov', '.wmv', '.webm'];
-  const isFilePath = videoExtensions.some(ext => videoPath.toLowerCase().endsWith(ext));
+  const videoExtensions = [
+    '.mp4',
+    '.mkv',
+    '.avi',
+    '.m3u8',
+    '.flv',
+    '.ts',
+    '.mov',
+    '.wmv',
+    '.webm',
+  ];
+  const isFilePath = videoExtensions.some((ext) =>
+    videoPath.toLowerCase().endsWith(ext),
+  );
 
   // 如果是文件路径，检查是否在季度目录中
-  const isInSeasonDir = isFilePath && /(season\s*\d+|s\d+)/i.test(pathParts[pathParts.length - 2]);
+  const isInSeasonDir =
+    isFilePath && /(season\s*\d+|s\d+)/i.test(pathParts[pathParts.length - 2]);
 
   if (isInSeasonDir) {
     // 电视剧：列出当前季的所有集
     const seasonDir = pathParts.slice(0, -1).join('/');
-    const listResponse = await xiaoyaClient.listDirectory(`/${seasonDir}`, 1, 100, false);
+    const listResponse = await xiaoyaClient.listDirectory(
+      `/${seasonDir}`,
+      1,
+      100,
+      false,
+    );
 
     const videoFiles = listResponse.content
-      .filter(item =>
-        !item.is_dir &&
-        videoExtensions.some(ext => item.name.toLowerCase().endsWith(ext))
+      .filter(
+        (item) =>
+          !item.is_dir &&
+          videoExtensions.some((ext) => item.name.toLowerCase().endsWith(ext)),
       )
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    return videoFiles.map(file => {
+    return videoFiles.map((file) => {
       const parsed = parseVideoFileName(file.name);
       console.log('[xiaoya-metadata] 解析文件名:', file.name, '结果:', parsed);
       let title = file.name;
@@ -308,7 +372,9 @@ export async function getXiaoyaEpisodes(
       if (parsed.season && parsed.episode) {
         title = `S${parsed.season.toString().padStart(2, '0')}E${parsed.episode.toString().padStart(2, '0')}`;
       } else if (parsed.episode) {
-        title = parsed.isOVA ? `OVA ${parsed.episode}` : `第${parsed.episode}集`;
+        title = parsed.isOVA
+          ? `OVA ${parsed.episode}`
+          : `第${parsed.episode}集`;
       }
 
       return {
@@ -318,17 +384,25 @@ export async function getXiaoyaEpisodes(
     });
   } else {
     // 目录路径或电影文件路径：列出该目录下的所有视频
-    const targetDir = isFilePath ? pathParts.slice(0, -1).join('/') : pathParts.join('/');
-    const listResponse = await xiaoyaClient.listDirectory(`/${targetDir}`, 1, 100, false);
+    const targetDir = isFilePath
+      ? pathParts.slice(0, -1).join('/')
+      : pathParts.join('/');
+    const listResponse = await xiaoyaClient.listDirectory(
+      `/${targetDir}`,
+      1,
+      100,
+      false,
+    );
 
     const videoFiles = listResponse.content
-      .filter(item =>
-        !item.is_dir &&
-        videoExtensions.some(ext => item.name.toLowerCase().endsWith(ext))
+      .filter(
+        (item) =>
+          !item.is_dir &&
+          videoExtensions.some((ext) => item.name.toLowerCase().endsWith(ext)),
       )
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    return videoFiles.map(file => ({
+    return videoFiles.map((file) => ({
       path: `/${targetDir}/${file.name}`,
       title: file.name,
     }));

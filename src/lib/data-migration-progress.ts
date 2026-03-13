@@ -1,11 +1,14 @@
 // 存储进度信息的 Map
-const progressStore = new Map<string, {
-  phase: string;
-  current: number;
-  total: number;
-  message: string;
-  timestamp: number;
-}>();
+const progressStore = new Map<
+  string,
+  {
+    phase: string;
+    current: number;
+    total: number;
+    message: string;
+    timestamp: number;
+  }
+>();
 
 // 清理过期的进度信息（超过5分钟）
 setInterval(() => {
@@ -25,7 +28,7 @@ export function updateProgress(
   phase: string,
   current: number,
   total: number,
-  message: string
+  message: string,
 ) {
   const progressKey = `${username}:${operation}`;
   progressStore.set(progressKey, {
@@ -38,7 +41,10 @@ export function updateProgress(
 }
 
 // 辅助函数：清除进度
-export function clearProgress(username: string, operation: 'export' | 'import') {
+export function clearProgress(
+  username: string,
+  operation: 'export' | 'import',
+) {
   const progressKey = `${username}:${operation}`;
   progressStore.delete(progressKey);
 }
