@@ -1,8 +1,15 @@
+import withSerwistInit from '@serwist/next';
 import type { NextConfig } from 'next';
 
 const isCloudflare =
   process.env.CF_PAGES === '1' || process.env.BUILD_TARGET === 'cloudflare';
 const isPwaEnabled = process.env.ENABLE_PWA === '1';
+
+const withSerwist = withSerwistInit({
+  swSrc: 'src/app/sw.ts',
+  swDest: 'public/sw.js',
+  disable: !isPwaEnabled,
+});
 
 const nextConfig: NextConfig = {
   output: isCloudflare ? undefined : 'standalone',
@@ -82,18 +89,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-let exportedConfig: NextConfig = nextConfig;
-
-if (isPwaEnabled) {
-  // next-pwa is CJS-only, dynamic require needed
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const withPWA = require('next-pwa')({
-    dest: 'public',
-    disable: process.env.NODE_ENV === 'development',
-    register: true,
-    skipWaiting: true,
-  });
-  exportedConfig = withPWA(nextConfig);
-}
-
-export default exportedConfig;
+export default withSerwist(nextConfig);
