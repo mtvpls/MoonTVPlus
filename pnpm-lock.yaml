@@ -68,9 +68,6 @@ importers:
       hls.js:
         specifier: ^1.6.10
         version: 1.6.15
-      https-proxy-agent:
-        specifier: ^7.0.6
-        version: 7.0.6
       lucide-react:
         specifier: ^0.438.0
         version: 0.438.0(react@19.2.4)
@@ -92,9 +89,6 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      node-fetch:
-        specifier: ^2.7.0
-        version: 2.7.0
       nodemailer:
         specifier: ^7.0.12
         version: 7.0.12
@@ -149,6 +143,9 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.21.0
+      undici:
+        specifier: ^7.24.1
+        version: 7.24.1
       vidstack:
         specifier: ^0.6.15
         version: 0.6.15
@@ -207,9 +204,6 @@ importers:
       '@types/node':
         specifier: 24.0.3
         version: 24.0.3
-      '@types/node-fetch':
-        specifier: ^2.6.13
-        version: 2.6.13
       '@types/nodemailer':
         specifier: ^7.0.11
         version: 7.0.11
@@ -7638,8 +7632,8 @@ packages:
     resolution: {integrity: sha512-y+8YjDFzWdQlSE9N5nzKMT3g4a5UBX1HKowfdXh0uvAnTaqqwqB92Jt4UXBAeKekDs5IaDKyJFR4X1gYVCgXcw==}
     engines: {node: '>=20.18.1'}
 
-  undici@7.24.0:
-    resolution: {integrity: sha512-jxytwMHhsbdpBXxLAcuu0fzlQeXCNnWdDyRHpvWsUl8vd98UwYdl9YTyn8/HcpcJPC3pwUveefsa3zTxyD/ERg==}
+  undici@7.24.1:
+    resolution: {integrity: sha512-5xoBibbmnjlcR3jdqtY2Lnx7WbrD/tHlT01TmvqZUFVc9Q1w4+j5hbnapTqbcXITMH1ovjq/W7BkqBilHiVAaA==}
     engines: {node: '>=20.18.1'}
 
   unenv@2.0.0-rc.24:
@@ -12674,7 +12668,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 7.24.0
+      undici: 7.24.1
       whatwg-mimetype: 4.0.0
 
   chokidar@3.6.0:
@@ -16943,7 +16937,7 @@ snapshots:
 
   undici@7.18.2: {}
 
-  undici@7.24.0: {}
+  undici@7.24.1: {}
 
   unenv@2.0.0-rc.24:
     dependencies:

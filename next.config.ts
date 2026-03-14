@@ -73,11 +73,13 @@ const nextConfig: NextConfig = {
         'better-sqlite3': 'commonjs better-sqlite3',
         '@vercel/postgres': 'commonjs @vercel/postgres',
         pg: 'commonjs pg',
+        undici: 'commonjs undici',
       });
 
       config.resolve.alias = {
         ...config.resolve.alias,
         'better-sqlite3': false,
+        undici: false,
         '@/lib/d1.db': false,
         '@/lib/d1-adapter': false,
         '@/lib/postgres.db': false,

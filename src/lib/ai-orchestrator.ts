@@ -300,7 +300,7 @@ async function fetchTMDBData(
 
     const fetchOptions: any = tmdbProxy
       ? {
-          // 如果有代理，使用 node-fetch 和代理
+          // 如果有代理，使用代理
           signal: AbortSignal.timeout(15000),
         }
       : {
