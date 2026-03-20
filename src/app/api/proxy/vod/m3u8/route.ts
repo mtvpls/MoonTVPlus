@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 
 import { getConfig } from "@/lib/config";
 import { getBaseUrl, resolveUrl } from "@/lib/live";
+import { validateProxyUrlServerSide } from '@/lib/server/ssrf';
+import { buildProxyM3u8Headers, buildProxyStreamHeaders } from '@/lib/server/proxy-headers';
 
 export const runtime = 'nodejs';
 
@@ -38,6 +40,12 @@ export async function GET(request: Request) {
   try {
     const decodedUrl = decodeURIComponent(url);
 
+    // 安全校验：防 SSRF 拦截请求内网或非法 URL
+    const isSafeUrl = await validateProxyUrlServerSide(decodedUrl);
+    if (!isSafeUrl) {
+      return NextResponse.json({ error: 'Proxy request to local or invalid network is forbidden' }, { status: 403 });
+    }
+
     response = await fetch(decodedUrl, {
       cache: 'no-cache',
       redirect: 'follow',
@@ -66,23 +74,14 @@ export async function GET(request: Request) {
       // 重写 M3U8 内容
       const modifiedContent = rewriteM3U8Content(m3u8Content, baseUrl, request, source);
 
-      const headers = new Headers();
-      headers.set('Content-Type', contentType || 'application/vnd.apple.mpegurl');
-      headers.set('Access-Control-Allow-Origin', '*');
-      headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      headers.set('Access-Control-Allow-Headers', 'Content-Type, Range, Origin, Accept');
-      headers.set('Cache-Control', 'no-cache');
-      headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+      const headers = buildProxyM3u8Headers(contentType || undefined);
       return new Response(modifiedContent, { headers });
     }
     // just proxy
-    const headers = new Headers();
-    headers.set('Content-Type', response.headers.get('Content-Type') || 'application/vnd.apple.mpegurl');
-    headers.set('Access-Control-Allow-Origin', '*');
-    headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Range, Origin, Accept');
+    const headers = buildProxyStreamHeaders(
+      response.headers.get('Content-Type') || 'application/vnd.apple.mpegurl'
+    );
     headers.set('Cache-Control', 'no-cache');
-    headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
 
     // 直接返回视频流
     return new Response(response.body, {

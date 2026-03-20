@@ -155,7 +155,7 @@ export function processVideoUrl(originalUrl: string): string {
  */
 export async function getVideoResolutionFromM3u8(
   m3u8Url: string,
-  timeoutMs = 4000
+  timeoutMs = 6000
 ): Promise<{
   quality: string; // 如720p、1080p等
   loadSpeed: string; // 自动转换为KB/s或MB/s
@@ -185,11 +185,55 @@ export async function getVideoResolutionFromM3u8(
       // 固定使用hls.js加载
       const hls = new Hls();
 
-      // 设置超时处理 - 使用传入的超时时间
-      const timeout = setTimeout(() => {
+      let actualLoadSpeed = '未知';
+      let hasSpeedCalculated = false;
+      let hasMetadataLoaded = false;
+      let estimatedBitrate = 0; // 估算的码率（bps）
+
+      // 提取核心返回逻辑供 resolve 和 timeout 共同调用
+      const resolveCurrentState = () => {
+        const width = video.videoWidth;
+        const quality =
+          width >= 3840
+            ? '4K'
+            : width >= 2560
+              ? '2K'
+              : width >= 1920
+                ? '1080p'
+                : width >= 1280
+                  ? '720p'
+                  : width >= 854
+                    ? '480p'
+                    : width > 0
+                      ? 'SD'
+                      : '未知';
+
+        const bitrateStr = estimatedBitrate > 0
+          ? estimatedBitrate >= 1000000
+            ? `${(estimatedBitrate / 1000000).toFixed(1)} Mbps`
+            : `${Math.round(estimatedBitrate / 1000)} Kbps`
+          : '未知';
+
         hls.destroy();
         video.remove();
-        reject(new Error('Timeout loading video metadata'));
+
+        resolve({
+          quality,
+          loadSpeed: actualLoadSpeed,
+          pingTime: Math.round(pingTime),
+          bitrate: bitrateStr,
+        });
+      };
+
+      // 设置超时处理 - 如果部分数据已拿到，则宽容返回
+      const timeout = setTimeout(() => {
+        if (hasMetadataLoaded || hasSpeedCalculated) {
+          resolveCurrentState();
+        } else {
+          hls.destroy();
+          video.remove();
+          reject(new Error('Timeout loading video metadata'));
+        }
       }, timeoutMs);
 
       video.onerror = () => {
@@ -199,67 +243,16 @@ export async function getVideoResolutionFromM3u8(
         reject(new Error('Failed to load video metadata'));
       };
 
-      let actualLoadSpeed = '未知';
-      let hasSpeedCalculated = false;
-      let hasMetadataLoaded = false;
-      let estimatedBitrate = 0; // 估算的码率（bps）
-
       let fragmentStartTime = 0;
 
-      // 检查是否可以返回结果
+      // 检查是否可以相互满足要求
       const checkAndResolve = () => {
         if (
           hasMetadataLoaded &&
           (hasSpeedCalculated || actualLoadSpeed !== '未知')
         ) {
           clearTimeout(timeout);
-          const width = video.videoWidth;
-          if (width && width > 0) {
-            hls.destroy();
-            video.remove();
-
-            // 根据视频宽度判断视频质量等级，使用经典分辨率的宽度作为分割点
-            const quality =
-              width >= 3840
-                ? '4K' // 4K: 3840x2160
-                : width >= 2560
-                  ? '2K' // 2K: 2560x1440
-                  : width >= 1920
-                    ? '1080p' // 1080p: 1920x1080
-                    : width >= 1280
-                      ? '720p' // 720p: 1280x720
-                      : width >= 854
-                        ? '480p'
-                        : 'SD'; // 480p: 854x480
-
-            // 格式化码率
-            const bitrateStr = estimatedBitrate > 0
-              ? estimatedBitrate >= 1000000
-                ? `${(estimatedBitrate / 1000000).toFixed(1)} Mbps`
-                : `${Math.round(estimatedBitrate / 1000)} Kbps`
-              : '未知';
-
-            resolve({
-              quality,
-              loadSpeed: actualLoadSpeed,
-              pingTime: Math.round(pingTime),
-              bitrate: bitrateStr,
-            });
-          } else {
-            // webkit 无法获取尺寸，直接返回
-            const bitrateStr = estimatedBitrate > 0
-              ? estimatedBitrate >= 1000000
-                ? `${(estimatedBitrate / 1000000).toFixed(1)} Mbps`
-                : `${Math.round(estimatedBitrate / 1000)} Kbps`
-              : '未知';
-
-            resolve({
-              quality: '未知',
-              loadSpeed: actualLoadSpeed,
-              pingTime: Math.round(pingTime),
-              bitrate: bitrateStr,
-            });
-          }
+          resolveCurrentState();
         }
       };
 
@@ -309,7 +302,7 @@ export async function getVideoResolutionFromM3u8(
       });
 
       // 为分片请求添加时间戳参数破除浏览器缓存
-      hls.config.xhrSetup = function(xhr: XMLHttpRequest, url: string) {
+      hls.config.xhrSetup = function (xhr: XMLHttpRequest, url: string) {
         const urlWithTimestamp = url.includes('?')
           ? `${url}&_t=${Date.now()}`
           : `${url}?_t=${Date.now()}`;
@@ -323,6 +316,22 @@ export async function getVideoResolutionFromM3u8(
       hls.on(Hls.Events.ERROR, (event: any, data: any) => {
         console.error('HLS错误:', data);
         if (data.fatal) {
+          const statusCode = data.response?.code || data.response?.status;
+          // 防止 415 代理兜底熔断导致正常的二进制源在优选逻辑中被剔除
+          if (statusCode === 415 && (m3u8Url.includes('/api/proxy-m3u8') || m3u8Url.includes('/api/proxy/vod/m3u8'))) {
+            console.log('[测速] 测速通道嗅探到这是底层的媒体流文件，免测速通过');
+            clearTimeout(timeout);
+            hls.destroy();
+            video.remove();
+            resolve({
+              quality: '原生画质',
+              loadSpeed: '直连',
+              pingTime: 10,
+              bitrate: '未知',
+            });
+            return;
+          }
+
           clearTimeout(timeout);
           hls.destroy();
           video.remove();
@@ -397,3 +406,4 @@ export function base58Decode(encoded: string): string {
   // 在 Node.js 环境中使用 Buffer
   return Buffer.from(bytes).toString('utf-8');
 }
+

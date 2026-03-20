@@ -84,10 +84,19 @@ export async function GET(
       'User-Agent': client.getUserAgent(),
     };
 
-    // 请求图片
-    const imageResponse = await fetch(imageUrl, {
-      headers: requestHeaders,
-    });
+    // 创建 AbortController 用于超时控制
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 20000); // 20秒超时
+
+    try {
+      // 请求图片
+      const imageResponse = await fetch(imageUrl, {
+        headers: requestHeaders,
+        signal: abortController.signal,
+      });
+
+      // 清除超时定时器
+      clearTimeout(timeoutId);
 
     if (!imageResponse.ok) {
       console.error('[Emby Image] 获取图片失败:', {
@@ -123,6 +132,19 @@ export async function GET(
       status: imageResponse.status,
       headers,
     });
+    } catch (error) {
+      // 清除超时定时器
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('[Emby Image] 请求超时');
+        return NextResponse.json(
+          { error: '请求超时' },
+          { status: 504 }
+        );
+      }
+      throw error;
+    }
   } catch (error) {
     console.error('[Emby Image] 错误:', error);
     return NextResponse.json(

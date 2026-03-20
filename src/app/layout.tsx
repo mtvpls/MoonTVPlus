@@ -84,6 +84,7 @@ export default async function RootLayout({
   let aiEnableHomepageEntry = false;
   let aiEnableVideoCardEntry = false;
   let aiEnablePlayPageEntry = false;
+  let aiEnableComments = false;
   let aiDefaultMessageNoVideo = '';
   let aiDefaultMessageWithVideo = '';
   let enableMovieRequest = true;
@@ -133,6 +134,7 @@ export default async function RootLayout({
     aiEnableHomepageEntry = config.AIConfig?.EnableHomepageEntry || false;
     aiEnableVideoCardEntry = config.AIConfig?.EnableVideoCardEntry || false;
     aiEnablePlayPageEntry = config.AIConfig?.EnablePlayPageEntry || false;
+    aiEnableComments = config.AIConfig?.EnableAIComments || false;
     aiDefaultMessageNoVideo = config.AIConfig?.DefaultMessageNoVideo || '';
     aiDefaultMessageWithVideo = config.AIConfig?.DefaultMessageWithVideo || '';
     // 求片功能配置
@@ -198,6 +200,9 @@ export default async function RootLayout({
     AI_ENABLE_HOMEPAGE_ENTRY: aiEnableHomepageEntry,
     AI_ENABLE_VIDEOCARD_ENTRY: aiEnableVideoCardEntry,
     AI_ENABLE_PLAYPAGE_ENTRY: aiEnablePlayPageEntry,
+    AIConfig: {
+      EnableAIComments: aiEnableComments,
+    },
     AI_DEFAULT_MESSAGE_NO_VIDEO: aiDefaultMessageNoVideo,
     AI_DEFAULT_MESSAGE_WITH_VIDEO: aiDefaultMessageWithVideo,
     ENABLE_MOVIE_REQUEST: enableMovieRequest,

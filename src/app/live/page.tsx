@@ -53,6 +53,7 @@ interface LiveSource {
   from: 'config' | 'custom';
   channelNumber?: number;
   disabled?: boolean;
+  proxyMode?: 'full' | 'm3u8-only' | 'direct'; // 代理模式
 }
 
 function LivePageClient() {
@@ -295,6 +296,12 @@ function LivePageClient() {
   // 工具函数（Utils）
   // -----------------------------------------------------------------------------
 
+  // 获取 logo URL（始终使用代理）
+  const getLogoUrl = (logoUrl: string, sourceKey: string) => {
+    if (!logoUrl) return '';
+    return `/api/proxy/logo?url=${encodeURIComponent(logoUrl)}&source=${sourceKey}`;
+  };
+
   // 获取直播源列表
   const fetchLiveSources = async () => {
     try {
@@ -435,7 +442,7 @@ function LivePageClient() {
               title: selectedChannel.name,
               source_name: source.name,
               year: '',
-              cover: `/api/proxy/logo?url=${encodeURIComponent(selectedChannel.logo)}&source=${source.key}`,
+              cover: getLogoUrl(selectedChannel.logo, source.key),
               index: 1,
               total_episodes: 1,
               play_time: 0,
@@ -626,7 +633,7 @@ function LivePageClient() {
           title: channel.name,
           source_name: currentSource.name,
           year: '',
-          cover: `/api/proxy/logo?url=${encodeURIComponent(channel.logo)}&source=${currentSource.key}`,
+          cover: getLogoUrl(channel.logo, currentSource.key),
           index: 1,
           total_episodes: 1,
           play_time: 0,
@@ -1203,7 +1210,7 @@ function LivePageClient() {
             title: currentChannelRef.current.name,
             source_name: currentSourceRef.current.name,
             year: '',
-            cover: `/api/proxy/logo?url=${encodeURIComponent(currentChannelRef.current.logo)}&source=${currentSourceRef.current.key}`,
+            cover: getLogoUrl(currentChannelRef.current.logo, currentSourceRef.current.key),
             total_episodes: 1,
             save_time: Date.now(),
             search_title: '',
@@ -1331,32 +1338,54 @@ function LivePageClient() {
         super(config);
         const load = this.load.bind(this);
         this.load = function (context: any, config: any, callbacks: any) {
-          // 所有的请求都带一个 source 参数
-          try {
-            const url = new URL(context.url);
-            url.searchParams.set('moontv-source', currentSourceRef.current?.key || '');
-            context.url = url.toString();
-          } catch (error) {
-            // ignore
-          }
+          // 判断当前直播源的代理模式
+          const currentLiveSource = currentSourceRef.current;
+          const proxyMode = currentLiveSource?.proxyMode || 'full';
+
           // 拦截manifest和level请求
           if (
             (context as any).type === 'manifest' ||
             (context as any).type === 'level'
           ) {
-            // 判断是否浏览器直连
-            const isLiveDirectConnectStr = localStorage.getItem('liveDirectConnect');
-            const isLiveDirectConnect = isLiveDirectConnectStr === 'true';
-            if (isLiveDirectConnect) {
-              // 浏览器直连，使用 URL 对象处理参数
-              try {
-                const url = new URL(context.url);
-                url.searchParams.set('allowCORS', 'true');
-                context.url = url.toString();
-              } catch (error) {
-                // 如果 URL 解析失败，回退到字符串拼接
-                context.url = context.url + '&allowCORS=true';
+            // manifest 请求处理
+            if ((context as any).type === 'manifest') {
+              if (proxyMode === 'full') {
+                // 全量代理：添加 source 参数
+                try {
+                  const url = new URL(context.url);
+                  url.searchParams.set('moontv-source', currentSourceRef.current?.key || '');
+                  context.url = url.toString();
+                } catch (error) {
+                  // ignore
+                }
+              } else if (proxyMode === 'm3u8-only') {
+                // 仅代理m3u8模式：添加 source 参数和 allowCORS 参数
+                try {
+                  const url = new URL(context.url);
+                  url.searchParams.set('moontv-source', currentSourceRef.current?.key || '');
+                  url.searchParams.set('allowCORS', 'true');
+                  context.url = url.toString();
+                } catch (error) {
+                  context.url = context.url + '&allowCORS=true';
+                }
               }
+              // direct 模式：直接使用原始 URL，不添加任何参数
+            }
+
+            // level 请求（ts 分片）处理
+            if ((context as any).type === 'level') {
+              if (proxyMode === 'full') {
+                // 全量代理：添加 source 参数
+                try {
+                  const url = new URL(context.url);
+                  url.searchParams.set('moontv-source', currentSourceRef.current?.key || '');
+                  context.url = url.toString();
+                } catch (error) {
+                  // ignore
+                }
+              }
+              // m3u8-only 模式：ts 分片 URL 已经被代理服务器重写为原始 URL，不需要添加参数
+              // direct 模式：ts 分片直接使用原始 URL，不添加任何参数
             }
           }
           // 执行原始load方法
@@ -1463,26 +1492,34 @@ function LivePageClient() {
 
       // precheck type
       let type = 'm3u8';
-      try {
-        const precheckUrl = `/api/live/precheck?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`;
-        const precheckResponse = await fetch(precheckUrl);
-        if (!precheckResponse.ok) {
-          console.error('预检查失败:', precheckResponse.statusText);
+      const proxyMode = currentSourceRef.current?.proxyMode || 'full';
+
+      // 直连模式：跳过服务器预检查，直接使用 m3u8
+      if (proxyMode === 'direct') {
+        type = 'm3u8';
+      } else {
+        // 全量代理或仅代理m3u8：通过服务器预检查
+        try {
+          const precheckUrl = `/api/live/precheck?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`;
+          const precheckResponse = await fetch(precheckUrl);
+          if (!precheckResponse.ok) {
+            console.error('预检查失败:', precheckResponse.statusText);
+            setIsVideoLoading(false);
+            return;
+          }
+          const precheckResult = await precheckResponse.json();
+          if (precheckResult?.success && precheckResult?.type) {
+            type = precheckResult.type;
+          } else {
+            console.error('预检查返回无效结果:', precheckResult);
+            setIsVideoLoading(false);
+            return;
+          }
+        } catch (err) {
+          console.error('预检查异常:', err);
           setIsVideoLoading(false);
           return;
         }
-        const precheckResult = await precheckResponse.json();
-        if (precheckResult?.success && precheckResult?.type) {
-          type = precheckResult.type;
-        } else {
-          console.error('预检查返回无效结果:', precheckResult);
-          setIsVideoLoading(false);
-          return;
-        }
-      } catch (err) {
-        console.error('预检查异常:', err);
-        setIsVideoLoading(false);
-        return;
       }
 
       // 如果不是 m3u8、flv 或 mp4 类型，设置不支持的类型并返回
@@ -1496,9 +1533,19 @@ function LivePageClient() {
       setUnsupportedType(null);
 
       const customType = { m3u8: m3u8Loader, flv: flvLoader };
-      const targetUrl = (type === 'flv' || type === 'mp4')
-        ? videoUrl
-        : `/api/proxy/m3u8?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`;
+
+      // 根据代理模式决定 URL
+      let targetUrl = videoUrl;
+      if (type === 'm3u8') {
+        if (proxyMode === 'direct') {
+          // 直连模式：直接使用原始 URL
+          targetUrl = videoUrl;
+        } else {
+          // 全量代理或仅代理m3u8：使用代理 URL
+          targetUrl = `/api/proxy/m3u8?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`;
+        }
+      }
+
       try {
         // 创建新的播放器实例
         Artplayer.USE_RAF = true;
@@ -2338,7 +2385,7 @@ function LivePageClient() {
                                 <div className='w-10 h-10 bg-gray-300 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden'>
                                   {channel.logo ? (
                                     <img
-                                      src={`/api/proxy/logo?url=${encodeURIComponent(channel.logo)}&source=${currentSource?.key || ''}`}
+                                      src={getLogoUrl(channel.logo, currentSource?.key || '')}
                                       alt={channel.name}
                                       className='w-full h-full rounded object-contain'
                                       loading="lazy"
@@ -2462,7 +2509,7 @@ function LivePageClient() {
                   <div className='w-20 h-20 bg-gray-300 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden'>
                     {currentChannel.logo ? (
                       <img
-                        src={`/api/proxy/logo?url=${encodeURIComponent(currentChannel.logo)}&source=${currentSource?.key || ''}`}
+                        src={getLogoUrl(currentChannel.logo, currentSource?.key || '')}
                         alt={currentChannel.name}
                         className='w-full h-full rounded object-contain'
                         loading="lazy"

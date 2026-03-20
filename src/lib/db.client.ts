@@ -716,6 +716,42 @@ export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
   }
 }
 
+export function getCachedPlayRecordsSnapshot(): Record<string, PlayRecord> {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  if (STORAGE_TYPE !== 'localstorage') {
+    const cachedRecords = cacheManager.getCachedPlayRecords();
+    if (cachedRecords) {
+      return cachedRecords;
+    }
+
+    try {
+      const username = getAuthInfoFromBrowserCookie()?.username;
+      if (!username) return {};
+
+      const raw = localStorage.getItem(`${CACHE_PREFIX}${username}`);
+      if (!raw) return {};
+
+      const userCache = JSON.parse(raw) as UserCacheStore;
+      return userCache.playRecords?.data || {};
+    } catch (err) {
+      console.error('读取用户播放记录快照失败:', err);
+      return {};
+    }
+  }
+
+  try {
+    const raw = localStorage.getItem(PLAY_RECORDS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, PlayRecord>;
+  } catch (err) {
+    console.error('读取本地播放记录快照失败:', err);
+    return {};
+  }
+}
+
 /**
  * 保存播放记录。
  * 数据库存储模式下使用乐观更新：先更新缓存（立即生效），再异步同步到数据库。
@@ -860,13 +896,15 @@ export async function getSearchHistory(): Promise<string[]> {
       // 返回缓存数据，同时后台异步更新
       fetchFromApi<string[]>(`/api/searchhistory`)
         .then((freshData) => {
+          // 去重处理
+          const uniqueData = Array.from(new Set(freshData));
           // 只有数据真正不同时才更新缓存
-          if (JSON.stringify(cachedData) !== JSON.stringify(freshData)) {
-            cacheManager.cacheSearchHistory(freshData);
+          if (JSON.stringify(cachedData) !== JSON.stringify(uniqueData)) {
+            cacheManager.cacheSearchHistory(uniqueData);
             // 触发数据更新事件
             window.dispatchEvent(
               new CustomEvent('searchHistoryUpdated', {
-                detail: freshData,
+                detail: uniqueData,
               })
             );
           }
@@ -881,8 +919,10 @@ export async function getSearchHistory(): Promise<string[]> {
       // 缓存为空，直接从 API 获取并缓存
       try {
         const freshData = await fetchFromApi<string[]>(`/api/searchhistory`);
-        cacheManager.cacheSearchHistory(freshData);
-        return freshData;
+        // 去重处理
+        const uniqueData = Array.from(new Set(freshData));
+        cacheManager.cacheSearchHistory(uniqueData);
+        return uniqueData;
       } catch (err) {
         console.error('获取搜索历史失败:', err);
         triggerGlobalError('获取搜索历史失败');
@@ -896,8 +936,9 @@ export async function getSearchHistory(): Promise<string[]> {
     const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
     if (!raw) return [];
     const arr = JSON.parse(raw) as string[];
-    // 仅返回字符串数组
-    return Array.isArray(arr) ? arr : [];
+    // 仅返回字符串数组，并去重
+    const validArray = Array.isArray(arr) ? arr : [];
+    return Array.from(new Set(validArray));
   } catch (err) {
     console.error('读取搜索历史失败:', err);
     triggerGlobalError('读取搜索历史失败');

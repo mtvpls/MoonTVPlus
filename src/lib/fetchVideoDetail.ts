@@ -1,7 +1,7 @@
 import { getAvailableApiSites } from '@/lib/config';
 import { SearchResult } from '@/lib/types';
 
-import { getDetailFromApi, searchFromApi } from './downstream';
+import { getDetailFromApiV2 } from './downstream';
 import { getSpecialSourceDetail, isSpecialSource } from './special-sources-detail';
 
 interface FetchVideoDetailOptions {
@@ -13,13 +13,12 @@ interface FetchVideoDetailOptions {
 /**
  * 根据 source 与 id 获取视频详情。
  * 1. 如果是特殊源（emby、openlist、xiaoya），直接调用对应的获取函数。
- * 2. 若传入 fallbackTitle，则先调用 /api/search 搜索精确匹配。
- * 3. 若搜索未命中或未提供 fallbackTitle，则直接调用 /api/detail。
+ * 2. 其他采集源直接调用详情接口，避免依赖搜索接口。
  */
 export async function fetchVideoDetail({
   source,
   id,
-  fallbackTitle = '',
+  fallbackTitle: _fallbackTitle = '',
 }: FetchVideoDetailOptions): Promise<SearchResult> {
   // 检查是否是特殊源（emby、openlist、xiaoya）
   if (isSpecialSource(source)) {
@@ -30,30 +29,13 @@ export async function fetchVideoDetail({
     // 如果特殊源返回 null，继续使用标准流程
   }
 
-  // 优先通过搜索接口查找精确匹配
   const apiSites = await getAvailableApiSites();
   const apiSite = apiSites.find((site) => site.key === source);
   if (!apiSite) {
     throw new Error('无效的API来源');
   }
-  if (fallbackTitle) {
-    try {
-      const searchData = await searchFromApi(apiSite, fallbackTitle.trim());
-      const exactMatch = searchData.find(
-        (item: SearchResult) =>
-          item.source.toString() === source.toString() &&
-          item.id.toString() === id.toString()
-      );
-      if (exactMatch) {
-        return exactMatch;
-      }
-    } catch (error) {
-      // do nothing
-    }
-  }
 
-  // 调用 /api/detail 接口
-  const detail = await getDetailFromApi(apiSite, id);
+  const detail = await getDetailFromApiV2(apiSite, id);
   if (!detail) {
     throw new Error('获取视频详情失败');
   }

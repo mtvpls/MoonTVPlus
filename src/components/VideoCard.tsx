@@ -1077,7 +1077,9 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
 
             return (
               <div
-                className='absolute bottom-2 right-2 opacity-0 transition-all duration-300 ease-in-out delay-75 sm:group-hover:opacity-100'
+                className={`absolute bottom-1 right-1 sm:bottom-2 sm:right-2 transition-all duration-300 ease-in-out delay-75 ${
+                  from === 'search' ? 'opacity-100' : 'opacity-0 sm:group-hover:opacity-100'
+                }`}
                 style={{
                   WebkitUserSelect: 'none',
                   userSelect: 'none',

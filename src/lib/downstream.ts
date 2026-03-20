@@ -293,6 +293,90 @@ export async function getDetailFromApi(
   };
 }
 
+export async function getDetailFromApiV2(
+  apiSite: ApiSite,
+  id: string
+): Promise<SearchResult> {
+  const detailUrl = `${apiSite.api}${API_CONFIG.detail.path}${id}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  const response = await fetch(detailUrl, {
+    headers: API_CONFIG.detail.headers,
+    signal: controller.signal,
+  });
+
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    throw new Error(`详情请求失败: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (
+    !data ||
+    !data.list ||
+    !Array.isArray(data.list) ||
+    data.list.length === 0
+  ) {
+    throw new Error('获取到的详情内容无效');
+  }
+
+  const videoDetail = data.list[0];
+  let episodes: string[] = [];
+  let titles: string[] = [];
+
+  if (videoDetail.vod_play_url) {
+    const vodPlayUrlArray = videoDetail.vod_play_url.split('$$$');
+    vodPlayUrlArray.forEach((url: string) => {
+      const matchEpisodes: string[] = [];
+      const matchTitles: string[] = [];
+      const titleUrlArray = url.split('#');
+      titleUrlArray.forEach((titleUrl: string) => {
+        const episodeTitleUrl = titleUrl.split('$');
+        if (
+          episodeTitleUrl.length === 2 &&
+          episodeTitleUrl[1].endsWith('.m3u8')
+        ) {
+          matchTitles.push(episodeTitleUrl[0]);
+          matchEpisodes.push(episodeTitleUrl[1]);
+        }
+      });
+      if (matchEpisodes.length > episodes.length) {
+        episodes = matchEpisodes;
+        titles = matchTitles;
+      }
+    });
+  }
+
+  if (episodes.length === 0 && videoDetail.vod_content) {
+    const matches = videoDetail.vod_content.match(M3U8_PATTERN) || [];
+    episodes = matches.map((link: string) => link.replace(/^\$/, ''));
+  }
+
+  return {
+    id: id.toString(),
+    title: videoDetail.vod_name,
+    poster: videoDetail.vod_pic,
+    episodes,
+    episodes_titles: titles,
+    source: apiSite.key,
+    source_name: apiSite.name,
+    class: videoDetail.vod_class,
+    year: videoDetail.vod_year
+      ? videoDetail.vod_year.match(/\d{4}/)?.[0] || ''
+      : 'unknown',
+    desc: cleanHtmlTags(videoDetail.vod_content),
+    type_name: videoDetail.type_name,
+    douban_id: videoDetail.vod_douban_id,
+    vod_remarks: videoDetail.vod_remarks,
+    vod_total: videoDetail.vod_total,
+    proxyMode: apiSite.proxyMode || false,
+  };
+}
+
 async function handleSpecialSourceDetail(
   id: string,
   apiSite: ApiSite

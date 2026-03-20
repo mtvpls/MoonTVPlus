@@ -92,22 +92,42 @@ export async function GET(
       requestHeaders['Range'] = rangeHeader;
     }
 
-    // 流式代理视频内容
-    let videoResponse = await fetch(embyStreamUrl, {
-      headers: requestHeaders,
-    });
+    // 创建 AbortController 用于超时控制
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 300000); // 5分钟超时
 
-    // 如果返回 401，尝试重新认证并重试
-    if (videoResponse.status === 401) {
-      console.log('[Emby Play] 收到 401 错误，尝试重新认证');
-      const { embyManager } = await import('@/lib/emby-manager');
-      embyManager.clearCache();
-      client = await getEmbyClient(embyKey);
-      embyStreamUrl = await client.getStreamUrl(itemId, true, true);
-      videoResponse = await fetch(embyStreamUrl, {
+    try {
+      // 流式代理视频内容
+      let videoResponse = await fetch(embyStreamUrl, {
         headers: requestHeaders,
+        signal: abortController.signal,
       });
-    }
+
+      // 如果返回 401，尝试重新认证并重试
+      if (videoResponse.status === 401) {
+        console.log('[Emby Play] 收到 401 错误，尝试重新认证');
+        const { embyManager } = await import('@/lib/emby-manager');
+        embyManager.clearCache();
+        client = await getEmbyClient(embyKey);
+        embyStreamUrl = await client.getStreamUrl(itemId, true, true);
+
+        // 重置超时
+        clearTimeout(timeoutId);
+        const retryAbortController = new AbortController();
+        const retryTimeoutId = setTimeout(() => retryAbortController.abort(), 300000);
+
+        try {
+          videoResponse = await fetch(embyStreamUrl, {
+            headers: requestHeaders,
+            signal: retryAbortController.signal,
+          });
+        } finally {
+          clearTimeout(retryTimeoutId);
+        }
+      }
+
+      // 清除超时定时器
+      clearTimeout(timeoutId);
 
     if (!videoResponse.ok) {
       console.error('[Emby Play] 获取视频流失败:', {
@@ -147,11 +167,64 @@ export async function GET(
     // 使用 URL 中的文件名
     headers.set('Content-Disposition', `inline; filename="${params.filename}"`);
 
-    // 流式返回视频内容，不等待下载完成
-    return new NextResponse(videoResponse.body, {
+    // 创建一个可以被中断的流
+    const { readable, writable } = new TransformStream();
+    const reader = videoResponse.body?.getReader();
+
+    if (!reader) {
+      return NextResponse.json(
+        { error: '无法读取视频流' },
+        { status: 500 }
+      );
+    }
+
+    // 异步管道传输，确保在客户端断开时清理资源
+    (async () => {
+      const writer = writable.getWriter();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await writer.write(value);
+        }
+      } catch (error) {
+        // 客户端断开连接或其他错误
+        console.log('[Emby Play] 流传输中断:', error instanceof Error ? error.message : 'Unknown error');
+        // 取消上游 fetch，停止继续下载
+        try {
+          await reader.cancel();
+        } catch (e) {
+          // 忽略取消错误
+        }
+      } finally {
+        // 确保资源被释放
+        try {
+          reader.releaseLock();
+          await writer.close();
+        } catch (e) {
+          // 忽略关闭错误
+        }
+      }
+    })();
+
+    // 流式返回视频内容
+    return new NextResponse(readable, {
       status: videoResponse.status,
       headers,
     });
+    } catch (error) {
+      // 清除超时定时器
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('[Emby Play] 请求超时');
+        return NextResponse.json(
+          { error: '请求超时' },
+          { status: 504 }
+        );
+      }
+      throw error;
+    }
   } catch (error) {
     console.error('[Emby Play] 错误:', error);
     return NextResponse.json(

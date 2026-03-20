@@ -1,8 +1,10 @@
 /* eslint-disable no-console,@typescript-eslint/no-explicit-any */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-import { getConfig } from "@/lib/config";
+import { getConfig } from '@/lib/config';
+import { validateProxyUrlServerSide } from '@/lib/server/ssrf';
+import { buildProxyStreamHeaders } from '@/lib/server/proxy-headers';
 
 export const runtime = 'nodejs';
 
@@ -19,16 +21,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing source' }, { status: 400 });
   }
 
-  // 检查该视频源是否启用了代理模式
-  const config = await getConfig();
-  const videoSource = config.SourceConfig?.find((s: any) => s.key === source);
+  // 定义直链播放模式常量
+  const DIRECT_PLAY_SOURCE = 'directplay';
 
-  if (!videoSource) {
-    return NextResponse.json({ error: 'Source not found' }, { status: 404 });
-  }
+  // 直链播放模式：跳过源站配置检查，直接代理
+  if (source !== DIRECT_PLAY_SOURCE) {
+    // 检查该视频源是否启用了代理模式
+    const config = await getConfig();
+    const videoSource = config.SourceConfig?.find((s: any) => s.key === source);
 
-  if (!videoSource.proxyMode) {
-    return NextResponse.json({ error: 'Proxy mode not enabled for this source' }, { status: 403 });
+    if (!videoSource) {
+      return NextResponse.json({ error: 'Source not found' }, { status: 404 });
+    }
+
+    if (!videoSource.proxyMode) {
+      return NextResponse.json({ error: 'Proxy mode not enabled for this source' }, { status: 403 });
+    }
   }
 
   let response: Response | null = null;
@@ -36,6 +44,13 @@ export async function GET(request: Request) {
 
   try {
     const decodedUrl = decodeURIComponent(url);
+
+    // 安全校验：防 SSRF 拦截请求内网或非法 URL (强制检查所有代理请求)
+    const isSafeUrl = await validateProxyUrlServerSide(decodedUrl);
+    if (!isSafeUrl) {
+      return NextResponse.json({ error: 'Proxy request to local or invalid network is forbidden' }, { status: 403 });
+    }
+
     response = await fetch(decodedUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -46,19 +61,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch segment' }, { status: 500 });
     }
 
-    const headers = new Headers();
-    headers.set('Content-Type', response.headers.get('Content-Type') || 'video/mp2t');
-    headers.set('Access-Control-Allow-Origin', '*');
-    headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Range, Origin, Accept');
-    headers.set('Accept-Ranges', 'bytes');
-    headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
-    const contentLength = response.headers.get('content-length');
-    if (contentLength) {
-      headers.set('Content-Length', contentLength);
-    }
+    const headers = buildProxyStreamHeaders(
+      response.headers.get('Content-Type') || 'video/mp2t',
+      response.headers.get('content-length')
+    );
 
     // 使用流式传输，避免占用内存
+    let isCancelled = false;
+
     const stream = new ReadableStream({
       start(controller) {
         if (!response?.body) {
@@ -67,7 +77,6 @@ export async function GET(request: Request) {
         }
 
         reader = response.body.getReader();
-        const isCancelled = false;
 
         function pump() {
           if (isCancelled || !reader) {
@@ -109,6 +118,7 @@ export async function GET(request: Request) {
         pump();
       },
       cancel() {
+        isCancelled = true;
         // 当流被取消时，确保释放所有资源
         if (reader) {
           try {

@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: moontvplus
+    runtime: image
+    plan: free
+    image:
+      url: ghcr.io/mtvpls/moontvplus:latest
+    envVars:
+      - key: USERNAME
+        sync: false
+      - key: PASSWORD
+        sync: false
+      - key: NEXT_PUBLIC_SITE_NAME
+        value: MoonTVPlus
+      - key: CRON_PASSWORD
+        value: mtvpls

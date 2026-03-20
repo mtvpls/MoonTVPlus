@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,no-console */
 'use client';
 
-import { AlertCircle, Copy, ExternalLink, Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertCircle, Copy, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
 
 import { PansouLink, PansouSearchResult } from '@/lib/pansou.client';
 
@@ -57,51 +57,52 @@ export default function PansouSearch({
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string>('all'); // 'all' 表示显示全部
 
+  // 提取搜索函数，以便在重试时调用
+  const searchPansou = useCallback(async () => {
+    const currentKeyword = keyword.trim();
+    if (!currentKeyword) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResults(null);
+
+    try {
+      const response = await fetch('/api/pansou/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          keyword: currentKeyword,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '搜索失败');
+      }
+
+      const data: PansouSearchResult = await response.json();
+      setResults(data);
+    } catch (err: any) {
+      const errorMsg = err.message || '搜索失败，请检查配置';
+      setError(errorMsg);
+      onError?.(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, [keyword, onError]);
+
   useEffect(() => {
     // triggerSearch 变化时触发搜索（无论是 true 还是 false）
     if (triggerSearch === undefined) {
       return;
     }
 
-    const currentKeyword = keyword.trim();
-    if (!currentKeyword) {
-      return;
-    }
-
-    const searchPansou = async () => {
-      setLoading(true);
-      setError(null);
-      setResults(null);
-
-      try {
-        const response = await fetch('/api/pansou/search', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            keyword: currentKeyword,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || '搜索失败');
-        }
-
-        const data: PansouSearchResult = await response.json();
-        setResults(data);
-      } catch (err: any) {
-        const errorMsg = err.message || '搜索失败，请检查配置';
-        setError(errorMsg);
-        onError?.(errorMsg);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     searchPansou();
-  }, [triggerSearch, onError]); // 移除 keyword 依赖，只依赖 triggerSearch
+  }, [triggerSearch, searchPansou]); // 依赖 triggerSearch 和 searchPansou
 
   const handleCopy = async (text: string, url: string) => {
     try {
@@ -136,6 +137,13 @@ export default function PansouSearch({
         <div className='text-center'>
           <AlertCircle className='mx-auto h-12 w-12 text-red-500 dark:text-red-400' />
           <p className='mt-4 text-sm text-red-600 dark:text-red-400'>{error}</p>
+          <button
+            onClick={searchPansou}
+            className='mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors'
+          >
+            <RefreshCw className='h-4 w-4' />
+            重试
+          </button>
         </div>
       </div>
     );

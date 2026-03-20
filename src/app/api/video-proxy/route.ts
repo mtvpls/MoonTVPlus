@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validateProxyUrlServerSide } from '@/lib/server/ssrf';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +10,12 @@ export async function GET(request: Request) {
 
   if (!videoUrl) {
     return NextResponse.json({ error: 'Missing video URL' }, { status: 400 });
+  }
+
+  // 安全校验：防 SSRF，只允许合法的公网 URL
+  const isSafeUrl = await validateProxyUrlServerSide(videoUrl);
+  if (!isSafeUrl) {
+    return NextResponse.json({ error: 'Proxy request to local or invalid network is forbidden' }, { status: 403 });
   }
 
   try {
