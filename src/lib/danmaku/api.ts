@@ -148,17 +148,25 @@ export async function getDanmakuById(
     episodeTitle?: string;
     searchKeyword?: string;
     danmakuCount?: number;
-  }
+  },
+  skipCache: boolean = false
 ): Promise<DanmakuComment[]> {
   try {
-    // 1. 如果提供了 title 和 episodeIndex，先尝试从缓存读取
-    if (title && episodeIndex !== undefined) {
+    // 1. 非手动选择时，尝试从缓存读取并验证 episodeId
+    if (!skipCache && title && episodeIndex !== undefined) {
       const cachedData = await getDanmakuFromCache(title, episodeIndex);
       if (cachedData) {
-        console.log(`[弹幕缓存] 使用缓存: title=${title}, episodeIndex=${episodeIndex}, 数量=${cachedData.comments.length}`);
-        return cachedData.comments;
+        // 验证缓存中的 episodeId 是否与请求一致，防止自动匹配错误后缓存污染
+        if (cachedData.metadata?.episodeId === episodeId) {
+          console.log(`[弹幕缓存] 使用缓存: title=${title}, episodeIndex=${episodeIndex}, 数量=${cachedData.comments.length}`);
+          return cachedData.comments;
+        }
+        console.log(`[弹幕缓存] episodeId 不匹配 (缓存=${cachedData.metadata?.episodeId}, 请求=${episodeId})，忽略缓存`);
+      } else {
+        console.log(`[弹幕缓存] 缓存未命中，从 API 获取: title=${title}, episodeIndex=${episodeIndex}`);
       }
-      console.log(`[弹幕缓存] 缓存未命中，从 API 获取: title=${title}, episodeIndex=${episodeIndex}`);
+    } else if (skipCache) {
+      console.log(`[弹幕缓存] 手动选择，跳过缓存: episodeId=${episodeId}`);
     } else {
       console.log(`[弹幕缓存] 未提供 title/episodeIndex，跳过缓存: episodeId=${episodeId}`);
     }

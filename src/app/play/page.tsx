@@ -4044,13 +4044,21 @@ function PlayPageClient() {
 
       // 优先匹配 Emby 格式：S01E01, S02E09 等
       const embyMatch = title.match(/[Ss]\d+[Ee](\d+)/);
-      if (embyMatch) {
-        return parseInt(embyMatch[1], 10);
-      }
+      if (embyMatch) return parseInt(embyMatch[1], 10);
 
-      // 降级到原本的策略：纯数字或"第X集/话"格式
-      const match = title.match(/^(\d+)$|第?\s*(\d+)\s*[集话話]?/);
-      return match ? parseInt(match[1] || match[2], 10) : null;
+      // 中文格式：第X集/话/話
+      const chineseMatch = title.match(/第\s*(\d+)\s*[集话話]/);
+      if (chineseMatch) return parseInt(chineseMatch[1], 10);
+
+      // 纯数字格式：如 "140"（openlist 源使用此格式）
+      const pureNumberMatch = title.match(/^(\d+)$/);
+      if (pureNumberMatch) return parseInt(pureNumberMatch[1], 10);
+
+      // EP 格式：EP01, ep12, Ep1（P 为必需，避免误匹配）
+      const epMatch = title.match(/[Ee][Pp]\s*(\d+)/);
+      if (epMatch) return parseInt(epMatch[1], 10);
+
+      return null;
     };
 
     if (videoEpisodeTitle) {
@@ -4078,7 +4086,7 @@ function PlayPageClient() {
     episodeTitle?: string;
     searchKeyword?: string;
     danmakuCount?: number;
-  }) => {
+  }, skipCache: boolean = false) => {
     if (!danmakuPluginRef.current) {
       console.warn('弹幕插件未初始化');
       return;
@@ -4107,7 +4115,7 @@ function PlayPageClient() {
 
       console.log(`[弹幕加载] episodeId=${episodeId}, title="${title}", episodeIndex=${episodeIndex}`);
 
-      const comments = await getDanmakuById(episodeId, title, episodeIndex, metadata);
+      const comments = await getDanmakuById(episodeId, title, episodeIndex, metadata, skipCache);
 
       if (comments.length === 0) {
         console.warn('未获取到弹幕数据');
@@ -4455,14 +4463,14 @@ function PlayPageClient() {
       }
     }
 
-    // 加载弹幕，传递元信息
+    // 加载弹幕，传递元信息（手动选择时跳过缓存，确保获取正确的弹幕）
     await loadDanmaku(selection.episodeId, {
       animeId: selection.animeId,
       animeTitle: selection.animeTitle,
       episodeTitle: selection.episodeTitle,
       searchKeyword: selection.searchKeyword,
       danmakuCount: selection.danmakuCount,
-    });
+    }, isManual);
   };
 
   // 处理用户选择弹幕源

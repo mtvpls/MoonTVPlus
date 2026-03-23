@@ -257,13 +257,13 @@ export async function getOpenListDetail(
             parsed_from: 'filename',
           };
       }
-      let displayTitle = episodeInfo.title;
-      if (!displayTitle && episodeInfo.episode) {
-        displayTitle = episodeInfo.isOVA
-          ? `OVA ${episodeInfo.episode}`
-          : `第${episodeInfo.episode}集`;
-      }
-      if (!displayTitle) {
+      // 优先使用集数编号，确保弹幕匹配的 extractEpisodeNumber 能正确提取
+      let displayTitle: string | undefined;
+      if (episodeInfo.isOVA && episodeInfo.episode) {
+        displayTitle = `OVA ${episodeInfo.episode}`;
+      } else if (episodeInfo.episode) {
+        displayTitle = String(episodeInfo.episode);
+      } else {
         displayTitle = file.name;
       }
       return {
