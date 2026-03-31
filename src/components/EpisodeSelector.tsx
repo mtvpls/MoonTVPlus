@@ -418,20 +418,47 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
   const categoryContainerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const isDraggingRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragStartScrollLeftRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+  const suppressClickRef = useRef(false);
 
   // 添加鼠标悬停状态管理
   const [isCategoryHovered, setIsCategoryHovered] = useState(false);
 
+  const canScrollCategoryContainer = useCallback((deltaY: number) => {
+    const container = categoryContainerRef.current;
+    if (!container) return false;
+
+    const maxScrollLeft = container.scrollWidth - container.clientWidth;
+    if (maxScrollLeft <= 0) return false;
+
+    if (deltaY < 0) {
+      return container.scrollLeft > 0;
+    }
+
+    if (deltaY > 0) {
+      return container.scrollLeft < maxScrollLeft;
+    }
+
+    return false;
+  }, []);
+
   // 阻止页面竖向滚动
   const preventPageScroll = useCallback((e: WheelEvent) => {
-    if (isCategoryHovered) {
+    if (isCategoryHovered && canScrollCategoryContainer(e.deltaY)) {
       e.preventDefault();
     }
-  }, [isCategoryHovered]);
+  }, [isCategoryHovered, canScrollCategoryContainer]);
 
   // 处理滚轮事件，实现横向滚动
   const handleWheel = useCallback((e: WheelEvent) => {
-    if (isCategoryHovered && categoryContainerRef.current) {
+    if (
+      isCategoryHovered &&
+      categoryContainerRef.current &&
+      canScrollCategoryContainer(e.deltaY)
+    ) {
       e.preventDefault(); // 阻止默认的竖向滚动
 
       const container = categoryContainerRef.current;
@@ -443,7 +470,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         behavior: 'smooth'
       });
     }
-  }, [isCategoryHovered]);
+  }, [isCategoryHovered, canScrollCategoryContainer]);
 
   // 添加全局wheel事件监听器
   useEffect(() => {
@@ -462,6 +489,51 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       document.removeEventListener('wheel', handleWheel);
     };
   }, [isCategoryHovered, preventPageScroll, handleWheel]);
+
+  const handleCategoryMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!categoryContainerRef.current) return;
+
+    isDraggingRef.current = true;
+    hasDraggedRef.current = false;
+    suppressClickRef.current = false;
+    dragStartXRef.current = e.pageX - categoryContainerRef.current.offsetLeft;
+    dragStartScrollLeftRef.current = categoryContainerRef.current.scrollLeft;
+    categoryContainerRef.current.style.cursor = 'grabbing';
+  }, []);
+
+  const handleCategoryMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDraggingRef.current || !categoryContainerRef.current) return;
+
+    const x = e.pageX - categoryContainerRef.current.offsetLeft;
+    const distance = x - dragStartXRef.current;
+
+    if (Math.abs(distance) > 5) {
+      hasDraggedRef.current = true;
+      e.preventDefault();
+    }
+
+    categoryContainerRef.current.scrollLeft =
+      dragStartScrollLeftRef.current - distance * 1.5;
+  }, []);
+
+  const handleCategoryMouseUp = useCallback(() => {
+    suppressClickRef.current = hasDraggedRef.current;
+    isDraggingRef.current = false;
+
+    if (categoryContainerRef.current) {
+      categoryContainerRef.current.style.cursor = 'grab';
+    }
+  }, []);
+
+  const handleCategoryMouseLeave = useCallback(() => {
+    setIsCategoryHovered(false);
+    suppressClickRef.current = hasDraggedRef.current;
+    isDraggingRef.current = false;
+
+    if (categoryContainerRef.current) {
+      categoryContainerRef.current.style.cursor = 'grab';
+    }
+  }, []);
 
   // 当分页切换时，将激活的分页标签滚动到视口中间
   useEffect(() => {
@@ -495,7 +567,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   };
 
   const handleCategoryClick = useCallback(
-    (index: number) => {
+    (index: number, e?: React.MouseEvent<HTMLButtonElement>) => {
+      if (suppressClickRef.current) {
+        e?.preventDefault();
+        suppressClickRef.current = false;
+        return;
+      }
+
       if (descending) {
         // 在倒序时，需要将显示索引转换为实际索引
         setCurrentPage(pageCount - 1 - index);
@@ -649,8 +727,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             <div
               className='flex-1 overflow-x-auto'
               ref={categoryContainerRef}
+              onMouseDown={handleCategoryMouseDown}
+              onMouseMove={handleCategoryMouseMove}
+              onMouseUp={handleCategoryMouseUp}
               onMouseEnter={() => setIsCategoryHovered(true)}
-              onMouseLeave={() => setIsCategoryHovered(false)}
+              onMouseLeave={handleCategoryMouseLeave}
             >
               <div className='flex gap-2 min-w-max'>
                 {categories.map((label, idx) => {
@@ -661,7 +742,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                       ref={(el) => {
                         buttonRefs.current[idx] = el;
                       }}
-                      onClick={() => handleCategoryClick(idx)}
+                      onClick={(e) => handleCategoryClick(idx, e)}
                       className={`w-20 relative py-2 text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 text-center 
                         ${isActive
                           ? 'text-green-500 dark:text-green-400'
