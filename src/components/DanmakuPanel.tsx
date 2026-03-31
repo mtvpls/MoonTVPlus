@@ -26,6 +26,11 @@ export default function DanmakuPanel({
   currentSelection,
   onUploadDanmaku,
 }: DanmakuPanelProps) {
+  const TOOLTIP_VERTICAL_THRESHOLD = 56;
+  const HORIZONTAL_SCROLL_SPEED = 2;
+  const DRAG_SCROLL_MULTIPLIER = 1.5;
+  const DRAG_THRESHOLD = 5;
+
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchResults, setSearchResults] = useState<DanmakuAnime[]>([]);
   const [selectedAnime, setSelectedAnime] = useState<DanmakuAnime | null>(null);
@@ -266,8 +271,10 @@ export default function DanmakuPanel({
       if (container) {
         const containerRect = container.getBoundingClientRect();
 
-        // 垂直位置：始终显示在下方
-        const vertical: 'top' | 'bottom' = 'bottom';
+        // 垂直位置：默认显示在下方，空间不足时切换到上方
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const vertical: 'top' | 'bottom' =
+          spaceBelow < TOOLTIP_VERTICAL_THRESHOLD ? 'top' : 'bottom';
 
         // 水平位置：判断左右边缘
         const leftDistance = rect.left - containerRect.left;
@@ -340,7 +347,7 @@ export default function DanmakuPanel({
         e.preventDefault(); // 阻止默认的竖向滚动
 
         const container = categoryContainerRef.current;
-        const scrollAmount = e.deltaY * 2; // 调整滚动速度
+        const scrollAmount = e.deltaY * HORIZONTAL_SCROLL_SPEED; // 调整滚动速度
 
         // 根据滚轮方向进行横向滚动
         container.scrollBy({
@@ -389,13 +396,13 @@ export default function DanmakuPanel({
     const x = e.pageX - categoryContainerRef.current.offsetLeft;
     const distance = x - dragStartXRef.current;
 
-    if (Math.abs(distance) > 5) {
+    if (Math.abs(distance) > DRAG_THRESHOLD) {
       hasDraggedRef.current = true;
       e.preventDefault();
     }
 
     categoryContainerRef.current.scrollLeft =
-      dragStartScrollLeftRef.current - distance * 1.5;
+      dragStartScrollLeftRef.current - distance * DRAG_SCROLL_MULTIPLIER;
   }, []);
 
   // 鼠标拖动结束
@@ -441,7 +448,7 @@ export default function DanmakuPanel({
       horizontal: 'left' | 'center' | 'right';
     }) => {
       const baseStyle =
-        'absolute px-3 py-1 bg-gray-800 dark:bg-gray-900 text-white text-xs rounded-md shadow-lg whitespace-nowrap pointer-events-none z-[100] max-w-[300px] transition-all duration-200 ease-out delay-100';
+        'absolute w-max max-w-[300px] px-3 py-1 bg-gray-800 dark:bg-gray-900 text-white text-xs rounded-md shadow-lg whitespace-normal break-words pointer-events-none z-[100] transition-all duration-200 ease-out delay-100';
 
       let positionStyle = '';
 
