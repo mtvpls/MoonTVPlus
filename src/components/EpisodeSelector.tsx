@@ -88,6 +88,10 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   onFilterConfigUpdate,
   onShowToast,
 }) => {
+  const HORIZONTAL_SCROLL_SPEED = 2;
+  const DRAG_SCROLL_MULTIPLIER = 1.5;
+  const DRAG_THRESHOLD = 5;
+
   const router = useRouter();
   const pageCount = Math.ceil(totalEpisodes / episodesPerPage);
 
@@ -462,7 +466,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       e.preventDefault(); // 阻止默认的竖向滚动
 
       const container = categoryContainerRef.current;
-      const scrollAmount = e.deltaY * 2; // 调整滚动速度
+      const scrollAmount = e.deltaY * HORIZONTAL_SCROLL_SPEED; // 调整滚动速度
 
       // 根据滚轮方向进行横向滚动
       container.scrollBy({
@@ -507,13 +511,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     const x = e.pageX - categoryContainerRef.current.offsetLeft;
     const distance = x - dragStartXRef.current;
 
-    if (Math.abs(distance) > 5) {
+    if (Math.abs(distance) > DRAG_THRESHOLD) {
       hasDraggedRef.current = true;
       e.preventDefault();
     }
 
     categoryContainerRef.current.scrollLeft =
-      dragStartScrollLeftRef.current - distance * 1.5;
+      dragStartScrollLeftRef.current - distance * DRAG_SCROLL_MULTIPLIER;
   }, []);
 
   const handleCategoryMouseUp = useCallback(() => {
@@ -727,6 +731,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             <div
               className='flex-1 overflow-x-auto'
               ref={categoryContainerRef}
+              style={{
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+                WebkitOverflowScrolling: 'touch',
+              }}
               onMouseDown={handleCategoryMouseDown}
               onMouseMove={handleCategoryMouseMove}
               onMouseUp={handleCategoryMouseUp}
