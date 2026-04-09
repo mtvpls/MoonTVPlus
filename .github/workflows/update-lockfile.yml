@@ -1,0 +1,34 @@
+name: Update pnpm-lock.yaml
+
+on:
+  push:
+    branches:
+      - main  # 监控 main 分支的提交
+
+jobs:
+  install_dependencies:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'  # 使用的 Node.js 版本
+
+      - name: Install pnpm
+        run: npm install -g pnpm  # 安装 pnpm
+
+      - name: Install dependencies and update pnpm-lock.yaml
+        run: |
+          pnpm install  # 安装依赖并更新 pnpm-lock.yaml
+
+      - name: Commit and push updated pnpm-lock.yaml
+        run: |
+          git add pnpm-lock.yaml
+          git commit -m "Update pnpm-lock.yaml"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 自动提交的 GitHub token
