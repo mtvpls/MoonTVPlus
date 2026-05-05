@@ -53,7 +53,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/mtvpls/moontvplus-lite
+          images: ghcr.io/littlepp-xkn/moontvplus-lite
           tags: |
             type=raw,value=${{ github.event.inputs.tag || 'latest' }}
 
@@ -65,8 +65,8 @@ jobs:
           file: ./Dockerfile.lite
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          tags: ghcr.io/mtvpls/moontvplus-lite:${{ github.event.inputs.tag || 'latest' }}
-          outputs: type=image,name=ghcr.io/mtvpls/moontvplus-lite,name-canonical=true,push=true
+          tags: ghcr.io/littlepp-xkn/moontvplus-lite:${{ github.event.inputs.tag || 'latest' }}
+          outputs: type=image,name=ghcr.io/littlepp-xkn/moontvplus-lite,name-canonical=true,push=true
 
       - name: Export digest
         run: |
@@ -107,8 +107,8 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create -t ghcr.io/mtvpls/moontvplus-lite:${{ github.event.inputs.tag || 'latest' }} \
-            $(printf 'ghcr.io/mtvpls/moontvplus-lite@sha256:%s ' *)
+          docker buildx imagetools create -t ghcr.io/littlepp-xkn/moontvplus-lite:${{ github.event.inputs.tag || 'latest' }} \
+            $(printf 'ghcr.io/littlepp-xkn/moontvplus-lite@sha256:%s ' *)
 
   cleanup-refresh:
     runs-on: ubuntu-latest
