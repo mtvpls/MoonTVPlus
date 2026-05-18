@@ -5,6 +5,28 @@ import { db } from '@/lib/db';
 
 const defaultUA = 'AptvPlayer/1.4.10';
 
+export const DEFAULT_LIVE_REFRESH_INTERVAL_HOURS = 12;
+
+let lastGlobalLiveRefreshTime = 0;
+
+export function getLiveRefreshIntervalHours(refreshIntervalHours?: number): number {
+  const normalizedInterval = Number(refreshIntervalHours);
+
+  if (!Number.isFinite(normalizedInterval) || normalizedInterval <= 0) {
+    return DEFAULT_LIVE_REFRESH_INTERVAL_HOURS;
+  }
+
+  return Math.floor(normalizedInterval);
+}
+
+export function getLastGlobalLiveRefreshTime(): number {
+  return lastGlobalLiveRefreshTime;
+}
+
+export function setLastGlobalLiveRefreshTime(timestamp: number): void {
+  lastGlobalLiveRefreshTime = timestamp;
+}
+
 export interface LiveChannels {
   channelNumber: number;
   channels: {

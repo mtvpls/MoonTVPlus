@@ -2,18 +2,16 @@
 
 import { useEffect } from 'react';
 
-import { initDanmakuModule } from '@/lib/danmaku/api';
+import { initStartupCacheCleanup } from '@/lib/startup/cacheCleanup';
 
 /**
- * 弹幕缓存清理组件
- * 在应用启动时执行一次过期缓存清理
+ * 启动缓存清理组件
+ * 在应用启动时异步执行一次缓存清理
  */
-export function DanmakuCacheCleanup() {
+export function StartupCacheCleanup() {
   useEffect(() => {
-    // 只在客户端执行一次
-    initDanmakuModule();
+    initStartupCacheCleanup();
   }, []);
 
-  // 这个组件不渲染任何内容
   return null;
 }

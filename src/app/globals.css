@@ -245,3 +245,28 @@ div[data-media-provider] video {
     transform: scale(1.08);
   }
 }
+
+@keyframes reader-book-flip {
+  0%, 100% {
+    transform: perspective(120px) rotateY(0deg) translateY(0);
+  }
+  30% {
+    transform: perspective(120px) rotateY(-24deg) translateY(-2px);
+  }
+  60% {
+    transform: perspective(120px) rotateY(24deg) translateY(0);
+  }
+}
+
+.reader-book-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0284c7;
+  animation: reader-book-flip 1.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.dark .reader-book-loader {
+  color: #38bdf8;
+}

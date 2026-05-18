@@ -14,6 +14,17 @@ export interface DuanjuSource {
   key: string;
   name: string;
   api: string;
+  typeId?: string;
+  typeName?: string;
+}
+
+export function isDuanjuTypeName(typeName: string): boolean {
+  const normalizedTypeName = typeName.toLowerCase();
+  return (
+    normalizedTypeName.includes('短剧') ||
+    normalizedTypeName.includes('短视频') ||
+    normalizedTypeName.includes('微短剧')
+  );
 }
 
 /**
@@ -26,7 +37,16 @@ export async function getDuanjuSources(): Promise<DuanjuSource[]> {
 
     if (cachedData !== null) {
       // 有缓存，直接返回（getGlobalValue 已经处理了序列化问题）
-      return cachedData ? JSON.parse(cachedData) : [];
+      const cachedSources: DuanjuSource[] = cachedData ? JSON.parse(cachedData) : [];
+      // 旧版本缓存只保存采集源，不包含短剧分类 ID。缺少 typeId 时自动重建缓存。
+      if (
+        cachedSources.length === 0 ||
+        cachedSources.every((source) => source.typeId)
+      ) {
+        return cachedSources;
+      }
+
+      console.log('短剧视频源缓存缺少分类信息，重新筛选...');
     }
 
     // 没有缓存，开始筛选
@@ -56,20 +76,17 @@ export async function getDuanjuSources(): Promise<DuanjuSource[]> {
 
         // 检查是否有短剧分类
         if (data.class && Array.isArray(data.class)) {
-          const hasDuanju = data.class.some((item) => {
-            const typeName = item.type_name?.toLowerCase() || '';
-            return (
-              typeName.includes('短剧') ||
-              typeName.includes('短视频') ||
-              typeName.includes('微短剧')
-            );
-          });
+          const duanjuType = data.class.find((item) =>
+            isDuanjuTypeName(item.type_name || '')
+          );
 
-          if (hasDuanju) {
+          if (duanjuType) {
             return {
               key: source.key,
               name: source.name,
               api: source.api,
+              typeId: duanjuType.type_id.toString(),
+              typeName: duanjuType.type_name,
             };
           }
         }

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
+import { requireFeaturePermission } from '@/lib/permissions';
 import { OpenListClient } from '@/lib/openlist.client';
 
 export const runtime = 'nodejs';
@@ -65,6 +66,8 @@ async function getFinalUrl(url: string, maxRedirects = 5): Promise<string> {
  */
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'private_library', '无权限访问私人影库');
+    if (authResult instanceof NextResponse) return authResult;
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
       return NextResponse.json({ error: '未授权' }, { status: 401 });
@@ -168,11 +171,18 @@ export async function GET(request: NextRequest) {
         throw new Error('未找到已完成的播放链接');
       }
 
-      // 如果指定了 format=json，返回 JSON 格式
+      // 如果指定了 format=json，尝试解析到最终直链后再返回 JSON
       if (format === 'json') {
+        const resolvedQualities = await Promise.all(
+          qualities.map(async (quality: any) => ({
+            ...quality,
+            url: await getFinalUrl(quality.url),
+          }))
+        );
+
         return NextResponse.json({
-          url: qualities[0].url,
-          qualities
+          url: resolvedQualities[0].url,
+          qualities: resolvedQualities,
         });
       }
 

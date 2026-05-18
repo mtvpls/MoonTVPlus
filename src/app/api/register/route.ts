@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { username, password, turnstileToken } = await req.json();
+    const { username, password, inviteCode, turnstileToken } = await req.json();
 
     // 验证输入
     if (!username || typeof username !== 'string') {
@@ -68,6 +68,9 @@ export async function POST(req: NextRequest) {
     }
     if (!password || typeof password !== 'string') {
       return NextResponse.json({ error: '密码不能为空' }, { status: 400 });
+    }
+    if (inviteCode !== undefined && typeof inviteCode !== 'string') {
+      return NextResponse.json({ error: '邀请码格式错误' }, { status: 400 });
     }
 
     // 验证用户名格式（只允许字母、数字、下划线，长度3-20）
@@ -92,6 +95,23 @@ export async function POST(req: NextRequest) {
         { error: '该用户名不可用' },
         { status: 409 }
       );
+    }
+
+    if (siteConfig.RequireRegistrationInviteCode) {
+      const expectedInviteCode = (siteConfig.RegistrationInviteCode || '').trim();
+      if (!expectedInviteCode) {
+        return NextResponse.json(
+          { error: '服务器未配置邀请码' },
+          { status: 500 }
+        );
+      }
+
+      if (!inviteCode || inviteCode.trim() !== expectedInviteCode) {
+        return NextResponse.json(
+          { error: '邀请码错误' },
+          { status: 400 }
+        );
+      }
     }
 
     // 获取用户名锁，防止并发注册

@@ -80,6 +80,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '备份文件格式无效' }, { status: 400 });
     }
 
+    const importUsernames = Object.keys(importData.data.userData || {});
+    const backupHasMangaData = importUsernames.some((name) => Object.prototype.hasOwnProperty.call(importData.data.userData?.[name] || {}, 'mangaData'));
+    const backupHasBookData = importUsernames.some((name) => Object.prototype.hasOwnProperty.call(importData.data.userData?.[name] || {}, 'bookData'));
+    const preserveMangaData = !backupHasMangaData;
+    const preserveBookData = !backupHasBookData;
+
+    const preservedMangaData = preserveMangaData
+      ? Object.fromEntries(await Promise.all(importUsernames.map(async (name) => ([
+          name,
+          {
+            mangaShelf: await db.getAllMangaShelf(name),
+            mangaReadRecords: await db.getAllMangaReadRecords(name),
+          },
+        ]))))
+      : {};
+
+    const preservedBookData = preserveBookData
+      ? Object.fromEntries(await Promise.all(importUsernames.map(async (name) => ([
+          name,
+          {
+            bookShelf: await db.getAllBookShelf(name),
+            bookReadRecords: await db.getAllBookReadRecords(name),
+          },
+        ]))))
+      : {};
+
     // 开始导入数据 - 先清空现有数据
     updateProgress(username, 'import', 'clearing', 0, 1, '正在清空现有数据...');
     await db.clearAllData();
@@ -295,30 +321,43 @@ export async function POST(req: NextRequest) {
               }
             })(),
 
-            // 导入音乐播放记录（批量）
+            // 导入音乐 V2 播放记录（批量）
             (async () => {
-              if (user.musicPlayRecords) {
-                const entries = Object.entries(user.musicPlayRecords);
-                for (let j = 0; j < entries.length; j += DATA_BATCH_SIZE) {
-                  const batch = entries.slice(j, j + DATA_BATCH_SIZE);
-                  await Promise.all(
-                    batch.map(([key, record]) => {
-                      const [platform, id] = key.split('+');
-                      if (platform && id) {
-                        return db.saveMusicPlayRecord(username, platform, id, record as any);
-                      }
-                      return Promise.resolve();
-                    })
+              const historyRecords = Array.isArray(user.musicV2History)
+                ? user.musicV2History
+                : [];
+
+              if (historyRecords.length > 0) {
+                for (let j = 0; j < historyRecords.length; j += DATA_BATCH_SIZE) {
+                  const batch = historyRecords.slice(j, j + DATA_BATCH_SIZE);
+                  await db.batchUpsertMusicV2History(
+                    username,
+                    batch.map((record: any) => ({
+                      ...record,
+                      source: record.source,
+                      songId: record.songId,
+                      name: record.name,
+                      artist: record.artist,
+                      playProgressSec: record.playProgressSec || 0,
+                      lastPlayedAt: record.lastPlayedAt || Date.now(),
+                      playCount: record.playCount || 1,
+                      createdAt: record.createdAt || Date.now(),
+                      updatedAt: record.updatedAt || Date.now(),
+                    }))
                   );
                 }
               }
             })(),
 
-            // 导入音乐歌单
+            // 导入音乐 V2 歌单
             (async () => {
-              if (user.musicPlaylists && Array.isArray(user.musicPlaylists)) {
-                for (const playlist of user.musicPlaylists) {
-                  await db.createMusicPlaylist(username, {
+              const playlists = Array.isArray(user.musicV2Playlists)
+                ? user.musicV2Playlists
+                : [];
+
+              if (playlists.length > 0) {
+                for (const playlist of playlists) {
+                  await db.createMusicV2Playlist(username, {
                     id: playlist.id,
                     name: playlist.name,
                     description: playlist.description,
@@ -330,21 +369,73 @@ export async function POST(req: NextRequest) {
                     for (let j = 0; j < playlist.songs.length; j += DATA_BATCH_SIZE) {
                       const batch = playlist.songs.slice(j, j + DATA_BATCH_SIZE);
                       await Promise.all(
-                        batch.map((song: any) =>
-                          db.addSongToPlaylist(playlist.id, {
-                            platform: song.platform,
-                            id: song.id,
+                        batch.map((song: any, index: number) =>
+                          db.addMusicV2PlaylistItem(playlist.id, {
+                            playlistId: playlist.id,
+                            songId: song.songId || song.id,
+                            source: song.source || song.platform,
+                            songmid: song.songmid,
                             name: song.name,
                             artist: song.artist,
                             album: song.album,
-                            pic: song.pic,
-                            duration: song.duration || 0,
+                            cover: song.cover || song.pic,
+                            durationSec: song.durationSec || song.duration || 0,
+                            durationText: song.durationText,
+                            hash: song.hash,
+                            copyrightId: song.copyrightId,
+                            albumId: song.albumId,
+                            lrcUrl: song.lrcUrl,
+                            mrcUrl: song.mrcUrl,
+                            trcUrl: song.trcUrl,
+                            sortOrder: song.sortOrder ?? (j + index),
+                            addedAt: song.addedAt || Date.now(),
+                            updatedAt: song.updatedAt || Date.now(),
                           })
                         )
                       );
                     }
                   }
                 }
+              }
+            })(),
+
+            // 导入漫画书架 / 阅读记录
+            (async () => {
+              if (!backupHasMangaData) return;
+              const mangaShelfEntries = Object.entries((user.mangaData?.shelf || preservedMangaData[username]?.mangaShelf || {}));
+              for (let j = 0; j < mangaShelfEntries.length; j += DATA_BATCH_SIZE) {
+                const batch = mangaShelfEntries.slice(j, j + DATA_BATCH_SIZE);
+                await Promise.all(
+                  batch.map(([, item]: [string, any]) => db.saveMangaShelf(username, item.sourceId, item.mangaId, item))
+                );
+              }
+
+              const mangaReadEntries = Object.entries((user.mangaData?.readRecords || preservedMangaData[username]?.mangaReadRecords || {}));
+              for (let j = 0; j < mangaReadEntries.length; j += DATA_BATCH_SIZE) {
+                const batch = mangaReadEntries.slice(j, j + DATA_BATCH_SIZE);
+                await Promise.all(
+                  batch.map(([, record]: [string, any]) => db.saveMangaReadRecord(username, record.sourceId, record.mangaId, record))
+                );
+              }
+            })(),
+
+            // 导入电子书书架 / 阅读记录
+            (async () => {
+              if (!backupHasBookData) return;
+              const bookShelfEntries = Object.entries((user.bookData?.shelf || preservedBookData[username]?.bookShelf || {}));
+              for (let j = 0; j < bookShelfEntries.length; j += DATA_BATCH_SIZE) {
+                const batch = bookShelfEntries.slice(j, j + DATA_BATCH_SIZE);
+                await Promise.all(
+                  batch.map(([, item]: [string, any]) => db.saveBookShelf(username, item.sourceId, item.bookId, item))
+                );
+              }
+
+              const bookReadEntries = Object.entries((user.bookData?.readRecords || preservedBookData[username]?.bookReadRecords || {}));
+              for (let j = 0; j < bookReadEntries.length; j += DATA_BATCH_SIZE) {
+                const batch = bookReadEntries.slice(j, j + DATA_BATCH_SIZE);
+                await Promise.all(
+                  batch.map(([, record]: [string, any]) => db.saveBookReadRecord(username, record.sourceId, record.bookId, record))
+                );
               }
             })()
           ]);
@@ -379,6 +470,8 @@ export async function POST(req: NextRequest) {
       message: '数据导入成功',
       importedUsers: Object.keys(userData).length,
       importedUsersV2: importData.data.usersV2?.length || 0,
+      importedMangaData: backupHasMangaData,
+      importedBookData: backupHasBookData,
       timestamp: importData.timestamp,
       serverVersion: typeof importData.serverVersion === 'string' ? importData.serverVersion : '未知版本'
     });

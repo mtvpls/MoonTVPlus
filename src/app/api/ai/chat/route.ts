@@ -8,7 +8,7 @@ import {
 } from '@/lib/ai-orchestrator';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
-import { db } from '@/lib/db';
+import { hasFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
@@ -212,6 +212,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    if (!(await hasFeaturePermission(authInfo.username, 'ai_ask'))) {
+      return NextResponse.json({ error: '无权限使用 AI 问片功能' }, { status: 403 });
+    }
+
     // 2. 获取AI配置
     const adminConfig = await getConfig();
     const aiConfig = adminConfig.AIConfig;
@@ -223,23 +227,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. 权限检查：如果不允许普通用户使用，检查用户角色
-    if (!aiConfig.AllowRegularUsers) {
-      const username = authInfo.username;
-      // 站长始终有权限
-      if (username !== process.env.USERNAME) {
-        // 检查是否为管理员
-        const userInfo = await db.getUserInfoV2(username);
-        if (!userInfo || (userInfo.role !== 'admin' && userInfo.role !== 'owner') || userInfo.banned) {
-          return NextResponse.json(
-            { error: '该功能仅限站长和管理员使用' },
-            { status: 403 }
-          );
-        }
-      }
-    }
-
-    // 4. 解析请求参数
+    // 3. 解析请求参数
     const body = (await request.json()) as ChatRequest;
     const { message, context, history = [] } = body;
 

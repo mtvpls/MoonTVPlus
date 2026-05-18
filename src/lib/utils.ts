@@ -3,8 +3,7 @@ import bs58 from 'bs58';
 import he from 'he';
 import Hls from 'hls.js';
 
-function getDoubanImageProxyConfig(): {
-  proxyType:
+export type DoubanImageProxyType =
   | 'direct'
   | 'server'
   | 'img3'
@@ -12,13 +11,72 @@ function getDoubanImageProxyConfig(): {
   | 'cmliussss-cdn-ali'
   | 'baidu'
   | 'custom';
+
+function normalizeDoubanImageProxyConfig(
+  proxyType: DoubanImageProxyType,
+  proxyUrl: string
+): {
+  proxyType: DoubanImageProxyType;
   proxyUrl: string;
+} {
+  const normalizedProxyUrl = proxyUrl.trim();
+
+  if (proxyType === 'custom' && !normalizedProxyUrl) {
+    return {
+      proxyType: 'server',
+      proxyUrl: '',
+    };
+  }
+
+  return {
+    proxyType,
+    proxyUrl: normalizedProxyUrl,
+  };
+}
+
+function buildDoubanImageUrl(
+  originalUrl: string,
+  proxyType: DoubanImageProxyType,
+  proxyUrl: string
+): string {
+  switch (proxyType) {
+    case 'server':
+      return `/api/image-proxy?url=${encodeURIComponent(originalUrl)}`;
+    case 'img3':
+      return originalUrl.replace(/img\d+\.doubanio\.com/g, 'img3.doubanio.com');
+    case 'cmliussss-cdn-tencent':
+      return originalUrl.replace(
+        /img\d+\.doubanio\.com/g,
+        'img.doubanio.cmliussss.net'
+      );
+    case 'cmliussss-cdn-ali':
+      return originalUrl.replace(
+        /img\d+\.doubanio\.com/g,
+        'img.doubanio.cmliussss.com'
+      );
+    case 'baidu':
+      return `https://image.baidu.com/search/down?url=${encodeURIComponent(originalUrl)}`;
+    case 'custom':
+      return proxyUrl ? `${proxyUrl}${encodeURIComponent(originalUrl)}` : originalUrl;
+    case 'direct':
+    default:
+      return originalUrl;
+  }
+}
+
+function getDoubanImageProxyConfig(): {
+  proxyType: DoubanImageProxyType;
+  proxyUrl: string;
+  backupProxyType: DoubanImageProxyType;
+  backupProxyUrl: string;
 } {
   // 确保在浏览器环境中执行
   if (typeof window === 'undefined') {
     return {
       proxyType: 'cmliussss-cdn-tencent',
       proxyUrl: '',
+      backupProxyType: 'server',
+      backupProxyUrl: '',
     };
   }
 
@@ -30,10 +88,68 @@ function getDoubanImageProxyConfig(): {
     localStorage.getItem('doubanImageProxyUrl') ||
     (window as any).RUNTIME_CONFIG?.DOUBAN_IMAGE_PROXY ||
     '';
+  const doubanImageProxyBackupType =
+    (localStorage.getItem('doubanImageProxyTypeBackup') as DoubanImageProxyType | null) ||
+    'server';
+  const doubanImageProxyBackupUrl =
+    localStorage.getItem('doubanImageProxyUrlBackup') || '';
+  const primaryConfig = normalizeDoubanImageProxyConfig(
+    doubanImageProxyType,
+    doubanImageProxy
+  );
+  const backupConfig = normalizeDoubanImageProxyConfig(
+    doubanImageProxyBackupType,
+    doubanImageProxyBackupUrl
+  );
   return {
-    proxyType: doubanImageProxyType,
-    proxyUrl: doubanImageProxy,
+    proxyType: primaryConfig.proxyType,
+    proxyUrl: primaryConfig.proxyUrl,
+    backupProxyType: backupConfig.proxyType,
+    backupProxyUrl: backupConfig.proxyUrl,
   };
+}
+
+export function getDoubanImageFallbackUrl(originalUrl: string): string | null {
+  if (!originalUrl || !originalUrl.includes('doubanio.com')) {
+    return null;
+  }
+
+  const { proxyType, proxyUrl, backupProxyType, backupProxyUrl } =
+    getDoubanImageProxyConfig();
+  const primaryUrl = buildDoubanImageUrl(originalUrl, proxyType, proxyUrl);
+  const backupUrl = buildDoubanImageUrl(
+    originalUrl,
+    backupProxyType,
+    backupProxyUrl
+  );
+
+  if (backupUrl === primaryUrl) {
+    return null;
+  }
+
+  return backupUrl;
+}
+
+export function tryApplyDoubanImageFallback(
+  target: HTMLImageElement,
+  originalUrl: string
+): boolean {
+  if (!originalUrl || !originalUrl.includes('doubanio.com')) {
+    return false;
+  }
+
+  if (target.dataset.doubanBackupTried === 'true') {
+    return false;
+  }
+
+  const fallbackUrl = getDoubanImageFallbackUrl(originalUrl);
+  if (!fallbackUrl || fallbackUrl === target.currentSrc || fallbackUrl === target.src) {
+    return false;
+  }
+
+  target.dataset.doubanBackupTried = 'true';
+  target.src = fallbackUrl;
+  return true;
 }
 
 /**
@@ -65,29 +181,7 @@ export function processImageUrl(originalUrl: string): string {
   }
 
   const { proxyType, proxyUrl } = getDoubanImageProxyConfig();
-  switch (proxyType) {
-    case 'server':
-      return `/api/image-proxy?url=${encodeURIComponent(originalUrl)}`;
-    case 'img3':
-      return originalUrl.replace(/img\d+\.doubanio\.com/g, 'img3.doubanio.com');
-    case 'cmliussss-cdn-tencent':
-      return originalUrl.replace(
-        /img\d+\.doubanio\.com/g,
-        'img.doubanio.cmliussss.net'
-      );
-    case 'cmliussss-cdn-ali':
-      return originalUrl.replace(
-        /img\d+\.doubanio\.com/g,
-        'img.doubanio.cmliussss.com'
-      );
-    case 'baidu':
-      return `https://image.baidu.com/search/down?url=${encodeURIComponent(originalUrl)}`;
-    case 'custom':
-      return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
-    case 'direct':
-    default:
-      return originalUrl;
-  }
+  return buildDoubanImageUrl(originalUrl, proxyType, proxyUrl);
 }
 
 /**
@@ -406,4 +500,3 @@ export function base58Decode(encoded: string): string {
   // 在 Node.js 环境中使用 Buffer
   return Buffer.from(bytes).toString('utf-8');
 }
-

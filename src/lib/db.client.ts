@@ -15,6 +15,8 @@
  */
 
 import { getAuthInfoFromBrowserCookie, clearAuthCookie } from './auth';
+import { normalizeEpisodeFilterConfig } from './episode-filter';
+import { MangaReadRecord, MangaShelfItem } from './manga.types';
 import { DanmakuFilterConfig, EpisodeFilterConfig,SkipConfig } from './types';
 
 // 全局错误触发函数
@@ -81,6 +83,8 @@ interface CacheData<T> {
 interface UserCacheStore {
   playRecords?: CacheData<Record<string, PlayRecord>>;
   favorites?: CacheData<Record<string, Favorite>>;
+  mangaShelf?: CacheData<Record<string, MangaShelfItem>>;
+  mangaReadRecords?: CacheData<Record<string, MangaReadRecord>>;
   searchHistory?: CacheData<string[]>;
   skipConfigs?: CacheData<Record<string, SkipConfig>>;
   danmakuFilterConfig?: CacheData<DanmakuFilterConfig>;
@@ -90,6 +94,10 @@ interface UserCacheStore {
 // ---- 常量 ----
 const PLAY_RECORDS_KEY = 'moontv_play_records';
 const FAVORITES_KEY = 'moontv_favorites';
+const MANGA_SHELF_KEY = 'moontv_manga_shelf';
+const MANGA_HISTORY_KEY = 'moontv_manga_history';
+const DEFAULT_MAX_MANGA_HISTORY_RECORDS = 100;
+const DEFAULT_MAX_MANGA_HISTORY_THRESHOLD = DEFAULT_MAX_MANGA_HISTORY_RECORDS + 10;
 const SEARCH_HISTORY_KEY = 'moontv_search_history';
 const MUSIC_PLAY_RECORDS_KEY = 'moontv_music_play_records';
 
@@ -236,6 +244,14 @@ class HybridCacheManager {
     if (cache.favorites && now - cache.favorites.timestamp > maxAge) {
       delete cache.favorites;
     }
+
+    if (cache.mangaShelf && now - cache.mangaShelf.timestamp > maxAge) {
+      delete cache.mangaShelf;
+    }
+
+    if (cache.mangaReadRecords && now - cache.mangaReadRecords.timestamp > maxAge) {
+      delete cache.mangaReadRecords;
+    }
   }
 
   /**
@@ -327,6 +343,52 @@ class HybridCacheManager {
 
     const userCache = this.getUserCache(username);
     userCache.favorites = this.createCacheData(data);
+    this.saveUserCache(username, userCache);
+  }
+
+  getCachedMangaShelf(): Record<string, MangaShelfItem> | null {
+    const username = this.getCurrentUsername();
+    if (!username) return null;
+
+    const userCache = this.getUserCache(username);
+    const cached = userCache.mangaShelf;
+
+    if (cached && this.isCacheValid(cached)) {
+      return cached.data;
+    }
+
+    return null;
+  }
+
+  cacheMangaShelf(data: Record<string, MangaShelfItem>): void {
+    const username = this.getCurrentUsername();
+    if (!username) return;
+
+    const userCache = this.getUserCache(username);
+    userCache.mangaShelf = this.createCacheData(data);
+    this.saveUserCache(username, userCache);
+  }
+
+  getCachedMangaReadRecords(): Record<string, MangaReadRecord> | null {
+    const username = this.getCurrentUsername();
+    if (!username) return null;
+
+    const userCache = this.getUserCache(username);
+    const cached = userCache.mangaReadRecords;
+
+    if (cached && this.isCacheValid(cached)) {
+      return cached.data;
+    }
+
+    return null;
+  }
+
+  cacheMangaReadRecords(data: Record<string, MangaReadRecord>): void {
+    const username = this.getCurrentUsername();
+    if (!username) return;
+
+    const userCache = this.getUserCache(username);
+    userCache.mangaReadRecords = this.createCacheData(data);
     this.saveUserCache(username, userCache);
   }
 
@@ -503,7 +565,7 @@ const cacheManager = HybridCacheManager.getInstance();
  * 立即从数据库刷新对应类型的缓存以保持数据一致性
  */
 async function handleDatabaseOperationFailure(
-  dataType: 'playRecords' | 'favorites' | 'searchHistory',
+  dataType: 'playRecords' | 'favorites' | 'searchHistory' | 'mangaShelf' | 'mangaHistory',
   error: any
 ): Promise<void> {
   console.error(`数据库操作失败 (${dataType}):`, error);
@@ -535,6 +597,16 @@ async function handleDatabaseOperationFailure(
           cacheManager.cacheSearchHistory(freshData);
           eventName = 'searchHistoryUpdated';
           break;
+        case 'mangaShelf':
+          freshData = await fetchFromApi<Record<string, MangaShelfItem>>(`/api/manga/shelf`);
+          cacheManager.cacheMangaShelf(freshData);
+          eventName = 'mangaShelfUpdated';
+          break;
+        case 'mangaHistory':
+          freshData = await fetchFromApi<Record<string, MangaReadRecord>>(`/api/manga/history`);
+          cacheManager.cacheMangaReadRecords(freshData);
+          eventName = 'mangaHistoryUpdated';
+          break;
       }
 
       // 触发更新事件通知组件
@@ -559,7 +631,7 @@ if (typeof window !== 'undefined') {
 /**
  * 通用的 fetch 函数，处理 401 状态码自动跳转登录
  */
-async function fetchWithAuth(
+export async function fetchWithAuth(
   url: string,
   options?: RequestInit
 ): Promise<Response> {
@@ -752,6 +824,42 @@ export function getCachedPlayRecordsSnapshot(): Record<string, PlayRecord> {
   }
 }
 
+export function getCachedMangaReadRecordsSnapshot(): Record<string, MangaReadRecord> {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  if (STORAGE_TYPE !== 'localstorage') {
+    const cachedRecords = cacheManager.getCachedMangaReadRecords();
+    if (cachedRecords) {
+      return cachedRecords;
+    }
+
+    try {
+      const username = getAuthInfoFromBrowserCookie()?.username;
+      if (!username) return {};
+
+      const raw = localStorage.getItem(`${CACHE_PREFIX}${username}`);
+      if (!raw) return {};
+
+      const userCache = JSON.parse(raw) as UserCacheStore;
+      return userCache.mangaReadRecords?.data || {};
+    } catch (err) {
+      console.error('读取用户漫画历史快照失败:', err);
+      return {};
+    }
+  }
+
+  try {
+    const raw = localStorage.getItem(MANGA_HISTORY_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, MangaReadRecord>;
+  } catch (err) {
+    console.error('读取本地漫画历史快照失败:', err);
+    return {};
+  }
+}
+
 /**
  * 保存播放记录。
  * 数据库存储模式下使用乐观更新：先更新缓存（立即生效），再异步同步到数据库。
@@ -787,9 +895,21 @@ export async function savePlayRecord(
         body: JSON.stringify({ key, record }),
       });
     } catch (err) {
-      await handleDatabaseOperationFailure('playRecords', err);
-      triggerGlobalError('保存播放记录失败');
-      throw err;
+      // 播放记录以用户体验为优先：保留已经写入的本地缓存，避免切集后记忆进度被回滚。
+      console.warn('同步播放记录到数据库失败，保留本地缓存:', err);
+
+      // 后台再尝试补一次，不打断当前播放流程。
+      window.setTimeout(() => {
+        fetchWithAuth('/api/playrecords', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ key, record }),
+        }).catch((retryErr) => {
+          console.warn('播放记录后台重试失败:', retryErr);
+        });
+      }, 3000);
     }
     return;
   }
@@ -871,6 +991,88 @@ export async function deletePlayRecord(
   } catch (err) {
     console.error('删除播放记录失败:', err);
     triggerGlobalError('删除播放记录失败');
+    throw err;
+  }
+}
+
+/**
+ * 迁移播放记录到新的 source/id。
+ * 用于换源时保留单一记忆点语义：当前进度迁移到新源后，再清理旧源记录。
+ */
+export async function migratePlayRecord(
+  fromSource: string,
+  fromId: string,
+  toSource: string,
+  toId: string,
+  record: PlayRecord
+): Promise<void> {
+  const fromKey = generateStorageKey(fromSource, fromId);
+  const toKey = generateStorageKey(toSource, toId);
+
+  if (fromKey === toKey) {
+    await savePlayRecord(toSource, toId, record);
+    return;
+  }
+
+  if (STORAGE_TYPE !== 'localstorage') {
+    const cachedRecords = {
+      ...(cacheManager.getCachedPlayRecords() || {}),
+    };
+
+    delete cachedRecords[fromKey];
+    cachedRecords[toKey] = record;
+    cacheManager.cachePlayRecords(cachedRecords);
+
+    window.dispatchEvent(
+      new CustomEvent('playRecordsUpdated', {
+        detail: cachedRecords,
+      })
+    );
+
+    const persistMove = async () => {
+      await fetchWithAuth('/api/playrecords', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ key: toKey, record }),
+      });
+
+      await fetchWithAuth(`/api/playrecords?key=${encodeURIComponent(fromKey)}`, {
+        method: 'DELETE',
+      });
+    };
+
+    persistMove().catch((err) => {
+      console.warn('迁移播放记录到数据库失败，稍后重试:', err);
+
+      window.setTimeout(() => {
+        persistMove().catch((retryErr) => {
+          console.warn('迁移播放记录后台重试失败:', retryErr);
+        });
+      }, 3000);
+    });
+    return;
+  }
+
+  if (typeof window === 'undefined') {
+    console.warn('无法在服务端迁移播放记录到 localStorage');
+    return;
+  }
+
+  try {
+    const allRecords = await getAllPlayRecords();
+    delete allRecords[fromKey];
+    allRecords[toKey] = record;
+    localStorage.setItem(PLAY_RECORDS_KEY, JSON.stringify(allRecords));
+    window.dispatchEvent(
+      new CustomEvent('playRecordsUpdated', {
+        detail: allRecords,
+      })
+    );
+  } catch (err) {
+    console.error('迁移播放记录失败:', err);
+    triggerGlobalError('迁移播放记录失败');
     throw err;
   }
 }
@@ -1425,6 +1627,242 @@ export async function clearAllFavorites(): Promise<void> {
   );
 }
 
+
+// ---------------- 漫画书架 / 历史 API ----------------
+
+export async function getAllMangaShelf(): Promise<Record<string, MangaShelfItem>> {
+  if (typeof window === 'undefined') return {};
+
+  if (STORAGE_TYPE !== 'localstorage') {
+    const cachedData = cacheManager.getCachedMangaShelf();
+    if (cachedData) {
+      fetchFromApi<Record<string, MangaShelfItem>>('/api/manga/shelf')
+        .then((freshData) => {
+          if (JSON.stringify(cachedData) !== JSON.stringify(freshData)) {
+            cacheManager.cacheMangaShelf(freshData);
+            window.dispatchEvent(new CustomEvent('mangaShelfUpdated', { detail: freshData }));
+          }
+        })
+        .catch((err) => {
+          console.warn('后台同步漫画书架失败:', err);
+        });
+      return cachedData;
+    }
+
+    try {
+      const freshData = await fetchFromApi<Record<string, MangaShelfItem>>('/api/manga/shelf');
+      cacheManager.cacheMangaShelf(freshData);
+      return freshData;
+    } catch (err) {
+      console.error('获取漫画书架失败:', err);
+      triggerGlobalError('获取漫画书架失败');
+      return {};
+    }
+  }
+
+  try {
+    const raw = localStorage.getItem(MANGA_SHELF_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, MangaShelfItem>;
+  } catch (err) {
+    console.error('读取漫画书架失败:', err);
+    triggerGlobalError('读取漫画书架失败');
+    return {};
+  }
+}
+
+export async function saveMangaShelf(sourceId: string, mangaId: string, item: MangaShelfItem): Promise<void> {
+  const key = generateStorageKey(sourceId, mangaId);
+
+  if (STORAGE_TYPE !== 'localstorage') {
+    const cached = cacheManager.getCachedMangaShelf() || {};
+    cached[key] = item;
+    cacheManager.cacheMangaShelf(cached);
+    window.dispatchEvent(new CustomEvent('mangaShelfUpdated', { detail: cached }));
+
+    try {
+      await fetchWithAuth('/api/manga/shelf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, item }),
+      });
+    } catch (err) {
+      await handleDatabaseOperationFailure('mangaShelf', err);
+      throw err;
+    }
+    return;
+  }
+
+  const allItems = await getAllMangaShelf();
+  allItems[key] = item;
+  localStorage.setItem(MANGA_SHELF_KEY, JSON.stringify(allItems));
+  window.dispatchEvent(new CustomEvent('mangaShelfUpdated', { detail: allItems }));
+}
+
+export async function deleteMangaShelf(sourceId: string, mangaId: string): Promise<void> {
+  const key = generateStorageKey(sourceId, mangaId);
+
+  if (STORAGE_TYPE !== 'localstorage') {
+    const cached = cacheManager.getCachedMangaShelf() || {};
+    delete cached[key];
+    cacheManager.cacheMangaShelf(cached);
+    window.dispatchEvent(new CustomEvent('mangaShelfUpdated', { detail: cached }));
+
+    try {
+      await fetchWithAuth(`/api/manga/shelf?key=${encodeURIComponent(key)}`, { method: 'DELETE' });
+    } catch (err) {
+      await handleDatabaseOperationFailure('mangaShelf', err);
+      throw err;
+    }
+    return;
+  }
+
+  const allItems = await getAllMangaShelf();
+  delete allItems[key];
+  localStorage.setItem(MANGA_SHELF_KEY, JSON.stringify(allItems));
+  window.dispatchEvent(new CustomEvent('mangaShelfUpdated', { detail: allItems }));
+}
+
+export async function clearAllMangaShelf(): Promise<void> {
+  if (STORAGE_TYPE !== 'localstorage') {
+    cacheManager.cacheMangaShelf({});
+    window.dispatchEvent(new CustomEvent('mangaShelfUpdated', { detail: {} }));
+    try {
+      await fetchWithAuth('/api/manga/shelf', { method: 'DELETE' });
+    } catch (err) {
+      await handleDatabaseOperationFailure('mangaShelf', err);
+      throw err;
+    }
+    return;
+  }
+
+  localStorage.removeItem(MANGA_SHELF_KEY);
+  window.dispatchEvent(new CustomEvent('mangaShelfUpdated', { detail: {} }));
+}
+
+function trimMangaReadRecords(records: Record<string, MangaReadRecord>): Record<string, MangaReadRecord> {
+  const entries = Object.entries(records);
+  if (entries.length <= DEFAULT_MAX_MANGA_HISTORY_THRESHOLD) return records;
+
+  return Object.fromEntries(
+    entries
+      .sort(([, a], [, b]) => b.saveTime - a.saveTime)
+      .slice(0, DEFAULT_MAX_MANGA_HISTORY_RECORDS)
+  );
+}
+
+export async function getAllMangaReadRecords(): Promise<Record<string, MangaReadRecord>> {
+  if (typeof window === 'undefined') return {};
+
+  if (STORAGE_TYPE !== 'localstorage') {
+    const cachedData = cacheManager.getCachedMangaReadRecords();
+    if (cachedData) {
+      fetchFromApi<Record<string, MangaReadRecord>>('/api/manga/history')
+        .then((freshData) => {
+          if (JSON.stringify(cachedData) !== JSON.stringify(freshData)) {
+            cacheManager.cacheMangaReadRecords(freshData);
+            window.dispatchEvent(new CustomEvent('mangaHistoryUpdated', { detail: freshData }));
+          }
+        })
+        .catch((err) => {
+          console.warn('后台同步漫画历史失败:', err);
+        });
+      return cachedData;
+    }
+
+    try {
+      const freshData = await fetchFromApi<Record<string, MangaReadRecord>>('/api/manga/history');
+      cacheManager.cacheMangaReadRecords(freshData);
+      return freshData;
+    } catch (err) {
+      console.error('获取漫画历史失败:', err);
+      triggerGlobalError('获取漫画历史失败');
+      return {};
+    }
+  }
+
+  try {
+    const raw = localStorage.getItem(MANGA_HISTORY_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, MangaReadRecord>;
+  } catch (err) {
+    console.error('读取漫画历史失败:', err);
+    triggerGlobalError('读取漫画历史失败');
+    return {};
+  }
+}
+
+export async function saveMangaReadRecord(sourceId: string, mangaId: string, record: MangaReadRecord): Promise<void> {
+  const key = generateStorageKey(sourceId, mangaId);
+
+  if (STORAGE_TYPE !== 'localstorage') {
+    const cached = cacheManager.getCachedMangaReadRecords() || {};
+    cached[key] = record;
+    const trimmedRecords = trimMangaReadRecords(cached);
+    cacheManager.cacheMangaReadRecords(trimmedRecords);
+    window.dispatchEvent(new CustomEvent('mangaHistoryUpdated', { detail: trimmedRecords }));
+
+    try {
+      await fetchWithAuth('/api/manga/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, record }),
+      });
+    } catch (err) {
+      await handleDatabaseOperationFailure('mangaHistory', err);
+      throw err;
+    }
+    return;
+  }
+
+  const allRecords = await getAllMangaReadRecords();
+  allRecords[key] = record;
+  const trimmedRecords = trimMangaReadRecords(allRecords);
+  localStorage.setItem(MANGA_HISTORY_KEY, JSON.stringify(trimmedRecords));
+  window.dispatchEvent(new CustomEvent('mangaHistoryUpdated', { detail: trimmedRecords }));
+}
+
+export async function deleteMangaReadRecord(sourceId: string, mangaId: string): Promise<void> {
+  const key = generateStorageKey(sourceId, mangaId);
+
+  if (STORAGE_TYPE !== 'localstorage') {
+    const cached = cacheManager.getCachedMangaReadRecords() || {};
+    delete cached[key];
+    cacheManager.cacheMangaReadRecords(cached);
+    window.dispatchEvent(new CustomEvent('mangaHistoryUpdated', { detail: cached }));
+
+    try {
+      await fetchWithAuth(`/api/manga/history?key=${encodeURIComponent(key)}`, { method: 'DELETE' });
+    } catch (err) {
+      await handleDatabaseOperationFailure('mangaHistory', err);
+      throw err;
+    }
+    return;
+  }
+
+  const allRecords = await getAllMangaReadRecords();
+  delete allRecords[key];
+  localStorage.setItem(MANGA_HISTORY_KEY, JSON.stringify(allRecords));
+  window.dispatchEvent(new CustomEvent('mangaHistoryUpdated', { detail: allRecords }));
+}
+
+export async function clearAllMangaReadRecords(): Promise<void> {
+  if (STORAGE_TYPE !== 'localstorage') {
+    cacheManager.cacheMangaReadRecords({});
+    window.dispatchEvent(new CustomEvent('mangaHistoryUpdated', { detail: {} }));
+    try {
+      await fetchWithAuth('/api/manga/history', { method: 'DELETE' });
+    } catch (err) {
+      await handleDatabaseOperationFailure('mangaHistory', err);
+      throw err;
+    }
+    return;
+  }
+
+  localStorage.removeItem(MANGA_HISTORY_KEY);
+  window.dispatchEvent(new CustomEvent('mangaHistoryUpdated', { detail: {} }));
+}
+
 // ---------------- 混合缓存辅助函数 ----------------
 
 /**
@@ -1448,10 +1886,12 @@ export async function refreshAllCache(): Promise<void> {
     // 使用 Promise 缓存防止并发重复刷新
     await cacheManager.getOrCreateRequest('refresh-all-cache', async () => {
       // 并行刷新所有数据
-      const [playRecords, favorites, searchHistory, skipConfigs] =
+      const [playRecords, favorites, mangaShelf, mangaHistory, searchHistory, skipConfigs] =
         await Promise.allSettled([
           fetchFromApi<Record<string, PlayRecord>>(`/api/playrecords`),
           fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
+          fetchFromApi<Record<string, MangaShelfItem>>(`/api/manga/shelf`),
+          fetchFromApi<Record<string, MangaReadRecord>>(`/api/manga/history`),
           fetchFromApi<string[]>(`/api/searchhistory`),
           fetchFromApi<Record<string, SkipConfig>>(`/api/skipconfigs`),
         ]);
@@ -1470,6 +1910,24 @@ export async function refreshAllCache(): Promise<void> {
         window.dispatchEvent(
           new CustomEvent('favoritesUpdated', {
             detail: favorites.value,
+          })
+        );
+      }
+
+      if (mangaShelf.status === 'fulfilled') {
+        cacheManager.cacheMangaShelf(mangaShelf.value);
+        window.dispatchEvent(
+          new CustomEvent('mangaShelfUpdated', {
+            detail: mangaShelf.value,
+          })
+        );
+      }
+
+      if (mangaHistory.status === 'fulfilled') {
+        cacheManager.cacheMangaReadRecords(mangaHistory.value);
+        window.dispatchEvent(
+          new CustomEvent('mangaHistoryUpdated', {
+            detail: mangaHistory.value,
           })
         );
       }
@@ -1507,6 +1965,8 @@ export function getCacheStatus(): {
   hasFavorites: boolean;
   hasSearchHistory: boolean;
   hasSkipConfigs: boolean;
+  hasMangaShelf: boolean;
+  hasMangaHistory: boolean;
   username: string | null;
 } {
   if (STORAGE_TYPE === 'localstorage') {
@@ -1515,6 +1975,8 @@ export function getCacheStatus(): {
       hasFavorites: false,
       hasSearchHistory: false,
       hasSkipConfigs: false,
+      hasMangaShelf: false,
+      hasMangaHistory: false,
       username: null,
     };
   }
@@ -1525,6 +1987,8 @@ export function getCacheStatus(): {
     hasFavorites: !!cacheManager.getCachedFavorites(),
     hasSearchHistory: !!cacheManager.getCachedSearchHistory(),
     hasSkipConfigs: !!cacheManager.getCachedSkipConfigs(),
+    hasMangaShelf: !!cacheManager.getCachedMangaShelf(),
+    hasMangaHistory: !!cacheManager.getCachedMangaReadRecords(),
     username: authInfo?.username || null,
   };
 }
@@ -1535,7 +1999,10 @@ export type CacheUpdateEvent =
   | 'playRecordsUpdated'
   | 'favoritesUpdated'
   | 'searchHistoryUpdated'
-  | 'skipConfigsUpdated';
+  | 'skipConfigsUpdated'
+  | 'mangaShelfUpdated'
+  | 'mangaHistoryUpdated'
+  | 'bookHistoryUpdated';
 
 /**
  * 用于 React 组件监听数据更新的事件监听器
@@ -2214,7 +2681,7 @@ export async function getEpisodeFilterConfig(): Promise<EpisodeFilterConfig | nu
   try {
     const raw = localStorage.getItem('moontv_episode_filter_config');
     if (!raw) return null;
-    return JSON.parse(raw) as EpisodeFilterConfig;
+    return normalizeEpisodeFilterConfig(JSON.parse(raw) as EpisodeFilterConfig);
   } catch (err) {
     console.error('读取集数过滤配置失败:', err);
     return null;
@@ -2233,10 +2700,11 @@ export async function saveEpisodeFilterConfig(
   }
 
   try {
-    localStorage.setItem('moontv_episode_filter_config', JSON.stringify(config));
+    const normalizedConfig = normalizeEpisodeFilterConfig(config);
+    localStorage.setItem('moontv_episode_filter_config', JSON.stringify(normalizedConfig));
     window.dispatchEvent(
       new CustomEvent('episodeFilterConfigUpdated', {
-        detail: config,
+        detail: normalizedConfig,
       })
     );
   } catch (err) {
@@ -2244,5 +2712,3 @@ export async function saveEpisodeFilterConfig(
     throw err;
   }
 }
-
-

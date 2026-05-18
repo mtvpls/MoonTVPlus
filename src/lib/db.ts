@@ -3,6 +3,9 @@
 import { AdminConfig } from './admin.types';
 import { MusicPlayRecord } from './db.client';
 import { KvrocksStorage } from './kvrocks.db';
+import { MangaReadRecord, MangaShelfItem } from './manga.types';
+import { BookReadRecord, BookShelfItem } from './book.types';
+import { MusicV2HistoryRecord, MusicV2PlaylistItem, MusicV2PlaylistRecord } from './music-v2';
 import { RedisStorage } from './redis.db';
 import { DanmakuFilterConfig,Favorite, IStorage, PlayRecord, SkipConfig } from './types';
 import { UpstashRedisStorage } from './upstash.db';
@@ -110,12 +113,15 @@ function getD1Adapter(): any {
   const Database = require('better-sqlite3');
   const path = require('path');
 
-  const dbPath = path.join(process.cwd(), '.data', 'moontv.db');
+  const dbPath =
+    process.env.SQLITE_DB_PATH || path.join(process.cwd(), '.data', 'moontv.db');
 
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL'); // 启用 WAL 模式提升性能
+  db.pragma('foreign_keys = ON'); // 与 D1 保持一致，启用外键约束
+  db.pragma('busy_timeout = 5000'); // 避免启动阶段或并发写入时立即锁失败
 
-  console.log('Using SQLite database (development mode)');
+  console.log('Using SQLite database (non-Cloudflare mode)');
   console.log('Database location:', dbPath);
 
   return new SQLiteAdapter(db);
@@ -262,6 +268,105 @@ export class DbManager {
 
   async clearAllMusicPlayRecords(userName: string): Promise<void> {
     await this.storage.clearAllMusicPlayRecords(userName);
+  }
+
+  // Music V2 历史记录相关
+  async listMusicV2History(userName: string): Promise<MusicV2HistoryRecord[]> {
+    if (typeof (this.storage as any).listMusicV2History === 'function') {
+      // 按播放队列顺序返回（createdAt ASC），
+      // 当前播放项由调用方基于 lastPlayedAt 决定。
+      return (this.storage as any).listMusicV2History(userName);
+    }
+    return [];
+  }
+
+  async upsertMusicV2History(userName: string, record: MusicV2HistoryRecord): Promise<void> {
+    if (typeof (this.storage as any).upsertMusicV2History === 'function') {
+      await (this.storage as any).upsertMusicV2History(userName, record);
+    }
+  }
+
+  async batchUpsertMusicV2History(userName: string, records: MusicV2HistoryRecord[]): Promise<void> {
+    if (typeof (this.storage as any).batchUpsertMusicV2History === 'function') {
+      await (this.storage as any).batchUpsertMusicV2History(userName, records);
+    }
+  }
+
+  async deleteMusicV2History(userName: string, songId: string): Promise<void> {
+    if (typeof (this.storage as any).deleteMusicV2History === 'function') {
+      await (this.storage as any).deleteMusicV2History(userName, songId);
+    }
+  }
+
+  async clearMusicV2History(userName: string): Promise<void> {
+    if (typeof (this.storage as any).clearMusicV2History === 'function') {
+      await (this.storage as any).clearMusicV2History(userName);
+    }
+  }
+
+  // Music V2 歌单相关
+  async createMusicV2Playlist(
+    userName: string,
+    playlist: { id: string; name: string; description?: string; cover?: string; }
+  ): Promise<void> {
+    if (typeof (this.storage as any).createMusicV2Playlist === 'function') {
+      await (this.storage as any).createMusicV2Playlist(userName, playlist);
+    }
+  }
+
+  async getMusicV2Playlist(playlistId: string): Promise<MusicV2PlaylistRecord | null> {
+    if (typeof (this.storage as any).getMusicV2Playlist === 'function') {
+      return (this.storage as any).getMusicV2Playlist(playlistId);
+    }
+    return null;
+  }
+
+  async listMusicV2Playlists(userName: string): Promise<MusicV2PlaylistRecord[]> {
+    if (typeof (this.storage as any).listMusicV2Playlists === 'function') {
+      return (this.storage as any).listMusicV2Playlists(userName);
+    }
+    return [];
+  }
+
+  async updateMusicV2Playlist(
+    playlistId: string,
+    updates: { name?: string; description?: string; cover?: string; song_count?: number; }
+  ): Promise<void> {
+    if (typeof (this.storage as any).updateMusicV2Playlist === 'function') {
+      await (this.storage as any).updateMusicV2Playlist(playlistId, updates);
+    }
+  }
+
+  async deleteMusicV2Playlist(playlistId: string): Promise<void> {
+    if (typeof (this.storage as any).deleteMusicV2Playlist === 'function') {
+      await (this.storage as any).deleteMusicV2Playlist(playlistId);
+    }
+  }
+
+  async addMusicV2PlaylistItem(playlistId: string, item: MusicV2PlaylistItem): Promise<void> {
+    if (typeof (this.storage as any).addMusicV2PlaylistItem === 'function') {
+      await (this.storage as any).addMusicV2PlaylistItem(playlistId, item);
+    }
+  }
+
+  async removeMusicV2PlaylistItem(playlistId: string, songId: string): Promise<void> {
+    if (typeof (this.storage as any).removeMusicV2PlaylistItem === 'function') {
+      await (this.storage as any).removeMusicV2PlaylistItem(playlistId, songId);
+    }
+  }
+
+  async listMusicV2PlaylistItems(playlistId: string): Promise<MusicV2PlaylistItem[]> {
+    if (typeof (this.storage as any).listMusicV2PlaylistItems === 'function') {
+      return (this.storage as any).listMusicV2PlaylistItems(playlistId);
+    }
+    return [];
+  }
+
+  async hasMusicV2PlaylistItem(playlistId: string, songId: string): Promise<boolean> {
+    if (typeof (this.storage as any).hasMusicV2PlaylistItem === 'function') {
+      return (this.storage as any).hasMusicV2PlaylistItem(playlistId, songId);
+    }
+    return false;
   }
 
   // 音乐歌单相关方法
@@ -623,6 +728,74 @@ export class DbManager {
 
   async deleteSearchHistory(userName: string, keyword?: string): Promise<void> {
     await this.storage.deleteSearchHistory(userName, keyword);
+  }
+
+  // ---------- 漫画书架 ----------
+  async getMangaShelf(userName: string, sourceId: string, mangaId: string): Promise<MangaShelfItem | null> {
+    return this.storage.getMangaShelf(userName, generateStorageKey(sourceId, mangaId));
+  }
+
+  async saveMangaShelf(userName: string, sourceId: string, mangaId: string, item: MangaShelfItem): Promise<void> {
+    await this.storage.setMangaShelf(userName, generateStorageKey(sourceId, mangaId), item);
+  }
+
+  async getAllMangaShelf(userName: string): Promise<{ [key: string]: MangaShelfItem }> {
+    return this.storage.getAllMangaShelf(userName);
+  }
+
+  async deleteMangaShelf(userName: string, sourceId: string, mangaId: string): Promise<void> {
+    await this.storage.deleteMangaShelf(userName, generateStorageKey(sourceId, mangaId));
+  }
+
+  // ---------- 漫画阅读历史 ----------
+  async getMangaReadRecord(userName: string, sourceId: string, mangaId: string): Promise<MangaReadRecord | null> {
+    return this.storage.getMangaReadRecord(userName, generateStorageKey(sourceId, mangaId));
+  }
+
+  async saveMangaReadRecord(userName: string, sourceId: string, mangaId: string, record: MangaReadRecord): Promise<void> {
+    await this.storage.setMangaReadRecord(userName, generateStorageKey(sourceId, mangaId), record);
+  }
+
+  async getAllMangaReadRecords(userName: string): Promise<{ [key: string]: MangaReadRecord }> {
+    return this.storage.getAllMangaReadRecords(userName);
+  }
+
+  async deleteMangaReadRecord(userName: string, sourceId: string, mangaId: string): Promise<void> {
+    await this.storage.deleteMangaReadRecord(userName, generateStorageKey(sourceId, mangaId));
+  }
+
+  // ---------- 电子书书架 ----------
+  async getBookShelf(userName: string, sourceId: string, bookId: string): Promise<BookShelfItem | null> {
+    return this.storage.getBookShelf(userName, generateStorageKey(sourceId, bookId));
+  }
+
+  async saveBookShelf(userName: string, sourceId: string, bookId: string, item: BookShelfItem): Promise<void> {
+    await this.storage.setBookShelf(userName, generateStorageKey(sourceId, bookId), item);
+  }
+
+  async getAllBookShelf(userName: string): Promise<{ [key: string]: BookShelfItem }> {
+    return this.storage.getAllBookShelf(userName);
+  }
+
+  async deleteBookShelf(userName: string, sourceId: string, bookId: string): Promise<void> {
+    await this.storage.deleteBookShelf(userName, generateStorageKey(sourceId, bookId));
+  }
+
+  // ---------- 电子书阅读历史 ----------
+  async getBookReadRecord(userName: string, sourceId: string, bookId: string): Promise<BookReadRecord | null> {
+    return this.storage.getBookReadRecord(userName, generateStorageKey(sourceId, bookId));
+  }
+
+  async saveBookReadRecord(userName: string, sourceId: string, bookId: string, record: BookReadRecord): Promise<void> {
+    await this.storage.setBookReadRecord(userName, generateStorageKey(sourceId, bookId), record);
+  }
+
+  async getAllBookReadRecords(userName: string): Promise<{ [key: string]: BookReadRecord }> {
+    return this.storage.getAllBookReadRecords(userName);
+  }
+
+  async deleteBookReadRecord(userName: string, sourceId: string, bookId: string): Promise<void> {
+    await this.storage.deleteBookReadRecord(userName, generateStorageKey(sourceId, bookId));
   }
 
   // 获取全部用户名

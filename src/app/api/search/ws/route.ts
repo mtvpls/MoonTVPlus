@@ -5,8 +5,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
+import { hasFeaturePermission } from '@/lib/permissions';
 import { yellowWords } from '@/lib/yellow';
 import { getProxyToken } from '@/lib/emby-token';
+import {
+  executeSavedSourceScript,
+  listEnabledSourceScripts,
+  normalizeScriptSearchResults,
+  normalizeScriptSources,
+} from '@/lib/source-script';
 
 export const runtime = 'nodejs';
 
@@ -33,6 +40,10 @@ export async function GET(request: NextRequest) {
 
   const config = await getConfig();
   const apiSites = await getAvailableApiSites(authInfo.username);
+  const [canAccessOpenList, canAccessEmby] = await Promise.all([
+    hasFeaturePermission(authInfo.username, 'private_library'),
+    hasFeaturePermission(authInfo.username, 'emby'),
+  ]);
 
   // 创建权重映射表
   const weightMap = new Map<string, number>();
@@ -49,6 +60,7 @@ export async function GET(request: NextRequest) {
 
   // 检查是否配置了 OpenList
   const hasOpenList = !!(
+    canAccessOpenList &&
     config.OpenListConfig?.Enabled &&
     config.OpenListConfig?.URL &&
     config.OpenListConfig?.Username &&
@@ -57,10 +69,12 @@ export async function GET(request: NextRequest) {
 
   // 检查是否配置了 Emby（支持多源）
   const hasEmby = !!(
+    canAccessEmby &&
     config.EmbyConfig?.Sources &&
     config.EmbyConfig.Sources.length > 0 &&
     config.EmbyConfig.Sources.some(s => s.enabled && s.ServerURL)
   );
+  const enabledScripts = await listEnabledSourceScripts();
 
   // 共享状态
   let streamClosed = false;
@@ -103,7 +117,7 @@ export async function GET(request: NextRequest) {
       const startEvent = `data: ${JSON.stringify({
         type: 'start',
         query,
-        totalSources: sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount,
+        totalSources: sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount + enabledScripts.length,
         timestamp: Date.now()
       })}\n\n`;
 
@@ -147,6 +161,7 @@ export async function GET(request: NextRequest) {
                   id: item.Id,
                   source: sourceValue,
                   source_name: sourceName,
+                  weight: weightMap.get(sourceValue) ?? 0,
                   title: item.Name,
                   poster: client.getImageUrl(item.Id, 'Primary', undefined, client.isProxyEnabled() ? proxyToken || undefined : undefined),
                   episodes: [],
@@ -253,6 +268,7 @@ export async function GET(request: NextRequest) {
                     id: key,
                     source: 'openlist',
                     source_name: '私人影库',
+                    weight: weightMap.get('openlist') ?? 0,
                     title: info.title,
                     poster: getTMDBImageUrl(info.poster_path),
                     episodes: [],
@@ -335,6 +351,11 @@ export async function GET(request: NextRequest) {
             });
           }
 
+          filteredResults = filteredResults.map((result) => ({
+            ...result,
+            weight: result.weight ?? (weightMap.get(result.source) ?? 0),
+          }));
+
           // 发送该源的搜索结果
           completedSources++;
 
@@ -380,7 +401,7 @@ export async function GET(request: NextRequest) {
         }
 
         // 检查是否所有源都已完成
-        if (completedSources === sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount) {
+        if (completedSources === sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount + enabledScripts.length) {
           if (!streamClosed) {
             // 发送最终完成事件
             const completeEvent = `data: ${JSON.stringify({
@@ -402,8 +423,118 @@ export async function GET(request: NextRequest) {
         }
       });
 
+      const scriptPromises = enabledScripts.map(async (script) => {
+        try {
+          const sourcesExecution = await Promise.race([
+            executeSavedSourceScript({
+              key: script.key,
+              hook: 'getSources',
+              payload: {},
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error(`${script.name} timeout`)), 20000)
+            ),
+          ]);
+
+          const sources = normalizeScriptSources((sourcesExecution as any).result);
+          const sourceResults = await Promise.all(
+            sources.map(async (source) => {
+              const execution = await Promise.race([
+                executeSavedSourceScript({
+                  key: script.key,
+                  hook: 'search',
+                  payload: {
+                    keyword: query,
+                    page: 1,
+                    sourceId: source.id,
+                  },
+                }),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error(`${script.name}/${source.name} timeout`)), 20000)
+                ),
+              ]);
+
+              return normalizeScriptSearchResults({
+                scriptKey: script.key,
+                scriptName: script.name,
+                sourceId: source.id,
+                sourceName: source.name,
+                result: (execution as any).result,
+              });
+            })
+          );
+
+          let filteredResults = sourceResults.flat();
+          if (!config.SiteConfig.DisableYellowFilter) {
+            filteredResults = filteredResults.filter((result) => {
+              const typeName = result.type_name || '';
+              return !yellowWords.some((word: string) => typeName.includes(word));
+            });
+          }
+
+          completedSources++;
+
+          if (!streamClosed) {
+            const sourceEvent = `data: ${JSON.stringify({
+              type: 'source_result',
+              source: `script:${script.key}`,
+              sourceName: script.name,
+              results: filteredResults,
+              timestamp: Date.now()
+            })}\n\n`;
+
+            if (!safeEnqueue(encoder.encode(sourceEvent))) {
+              streamClosed = true;
+              return;
+            }
+          }
+
+          if (filteredResults.length > 0) {
+            allResults.push(...filteredResults);
+          }
+        } catch (error) {
+          console.warn(`搜索脚本失败 ${script.name}:`, error);
+
+          completedSources++;
+
+          if (!streamClosed) {
+            const errorEvent = `data: ${JSON.stringify({
+              type: 'source_error',
+              source: `script:${script.key}`,
+              sourceName: script.name,
+              error: error instanceof Error ? error.message : '搜索失败',
+              timestamp: Date.now()
+            })}\n\n`;
+
+            if (!safeEnqueue(encoder.encode(errorEvent))) {
+              streamClosed = true;
+              return;
+            }
+          }
+        }
+
+        if (completedSources === sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount + enabledScripts.length) {
+          if (!streamClosed) {
+            const completeEvent = `data: ${JSON.stringify({
+              type: 'complete',
+              totalResults: allResults.length,
+              completedSources,
+              timestamp: Date.now()
+            })}\n\n`;
+
+            if (safeEnqueue(encoder.encode(completeEvent))) {
+              try {
+                controller.close();
+              } catch (error) {
+                console.warn('Failed to close controller:', error);
+              }
+            }
+          }
+        }
+      });
+
       // 等待所有搜索完成
-      await Promise.allSettled(searchPromises);
+      await Promise.allSettled([...searchPromises, ...scriptPromises]);
     },
 
     cancel() {

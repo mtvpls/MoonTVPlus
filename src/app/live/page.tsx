@@ -2,9 +2,9 @@
 
 'use client';
 
-import { Heart, Radio, Tv } from 'lucide-react';
+import { GitBranch, Heart, Radio, Tv } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   deleteFavorite,
@@ -43,6 +43,21 @@ interface LiveChannel {
   url: string;
 }
 
+type MergedChannelItem =
+  | {
+    type: 'single';
+    key: string;
+    channel: LiveChannel;
+  }
+  | {
+    type: 'merged';
+    key: string;
+    name: string;
+    group: string;
+    logo: string;
+    channels: LiveChannel[];
+  };
+
 // 直播源接口
 interface LiveSource {
   key: string;
@@ -57,14 +72,22 @@ interface LiveSource {
 }
 
 function LivePageClient() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   // 动态加载浏览器专用库
   useEffect(() => {
     if (typeof window !== 'undefined') {
       import('artplayer').then(mod => { Artplayer = mod.default; });
       import('hls.js').then(mod => { Hls = mod.default; });
       import('flv.js').then(mod => { flvjs = mod.default; });
+
+      const runtimeConfig = (window as any).RUNTIME_CONFIG;
+      if (runtimeConfig?.LIVE_ENABLED === false) {
+        router.replace('/');
+      }
     }
-  }, []);
+  }, [router]);
 
   // -----------------------------------------------------------------------------
   // 状态变量（State）
@@ -75,9 +98,6 @@ function LivePageClient() {
   >('loading');
   const [loadingMessage, setLoadingMessage] = useState('正在加载直播源...');
   const [error, setError] = useState<string | null>(null);
-
-  const searchParams = useSearchParams();
-  const router = useRouter();
 
   // 直播源相关
   const [liveSources, setLiveSources] = useState<LiveSource[]>([]);
@@ -120,6 +140,7 @@ function LivePageClient() {
 
   // 搜索关键词
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [expandedMergedChannels, setExpandedMergedChannels] = useState<string[]>([]);
 
   // 节目单信息
   const [epgData, setEpgData] = useState<{
@@ -1125,6 +1146,69 @@ function LivePageClient() {
     }
 
     return filtered;
+  };
+
+  const mergedChannelItems = useMemo<MergedChannelItem[]>(() => {
+    if (!filteredChannels || filteredChannels.length === 0) return [];
+
+    const mergedMap = new Map<string, {
+      key: string;
+      name: string;
+      group: string;
+      logo: string;
+      channels: LiveChannel[];
+    }>();
+    const order: string[] = [];
+
+    filteredChannels.forEach((channel) => {
+      const mergedKey = `${channel.group}::${channel.name.trim().toLowerCase()}`;
+      const existing = mergedMap.get(mergedKey);
+
+      if (existing) {
+        existing.channels.push(channel);
+        if (!existing.logo && channel.logo) {
+          existing.logo = channel.logo;
+        }
+        return;
+      }
+
+      mergedMap.set(mergedKey, {
+        key: mergedKey,
+        name: channel.name,
+        group: channel.group,
+        logo: channel.logo,
+        channels: [channel],
+      });
+      order.push(mergedKey);
+    });
+
+    return order.map((key) => {
+      const item = mergedMap.get(key)!;
+      if (item.channels.length === 1) {
+        return {
+          type: 'single',
+          key,
+          channel: item.channels[0],
+        };
+      }
+
+      return {
+        type: 'merged',
+        key,
+        name: item.name,
+        group: item.group,
+        logo: item.logo,
+        channels: item.channels,
+      };
+    });
+  }, [filteredChannels]);
+
+  const toggleMergedChannel = (key: string) => {
+    setExpandedMergedChannels((prev) => (
+      prev.includes(key)
+        ? prev.filter(item => item !== key)
+        : [...prev, key]
+    ));
   };
 
   // 切换分组
@@ -2212,7 +2296,7 @@ function LivePageClient() {
             </div>
 
             {/* 频道列表 */}
-            <div className={`h-[300px] lg:h-full md:overflow-hidden transition-all duration-300 ease-in-out ${isChannelListCollapsed
+            <div className={`h-[330px] lg:h-full md:overflow-hidden transition-all duration-300 ease-in-out ${isChannelListCollapsed
               ? 'md:col-span-1 lg:hidden lg:opacity-0 lg:scale-95'
               : 'md:col-span-1 lg:opacity-100 lg:scale-100'
               }`}>
@@ -2365,45 +2449,151 @@ function LivePageClient() {
 
                     {/* 频道列表 */}
                     <div ref={channelListRef} className='flex-1 overflow-y-auto space-y-2 pb-4'>
-                      {filteredChannels?.length > 0 ? (
-                        filteredChannels.map(channel => {
-                          const isActive = channel.id === currentChannel?.id;
+                      {mergedChannelItems?.length > 0 ? (
+                        mergedChannelItems.map(item => {
+                          if (item.type === 'single') {
+                            const channel = item.channel;
+                            const isActive = channel.id === currentChannel?.id;
+                            return (
+                              <button
+                                key={channel.id}
+                                data-channel-id={channel.id}
+                                onClick={() => handleChannelChange(channel)}
+                                disabled={isSwitchingSource}
+                                className={`w-full p-3 rounded-lg text-left transition-all duration-200 ${isSwitchingSource
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : isActive
+                                    ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                                    : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                                  }`}
+                              >
+                                <div className='flex items-center gap-3'>
+                                  <div className='w-10 h-10 bg-gray-300 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden'>
+                                    {channel.logo ? (
+                                      <img
+                                        src={getLogoUrl(channel.logo, currentSource?.key || '')}
+                                        alt={channel.name}
+                                        className='w-full h-full rounded object-contain'
+                                        loading="lazy"
+                                      />
+                                    ) : (
+                                      <Tv className='w-5 h-5 text-gray-500' />
+                                    )}
+                                  </div>
+                                  <div className='flex-1 min-w-0'>
+                                    <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate' title={channel.name}>
+                                      {channel.name}
+                                    </div>
+                                    <div className='text-xs text-gray-500 dark:text-gray-400 mt-1' title={channel.group}>
+                                      {channel.group}
+                                    </div>
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          }
+
+                          const isExpanded = expandedMergedChannels.includes(item.key);
+                          const activeLineIndex = item.channels.findIndex(channel => channel.id === currentChannel?.id);
+                          const hasActiveChild = activeLineIndex !== -1;
+
                           return (
-                            <button
-                              key={channel.id}
-                              data-channel-id={channel.id}
-                              onClick={() => handleChannelChange(channel)}
-                              disabled={isSwitchingSource}
-                              className={`w-full p-3 rounded-lg text-left transition-all duration-200 ${isSwitchingSource
-                                ? 'opacity-50 cursor-not-allowed'
-                                : isActive
-                                  ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
-                                  : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-                                }`}
+                            <div
+                              key={item.key}
+                              className='space-y-2'
                             >
-                              <div className='flex items-center gap-3'>
-                                <div className='w-10 h-10 bg-gray-300 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden'>
-                                  {channel.logo ? (
-                                    <img
-                                      src={getLogoUrl(channel.logo, currentSource?.key || '')}
-                                      alt={channel.name}
-                                      className='w-full h-full rounded object-contain'
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <Tv className='w-5 h-5 text-gray-500' />
-                                  )}
-                                </div>
-                                <div className='flex-1 min-w-0'>
-                                  <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate' title={channel.name}>
-                                    {channel.name}
+                              <button
+                                type='button'
+                                onClick={() => {
+                                  handleChannelChange(item.channels[0]);
+                                }}
+                                disabled={isSwitchingSource}
+                                className={`w-full p-3 rounded-lg text-left transition-all duration-200 ${isSwitchingSource
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : hasActiveChild
+                                    ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                                    : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                                  }`}
+                              >
+                                <div className='flex items-center gap-3'>
+                                  <div className='w-10 h-10 bg-gray-300 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden'>
+                                    {item.logo ? (
+                                      <img
+                                        src={getLogoUrl(item.logo, currentSource?.key || '')}
+                                        alt={item.name}
+                                        className='w-full h-full rounded object-contain'
+                                        loading='lazy'
+                                      />
+                                    ) : (
+                                      <Tv className='w-5 h-5 text-gray-500' />
+                                    )}
                                   </div>
-                                  <div className='text-xs text-gray-500 dark:text-gray-400 mt-1' title={channel.group}>
-                                    {channel.group}
+                                  <div className='flex-1 min-w-0'>
+                                    <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate' title={item.name}>
+                                      {item.name}
+                                    </div>
+                                    <div className='text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2'>
+                                      <span title={item.group}>{item.group}</span>
+                                      <span>·</span>
+                                      <span>{item.channels.length} 条线路</span>
+                                      {hasActiveChild && (
+                                        <>
+                                          <span>·</span>
+                                          <span>{`当前线路${activeLineIndex + 1}`}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className='flex flex-col items-end gap-2 flex-shrink-0'>
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleMergedChannel(item.key);
+                                      }}
+                                      className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                                    >
+                                      {isExpanded ? '收起' : '展开'}
+                                    </span>
                                   </div>
                                 </div>
-                              </div>
-                            </button>
+                              </button>
+
+                              {isExpanded && (
+                                <div className='pl-4 space-y-2'>
+                                  {item.channels.map((channel, index) => {
+                                    const isActive = channel.id === currentChannel?.id;
+                                    return (
+                                      <button
+                                        key={channel.id}
+                                        type='button'
+                                        data-channel-id={channel.id}
+                                        onClick={() => handleChannelChange(channel)}
+                                        disabled={isSwitchingSource}
+                                        className={`w-full p-3 rounded-lg text-left text-sm transition-all duration-200 ${
+                                          isSwitchingSource
+                                            ? 'opacity-50 cursor-not-allowed'
+                                            : isActive
+                                              ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                                              : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                                        }`}
+                                      >
+                                        <div className='flex items-center justify-between gap-3'>
+                                          <span className='font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2'>
+                                            <GitBranch className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                                            {`线路${index + 1}`}
+                                          </span>
+                                          {isActive && (
+                                            <span className='text-xs text-green-600 dark:text-green-400'>
+                                              当前播放
+                                            </span>
+                                          )}
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           );
                         })
                       ) : (

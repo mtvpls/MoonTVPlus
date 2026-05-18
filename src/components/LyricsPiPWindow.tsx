@@ -10,12 +10,13 @@ interface Song {
   artist: string;
   album?: string;
   pic?: string;
-  platform: 'netease' | 'qq' | 'kuwo';
+  platform: 'wy' | 'tx' | 'kw' | 'kg' | 'mg';
 }
 
 interface LyricLine {
   time: number;
   text: string;
+  translation?: string;
 }
 
 interface LyricsPiPWindowProps {
@@ -187,7 +188,11 @@ const PiPLyricsContent = ({
           }}
         >
           {lyrics.length > 0 && currentLyricIndex >= 0
-            ? lyrics[currentLyricIndex]?.text || '♪'
+            ? (
+              lyrics[currentLyricIndex]?.translation
+                ? `${lyrics[currentLyricIndex]?.text || '♪'}\n${lyrics[currentLyricIndex]?.translation}`
+                : lyrics[currentLyricIndex]?.text || '♪'
+            )
             : currentSong
             ? '暂无歌词'
             : '请播放歌曲'}
@@ -220,7 +225,19 @@ const PiPLyricsContent = ({
                   fontWeight: index === currentLyricIndex ? 'bold' : 'normal',
                 }}
               >
-                {line.text}
+                <div>{line.text}</div>
+                {line.translation && (
+                  <div
+                    style={{
+                      marginTop: '4px',
+                      fontSize: index === currentLyricIndex ? '13px' : '12px',
+                      opacity: index === currentLyricIndex ? 0.85 : 0.55,
+                      fontWeight: 'normal',
+                    }}
+                  >
+                    {line.translation}
+                  </div>
+                )}
               </div>
             ))
           ) : (

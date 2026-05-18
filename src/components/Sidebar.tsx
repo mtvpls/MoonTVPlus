@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Cat, Clover, Film, FolderOpen, Globe, Home, Menu, Search, Star, Tv, Users } from 'lucide-react';
+import { Blend, Cat, Clover, Container, Film, Globe, Home, Menu, Search, Star, Tv, TvMinimalPlay, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
@@ -63,6 +63,10 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const watchRoomContext = useWatchRoomContextSafe();
+
+  if (pathname === '/watch-room/screen') {
+    return null;
+  }
   // 若同一次 SPA 会话中已经读取过折叠状态，则直接复用，避免闪烁
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     if (
@@ -143,14 +147,9 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
       href: '/douban?type=show',
     },
     {
-      icon: Tv,
+      icon: TvMinimalPlay,
       label: '电视直播',
       href: '/live',
-    },
-    {
-      icon: Globe,
-      label: '网络直播',
-      href: '/web-live',
     },
   ]);
 
@@ -179,11 +178,15 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
         label: '综艺',
         href: '/douban?type=show',
       },
-      {
-        icon: Tv,
-        label: '电视直播',
-        href: '/live',
-      },
+      ...(runtimeConfig?.LIVE_ENABLED
+        ? [
+            {
+              icon: TvMinimalPlay,
+              label: '电视直播',
+              href: '/live',
+            },
+          ]
+        : []),
     ];
 
     // 如果启用网络直播，添加网络直播入口
@@ -198,9 +201,17 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
     // 如果配置了 OpenList 或 Emby，添加私人影库入口
     if (runtimeConfig?.PRIVATE_LIBRARY_ENABLED) {
       items.push({
-        icon: FolderOpen,
+        icon: Container,
         label: '私人影库',
         href: '/private-library',
+      });
+    }
+
+    if (runtimeConfig?.ADVANCED_RECOMMENDATION_ENABLED) {
+      items.push({
+        icon: Blend,
+        label: '高级推荐',
+        href: '/advanced-recommendation',
       });
     }
 

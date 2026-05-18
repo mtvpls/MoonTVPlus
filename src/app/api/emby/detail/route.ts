@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { embyManager } from '@/lib/emby-manager';
 import { getProxyToken } from '@/lib/emby-token';
+import { requireFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const authResult = await requireFeaturePermission(request, 'emby', '无权限访问 Emby');
+    if (authResult instanceof NextResponse) return authResult;
     // 获取Emby客户端
     const client = await embyManager.getClient(embyKey);
 

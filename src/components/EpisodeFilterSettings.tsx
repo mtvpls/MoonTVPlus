@@ -6,6 +6,7 @@ import { useEffect, useRef,useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { getEpisodeFilterConfig, saveEpisodeFilterConfig } from '@/lib/db.client';
+import { normalizeEpisodeFilterConfig } from '@/lib/episode-filter';
 import { EpisodeFilterConfig, EpisodeFilterRule } from '@/lib/types';
 
 interface EpisodeFilterSettingsProps {
@@ -21,7 +22,7 @@ export default function EpisodeFilterSettings({
   onConfigUpdate,
   onShowToast,
 }: EpisodeFilterSettingsProps) {
-  const [config, setConfig] = useState<EpisodeFilterConfig>({ rules: [] });
+  const [config, setConfig] = useState<EpisodeFilterConfig>(normalizeEpisodeFilterConfig());
   const [newKeyword, setNewKeyword] = useState('');
   const [newType, setNewType] = useState<'normal' | 'regex'>('normal');
   const [loading, setLoading] = useState(false);
@@ -130,9 +131,9 @@ export default function EpisodeFilterSettings({
     try {
       const loadedConfig = await getEpisodeFilterConfig();
       if (loadedConfig) {
-        setConfig(loadedConfig);
+        setConfig(normalizeEpisodeFilterConfig(loadedConfig));
       } else {
-        setConfig({ rules: [] });
+        setConfig(normalizeEpisodeFilterConfig());
       }
     } catch (error) {
       console.error('加载集数过滤配置失败:', error);
@@ -141,13 +142,31 @@ export default function EpisodeFilterSettings({
     }
   };
 
+  const handleToggleReverseMode = () => {
+    setConfig((prev) => {
+      const normalizedConfig = normalizeEpisodeFilterConfig(prev);
+      return {
+        ...normalizedConfig,
+        reverseMode: !normalizedConfig.reverseMode,
+      };
+    });
+  };
+
   // 保存配置
   const handleSave = async () => {
+    const normalizedConfig = normalizeEpisodeFilterConfig(config);
+    if (normalizedConfig.reverseMode && normalizedConfig.rules.length === 0) {
+      if (onShowToast) {
+        onShowToast('启用相反模式时，至少需要添加一条规则', 'info');
+      }
+      return;
+    }
+
     setSaving(true);
     try {
-      await saveEpisodeFilterConfig(config);
+      await saveEpisodeFilterConfig(normalizedConfig);
       if (onConfigUpdate) {
-        onConfigUpdate(config);
+        onConfigUpdate(normalizedConfig);
       }
       if (onShowToast) {
         onShowToast('保存成功！', 'success');
@@ -182,9 +201,13 @@ export default function EpisodeFilterSettings({
       id: Date.now().toString(),
     };
 
-    setConfig((prev) => ({
-      rules: [...prev.rules, newRule],
-    }));
+    setConfig((prev) => {
+      const normalizedConfig = normalizeEpisodeFilterConfig(prev);
+      return {
+        ...normalizedConfig,
+        rules: [...normalizedConfig.rules, newRule],
+      };
+    });
 
     // 清空输入框并强制重新渲染
     setNewKeyword('');
@@ -202,19 +225,27 @@ export default function EpisodeFilterSettings({
   // 删除规则
   const handleDeleteRule = (id: string | undefined) => {
     if (!id) return;
-    setConfig((prev) => ({
-      rules: prev.rules.filter((rule) => rule.id !== id),
-    }));
+    setConfig((prev) => {
+      const normalizedConfig = normalizeEpisodeFilterConfig(prev);
+      return {
+        ...normalizedConfig,
+        rules: normalizedConfig.rules.filter((rule) => rule.id !== id),
+      };
+    });
   };
 
   // 切换规则启用状态
   const handleToggleRule = (id: string | undefined) => {
     if (!id) return;
-    setConfig((prev) => ({
-      rules: prev.rules.map((rule) =>
-        rule.id === id ? { ...rule, enabled: !rule.enabled } : rule
-      ),
-    }));
+    setConfig((prev) => {
+      const normalizedConfig = normalizeEpisodeFilterConfig(prev);
+      return {
+        ...normalizedConfig,
+        rules: normalizedConfig.rules.map((rule) =>
+          rule.id === id ? { ...rule, enabled: !rule.enabled } : rule
+        ),
+      };
+    });
   };
 
   if (!isVisible || !mounted) return null;
@@ -294,6 +325,37 @@ export default function EpisodeFilterSettings({
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
           {/* 添加规则 */}
           <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3 rounded-xl bg-white dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600 px-4 py-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  相反模式
+                </h3>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  开启后，将屏蔽改为仅显示符合规则的集数。
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+                  启用时必须至少保留一条规则才能保存。
+                </p>
+              </div>
+              <button
+                onClick={handleToggleReverseMode}
+                className="flex-shrink-0 active:scale-95 transition-transform duration-150"
+                title={config.reverseMode ? '关闭相反模式' : '开启相反模式'}
+              >
+                {config.reverseMode ? (
+                  <ToggleRight
+                    size={28}
+                    className="text-green-500 hover:text-green-400 transition-colors duration-150"
+                  />
+                ) : (
+                  <ToggleLeft
+                    size={28}
+                    className="text-gray-400 hover:text-gray-300 transition-colors duration-150"
+                  />
+                )}
+              </button>
+            </div>
+
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
               添加屏蔽规则
             </h3>
@@ -333,7 +395,8 @@ export default function EpisodeFilterSettings({
               </div>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-              💡 普通模式：集数标题包含关键字即屏蔽<br/>
+              💡 普通模式：集数标题包含关键字即命中规则<br/>
+              🔄 相反模式：仅显示命中规则的集数<br/>
               🔧 正则模式：支持正则表达式匹配（如：^预告.*匹配以"预告"开头的集数）
             </p>
           </div>

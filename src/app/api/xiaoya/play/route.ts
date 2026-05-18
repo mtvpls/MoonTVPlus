@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
+import { requireFeaturePermission } from '@/lib/permissions';
 import { XiaoyaClient } from '@/lib/xiaoya.client';
 
 export const runtime = 'nodejs';
@@ -66,6 +67,8 @@ async function getFinalUrl(url: string, maxRedirects = 5): Promise<string> {
  */
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'xiaoya', '无权限访问小雅');
+    if (authResult instanceof NextResponse) return authResult;
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
       return NextResponse.json({ error: '未授权' }, { status: 401 });

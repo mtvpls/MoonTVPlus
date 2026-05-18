@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { getCachedLiveChannels } from '@/lib/live';
+import { hasFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get('token');
   const globalToken = process.env.TVBOX_SUBSCRIBE_TOKEN;
   const adFilter = searchParams.get('adFilter') === 'true'; // 获取去广告参数
+  const yellowFilter = searchParams.get('yellowFilter') === 'true';
 
   if (!token) {
     return NextResponse.json(
@@ -75,7 +77,12 @@ export async function GET(request: NextRequest) {
     const apiSites = await getAvailableApiSites(username);
 
     // 获取直播源
-    const liveConfig = config.LiveConfig?.filter(live => !live.disabled) || [];
+    const canAccessLive = isGlobalToken || !username
+      ? true
+      : await hasFeaturePermission(username, 'live');
+    const liveConfig = canAccessLive
+      ? config.LiveConfig?.filter(live => !live.disabled) || []
+      : [];
 
     // 获取当前请求的 origin，用于构建代理链接
     // 优先级：SITE_BASE 环境变量 > origin 参数 > 从请求头构建
@@ -89,7 +96,7 @@ export async function GET(request: NextRequest) {
       baseUrl = `${proto}://${host}`;
     }
 
-    console.log('TVBOX 订阅 baseUrl:', baseUrl, 'adFilter:', adFilter);
+    console.log('TVBOX 订阅 baseUrl:', baseUrl, 'adFilter:', adFilter, 'yellowFilter:', yellowFilter);
 
     // 检查是否配置了 OpenList
     const hasOpenList = !!(
@@ -142,9 +149,9 @@ export async function GET(request: NextRequest) {
           key: site.key,
           name: site.name,
           type: 1,
-          // 如果开启去广告，使用 CMS 代理；否则使用原始 API
-          api: adFilter
-            ? `${baseUrl}/api/cms-proxy?api=${encodeURIComponent(site.api)}`
+          // 开启去广告或黄色过滤时使用 CMS 代理
+          api: (adFilter || yellowFilter)
+            ? `${baseUrl}/api/cms-proxy?api=${encodeURIComponent(site.api)}${adFilter ? '&adFilter=true' : ''}${yellowFilter ? '&yellowFilter=true' : ''}`
             : site.api,
           searchable: 1,
           quickSearch: 1,

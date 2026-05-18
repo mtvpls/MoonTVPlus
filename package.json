@@ -19,7 +19,6 @@
     "format:check": "prettier -c .",
     "gen:manifest": "node scripts/generate-manifest.js",
     "postbuild": "echo 'Build completed - sitemap generation disabled'",
-    "prepare": "husky install",
     "watch-room:server": "node server/watch-room-standalone-server.js --port 3001 --auth YOUR_SECRET_KEY",
     "init:sqlite": "node scripts/init-sqlite.js",
     "init:postgres": "node scripts/init-postgres.js",
@@ -45,6 +44,7 @@
     "cheerio": "^1.1.2",
     "clsx": "^2.0.0",
     "crypto-js": "^4.2.0",
+    "edge-tts-universal": "^1.4.0",
     "flv.js": "^1.6.2",
     "framer-motion": "^12.18.1",
     "he": "^1.2.0",
@@ -69,6 +69,7 @@
     "redis": "^4.6.7",
     "remark-gfm": "^3.0.1",
     "server-only": "^0.0.1",
+    "sharp": "^0.34.5",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
     "swiper": "^11.2.8",
@@ -78,8 +79,6 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@commitlint/cli": "^16.3.0",
-    "@commitlint/config-conventional": "^16.2.4",
     "@opennextjs/cloudflare": "^1.15.1",
     "@svgr/webpack": "^8.1.0",
     "@tailwindcss/forms": "^0.5.10",
@@ -105,9 +104,7 @@
     "eslint-config-prettier": "^8.10.0",
     "eslint-plugin-simple-import-sort": "^7.0.0",
     "eslint-plugin-unused-imports": "^2.0.0",
-    "husky": "^7.0.4",
     "jest": "^27.5.1",
-    "lint-staged": "^12.5.0",
     "next-router-mock": "^0.9.0",
     "postcss": "^8.5.1",
     "prettier": "^2.8.8",
@@ -116,15 +113,6 @@
     "typescript": "^4.9.5",
     "vercel": "^50.4.10",
     "webpack-obfuscator": "^3.5.1"
-  },
-  "lint-staged": {
-    "**/*.{js,jsx,ts,tsx}": [
-      "eslint --max-warnings=0",
-      "prettier -w"
-    ],
-    "**/*.{json,css,scss,md,webmanifest}": [
-      "prettier -w"
-    ]
   },
   "packageManager": "pnpm@10.14.0"
 }

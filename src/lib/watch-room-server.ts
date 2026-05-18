@@ -16,6 +16,8 @@ export class WatchRoomServer {
   private rooms: Map<string, Room> = new Map();
   private members: Map<string, Map<string, Member>> = new Map(); // roomId -> userId -> Member
   private socketToRoom: Map<string, RoomMemberInfo> = new Map(); // socketId -> RoomMemberInfo
+  private screenHelpers: Map<string, string> = new Map(); // roomId -> helperSocketId
+  private helperToRoom: Map<string, string> = new Map(); // helperSocketId -> roomId
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>) {
@@ -40,6 +42,7 @@ export class WatchRoomServer {
             description: data.description,
             password: data.password,
             isPublic: data.isPublic,
+            roomType: data.roomType || 'sync',
             ownerId: userId,
             ownerName: data.userName,
             ownerToken: ownerToken, // 保存房主令牌
@@ -89,15 +92,33 @@ export class WatchRoomServer {
           }
 
           const userId = socket.id;
+          let isOwner = false;
+
+          if (data.ownerToken && data.ownerToken === room.ownerToken) {
+            isOwner = true;
+            room.ownerId = userId;
+            room.lastOwnerHeartbeat = Date.now();
+            this.rooms.set(data.roomId, room);
+            console.log(`[WatchRoom] Owner ${data.userName} reconnected to room ${data.roomId}`);
+          }
+
           const member: Member = {
             id: userId,
             name: data.userName,
-            isOwner: false,
+            isOwner,
             lastHeartbeat: Date.now(),
           };
 
           const roomMembers = this.members.get(data.roomId);
           if (roomMembers) {
+            if (isOwner) {
+              Array.from(roomMembers.entries()).forEach(([memberId, existingMember]) => {
+                if (existingMember.isOwner && memberId !== userId) {
+                  roomMembers.delete(memberId);
+                }
+              });
+            }
+
             roomMembers.set(userId, member);
             room.memberCount = roomMembers.size;
             this.rooms.set(data.roomId, room);
@@ -107,7 +128,7 @@ export class WatchRoomServer {
             roomId: data.roomId,
             userId,
             userName: data.userName,
-            isOwner: false,
+            isOwner,
           });
 
           socket.join(data.roomId);
@@ -115,7 +136,7 @@ export class WatchRoomServer {
           // 通知房间内其他成员
           socket.to(data.roomId).emit('room:member-joined', member);
 
-          console.log(`[WatchRoom] User ${data.userName} joined room ${data.roomId}`);
+          console.log(`[WatchRoom] User ${data.userName} joined room ${data.roomId}${isOwner ? ' (as owner)' : ''}`);
 
           const members = Array.from(roomMembers?.values() || []);
           callback({ success: true, room, members });
@@ -197,6 +218,111 @@ export class WatchRoomServer {
           this.rooms.set(roomInfo.roomId, room);
           socket.to(roomInfo.roomId).emit('live:change', state);
         }
+      });
+
+      socket.on('screen:helper-register', (data, callback) => {
+        try {
+          const room = this.rooms.get(data.roomId);
+          if (!room) {
+            callback({ success: false, error: '房间不存在' });
+            return;
+          }
+
+          if (room.ownerToken !== data.ownerToken) {
+            callback({ success: false, error: '房主身份验证失败' });
+            return;
+          }
+
+          const oldHelperSocketId = this.screenHelpers.get(data.roomId);
+          if (oldHelperSocketId && oldHelperSocketId !== socket.id) {
+            this.helperToRoom.delete(oldHelperSocketId);
+          }
+
+          this.screenHelpers.set(data.roomId, socket.id);
+          this.helperToRoom.set(socket.id, data.roomId);
+          callback({ success: true });
+        } catch (error) {
+          console.error('[WatchRoom] Error registering screen helper:', error);
+          callback({ success: false, error: '注册共享控制窗口失败' });
+        }
+      });
+
+      socket.on('screen:start', (state) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        const helperRoomId = this.helperToRoom.get(socket.id);
+        const roomId = roomInfo?.roomId || helperRoomId;
+        if (!roomId) return;
+        if (helperRoomId && this.screenHelpers.get(helperRoomId) !== socket.id) return;
+        if (roomInfo && !roomInfo.isOwner) return;
+
+        const room = this.rooms.get(roomId);
+        if (room) {
+          room.currentState = state;
+          this.rooms.set(roomId, room);
+          this.io.to(roomId).emit('screen:start', state);
+        }
+      });
+
+      socket.on('screen:stop', () => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        const helperRoomId = this.helperToRoom.get(socket.id);
+        const roomId = roomInfo?.roomId || helperRoomId;
+        if (!roomId) return;
+        if (helperRoomId && this.screenHelpers.get(helperRoomId) !== socket.id) return;
+        if (roomInfo && !roomInfo.isOwner) return;
+
+        const room = this.rooms.get(roomId);
+        if (room) {
+          room.currentState = null;
+          this.rooms.set(roomId, room);
+          this.io.to(roomId).emit('screen:stop');
+        }
+      });
+
+      socket.on('screen:viewer-ready', () => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        if (!roomInfo) return;
+
+        const room = this.rooms.get(roomInfo.roomId);
+        if (!room || roomInfo.isOwner || room.currentState?.type !== 'screen') return;
+
+        const targetSocketId = this.screenHelpers.get(roomInfo.roomId) || room.ownerId;
+        this.io.to(targetSocketId).emit('screen:viewer-ready', {
+          userId: socket.id,
+        });
+      });
+
+      socket.on('screen:offer', (data) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        const helperRoomId = this.helperToRoom.get(socket.id);
+        if (!roomInfo && !helperRoomId) return;
+
+        this.io.to(data.targetUserId).emit('screen:offer', {
+          userId: socket.id,
+          offer: data.offer,
+        });
+      });
+
+      socket.on('screen:answer', (data) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        const helperRoomId = this.helperToRoom.get(socket.id);
+        if (!roomInfo && !helperRoomId) return;
+
+        this.io.to(data.targetUserId).emit('screen:answer', {
+          userId: socket.id,
+          answer: data.answer,
+        });
+      });
+
+      socket.on('screen:ice', (data) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        const helperRoomId = this.helperToRoom.get(socket.id);
+        if (!roomInfo && !helperRoomId) return;
+
+        this.io.to(data.targetUserId).emit('screen:ice', {
+          userId: socket.id,
+          candidate: data.candidate,
+        });
       });
 
       // 聊天消息
@@ -303,6 +429,19 @@ export class WatchRoomServer {
       // 断开连接
       socket.on('disconnect', () => {
         console.log(`[WatchRoom] Client disconnected: ${socket.id}`);
+        const helperRoomId = this.helperToRoom.get(socket.id);
+        if (helperRoomId) {
+          this.helperToRoom.delete(socket.id);
+          if (this.screenHelpers.get(helperRoomId) === socket.id) {
+            this.screenHelpers.delete(helperRoomId);
+            const room = this.rooms.get(helperRoomId);
+            if (room && room.currentState?.type === 'screen') {
+              room.currentState = null;
+              this.rooms.set(helperRoomId, room);
+              this.io.to(helperRoomId).emit('screen:stop');
+            }
+          }
+        }
         this.handleLeaveRoom(socket);
       });
     });
@@ -348,6 +487,11 @@ export class WatchRoomServer {
     this.io.to(roomId).emit('room:deleted');
     this.rooms.delete(roomId);
     this.members.delete(roomId);
+    const helperSocketId = this.screenHelpers.get(roomId);
+    if (helperSocketId) {
+      this.helperToRoom.delete(helperSocketId);
+      this.screenHelpers.delete(roomId);
+    }
   }
 
   // 定时清理房间（房主断开5分钟后删除）

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
+import { hasFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
@@ -44,7 +45,8 @@ export async function GET(
     if (username) {
       // 检查用户是否被封禁
       const userInfo = await db.getUserInfoV2(username);
-      if (userInfo && !userInfo.banned) {
+      const allowed = await hasFeaturePermission(username, 'private_library');
+      if (userInfo && !userInfo.banned && allowed) {
         isValidToken = true;
       }
     }

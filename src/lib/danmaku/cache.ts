@@ -276,6 +276,51 @@ export async function clearDanmakuCache(title: string, episodeIndex: number): Pr
   }
 }
 
+// 清除指定标题的所有弹幕缓存（所有集数）
+export async function clearDanmakuCacheByTitle(title: string): Promise<number> {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const objectStore = transaction.objectStore(STORE_NAME);
+
+    return new Promise((resolve, reject) => {
+      const request = objectStore.openCursor();
+      let deletedCount = 0;
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+
+        if (cursor) {
+          const data = cursor.value as DanmakuCacheData;
+
+          if (data.title === title) {
+            cursor.delete();
+            deletedCount++;
+          }
+
+          cursor.continue();
+        } else {
+          if (deletedCount > 0) {
+            console.log(`已清除标题"${title}"的 ${deletedCount} 个弹幕缓存`);
+          }
+          resolve(deletedCount);
+        }
+      };
+
+      request.onerror = () => {
+        reject(new Error('清除弹幕缓存失败'));
+      };
+
+      transaction.oncomplete = () => {
+        db.close();
+      };
+    });
+  } catch (error) {
+    console.error('清除弹幕缓存失败:', error);
+    return 0;
+  }
+}
+
 // 清除所有过期缓存
 export async function clearExpiredDanmakuCache(): Promise<number> {
   try {
@@ -383,7 +428,7 @@ export async function getDanmakuCacheStats(): Promise<{
         if (cursor) {
           const data = cursor.value as DanmakuCacheData;
           total++;
-          totalSize += data.comments.length;
+          totalSize += new Blob([JSON.stringify(data)]).size;
 
           if (data.timestamp < expireThreshold) {
             expired++;

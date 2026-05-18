@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
+import { requireFeaturePermission } from '@/lib/permissions';
 import { startOpenListRefresh } from '@/lib/openlist-refresh';
 
 export const runtime = 'nodejs';
@@ -14,6 +15,8 @@ export const runtime = 'nodejs';
  */
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'private_library', '无权限访问私人影库');
+    if (authResult instanceof NextResponse) return authResult;
     // 权限检查
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {

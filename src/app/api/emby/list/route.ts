@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCachedEmbyList, setCachedEmbyList } from '@/lib/emby-cache';
 import { embyManager } from '@/lib/emby-manager';
 import { getProxyToken } from '@/lib/emby-token';
+import { requireFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
@@ -18,6 +19,8 @@ export async function GET(request: NextRequest) {
   const sortOrder = searchParams.get('sortOrder') || 'Ascending';
 
   try {
+    const authResult = await requireFeaturePermission(request, 'emby', '无权限访问 Emby');
+    if (authResult instanceof NextResponse) return authResult;
     // 判断是否是默认排序（只有默认排序才使用缓存）
     const isDefaultSort = sortBy === 'SortName' && sortOrder === 'Ascending';
 

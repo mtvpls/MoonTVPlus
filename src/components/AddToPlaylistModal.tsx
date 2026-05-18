@@ -9,7 +9,7 @@ interface Song {
   artist: string;
   album?: string;
   pic?: string;
-  platform: 'netease' | 'qq' | 'kuwo';
+  platform: 'wy' | 'tx' | 'kw' | 'kg' | 'mg';
   duration?: number;
 }
 
@@ -29,6 +29,53 @@ interface AddToPlaylistModalProps {
   onClose: () => void;
   onSuccess?: () => void;
   onError?: (message: string) => void;
+}
+
+function MusicLoadingIndicator({
+  text,
+  size = 'md',
+  className = '',
+}: {
+  text?: string;
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const iconSize = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
+  const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
+
+  return (
+    <>
+      <style jsx>{`
+        @keyframes music-note-bounce {
+          0%,
+          100% {
+            transform: translateY(0);
+            opacity: 0.55;
+          }
+          50% {
+            transform: translateY(-8px);
+            opacity: 1;
+          }
+        }
+      `}</style>
+      <div className={`flex items-center justify-center gap-3 text-zinc-400 ${className}`}>
+        <div className="flex items-end gap-1.5">
+          {[0, 1, 2].map((index) => (
+            <svg
+              key={index}
+              className={`${iconSize} text-green-400`}
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              style={{ animation: `music-note-bounce 0.9s ease-in-out ${index * 0.14}s infinite` }}
+            >
+              <path d="M12 3v11.55A3.98 3.98 0 0010 14c-2.21 0-4 1.34-4 3s1.79 3 4 3 4-1.34 4-3V8h4V3h-6z" />
+            </svg>
+          ))}
+        </div>
+        {text ? <span className={`${textSize} font-medium tracking-wide`}>{text}</span> : null}
+      </div>
+    </>
+  );
 }
 
 export default function AddToPlaylistModal({
@@ -56,10 +103,10 @@ export default function AddToPlaylistModal({
   const loadPlaylists = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/music/playlists');
+      const response = await fetch('/api/music/v2/playlists');
       if (response.ok) {
         const data = await response.json();
-        setPlaylists(data.playlists || []);
+        setPlaylists(data.data?.playlists || []);
       }
     } catch (error) {
       console.error('加载歌单失败:', error);
@@ -76,7 +123,7 @@ export default function AddToPlaylistModal({
 
     try {
       setCreating(true);
-      const response = await fetch('/api/music/playlists', {
+      const response = await fetch('/api/music/v2/playlists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,19 +154,18 @@ export default function AddToPlaylistModal({
 
     try {
       setAddingToPlaylistId(playlistId);
-      const response = await fetch('/api/music/playlists/songs', {
+      const response = await fetch(`/api/music/v2/playlists/${playlistId}/songs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          playlistId,
           song: {
-            platform: song.platform,
-            id: song.id,
+            source: song.platform,
+            songId: song.id,
             name: song.name,
             artist: song.artist,
             album: song.album,
-            pic: song.pic,
-            duration: song.duration || 0,
+            cover: song.pic,
+            durationSec: song.duration || 0,
           },
         }),
       });
@@ -206,9 +252,9 @@ export default function AddToPlaylistModal({
                 <button
                   onClick={handleCreatePlaylist}
                   disabled={creating}
-                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-zinc-700 text-white rounded-lg transition-colors"
+                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-zinc-700 text-white rounded-lg transition-colors flex items-center justify-center"
                 >
-                  {creating ? '创建中...' : '确定'}
+                  {creating ? <MusicLoadingIndicator size="sm" className="gap-2 text-white" /> : '确定'}
                 </button>
                 <button
                   onClick={() => {
@@ -226,7 +272,7 @@ export default function AddToPlaylistModal({
 
           {/* Playlists List */}
           {loading ? (
-            <div className="text-center py-8 text-zinc-400">加载中...</div>
+            <MusicLoadingIndicator className="py-8" />
           ) : playlists.length === 0 ? (
             <div className="text-center py-8 text-zinc-400">
               还没有歌单，创建一个吧
@@ -260,10 +306,7 @@ export default function AddToPlaylistModal({
                     )}
                   </div>
                   {addingToPlaylistId === playlist.id ? (
-                    <svg className="w-5 h-5 text-green-500 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                    <MusicLoadingIndicator size="sm" className="gap-1" />
                   ) : (
                     <svg className="w-5 h-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

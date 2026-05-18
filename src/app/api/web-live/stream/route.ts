@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireFeaturePermission } from '@/lib/permissions';
+
 function getAntiCode(oldAntiCode: string, streamName: string): string {
   const paramsT = 100;
   const sdkVersion = 2403051612;
@@ -206,6 +208,8 @@ async function getDouyinStream(roomId: string) {
 
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'web_live', '无权限访问网络直播');
+    if (authResult instanceof NextResponse) return authResult;
     const { searchParams } = new URL(request.url);
     const platform = searchParams.get('platform');
     const roomId = searchParams.get('roomId');

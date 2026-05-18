@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
+import { getDanmakuApiBaseUrl } from '@/lib/danmaku/config';
 
 export const runtime = 'nodejs';
 
@@ -25,13 +26,7 @@ export async function POST(request: NextRequest) {
 
     // 从数据库读取弹幕配置
     const config = await getConfig();
-    const { DanmakuApiBase, DanmakuApiToken } = config.SiteConfig;
-
-    // 构建 API URL
-    const baseUrl =
-      DanmakuApiToken === '87654321'
-        ? DanmakuApiBase
-        : `${DanmakuApiBase}/${DanmakuApiToken}`;
+    const baseUrl = getDanmakuApiBaseUrl(config.SiteConfig);
 
     const apiUrl = `${baseUrl}/api/v2/match`;
 

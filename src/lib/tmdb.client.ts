@@ -703,3 +703,47 @@ export async function getTMDBCredits(
     return { code: 500, credits: null };
   }
 }
+
+/**
+ * 获取 TMDB 图片信息
+ * @param apiKey - TMDB API Key
+ * @param mediaId - 媒体ID
+ * @param mediaType - 媒体类型 (movie 或 tv)
+ * @param proxy - 代理服务器地址
+ * @param reverseProxyBaseUrl - 反代 Base URL
+ * @returns 图片信息
+ */
+export async function getTMDBImages(
+  apiKey: string,
+  mediaId: number,
+  mediaType: 'movie' | 'tv',
+  proxy?: string,
+  reverseProxyBaseUrl?: string
+): Promise<{ code: number; images: any }> {
+  try {
+    const actualKey = getNextApiKey(apiKey);
+    if (!actualKey) {
+      return { code: 400, images: null };
+    }
+
+    const baseUrl = reverseProxyBaseUrl || DEFAULT_TMDB_BASE_URL;
+    const url = `${baseUrl}/3/${mediaType}/${mediaId}/images?api_key=${actualKey}`;
+
+    const response = await universalFetch(url, proxy);
+
+    if (!response.ok) {
+      console.error('TMDB Images API 请求失败:', response.status, response.statusText);
+      return { code: response.status, images: null };
+    }
+
+    const data: any = await response.json();
+
+    return {
+      code: 200,
+      images: data,
+    };
+  } catch (error) {
+    console.error('获取 TMDB 图片信息失败:', error);
+    return { code: 500, images: null };
+  }
+}

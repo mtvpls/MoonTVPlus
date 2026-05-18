@@ -1,0 +1,2 @@
+# 强制所有文本文件在仓库中用 LF
+* text=auto eol=lf

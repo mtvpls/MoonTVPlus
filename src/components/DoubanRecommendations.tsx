@@ -7,6 +7,12 @@ import { useEnableComments } from '@/hooks/useEnableComments';
 import ScrollableRow from '@/components/ScrollableRow';
 import VideoCard from '@/components/VideoCard';
 
+import {
+  getRecommendationCache,
+  recommendationCacheKeys,
+  setRecommendationCache,
+} from '@/lib/recommendations/cache';
+
 interface DoubanRecommendation {
   doubanId: string;
   title: string;
@@ -31,25 +37,14 @@ export default function DoubanRecommendations({ doubanId }: DoubanRecommendation
       setLoading(true);
       setError(null);
 
-      // 检查localStorage缓存
-      const cacheKey = `douban_recommendations_${doubanId}`;
-      const cached = localStorage.getItem(cacheKey);
+      const cacheKey = recommendationCacheKeys.doubanRecommendations(doubanId);
+      const cached = getRecommendationCache<DoubanRecommendation[]>(cacheKey);
 
       if (cached) {
-        try {
-          const { data, timestamp } = JSON.parse(cached);
-          const cacheAge = Date.now() - timestamp;
-          const cacheMaxAge = 7 * 24 * 60 * 60 * 1000; // 7天
-
-          if (cacheAge < cacheMaxAge) {
-            console.log('使用缓存的推荐数据');
-            setRecommendations(data);
-            setLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.error('解析缓存失败:', e);
-        }
+        console.log('使用缓存的推荐数据');
+        setRecommendations(cached);
+        setLoading(false);
+        return;
       }
 
       const response = await fetch(
@@ -66,15 +61,7 @@ export default function DoubanRecommendations({ doubanId }: DoubanRecommendation
       const recommendationsData = result.recommendations || [];
       setRecommendations(recommendationsData);
 
-      // 保存到localStorage
-      try {
-        localStorage.setItem(cacheKey, JSON.stringify({
-          data: recommendationsData,
-          timestamp: Date.now()
-        }));
-      } catch (e) {
-        console.error('保存缓存失败:', e);
-      }
+      setRecommendationCache(cacheKey, recommendationsData);
     } catch (err) {
       console.error('获取推荐失败:', err);
       setError(err instanceof Error ? err.message : '获取推荐失败');

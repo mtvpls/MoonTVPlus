@@ -56,8 +56,8 @@ function OIDCRegisterPageClient() {
       });
 
       if (res.ok) {
-        // 注册成功,跳转到首页
-        router.replace('/');
+        // 注册成功，接口已写入认证 cookie，这里用整页跳转确保权限配置和登录态完全重建
+        window.location.replace('/');
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.error || '注册失败');

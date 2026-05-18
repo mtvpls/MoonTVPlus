@@ -57,9 +57,14 @@ public/workbox-*.js
 public/workbox-*.js.map
 
 /.claude
+/.codex
 /.vscode
 # SQLite 开发数据库
 .data/
 *.db
 *.db-shm
 *.db-wal
+
+# local scripts
+scripts/tvbox/
+scripts/test

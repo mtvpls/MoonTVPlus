@@ -6,13 +6,145 @@ import { checkAnimeSubscriptions } from '@/lib/anime-subscription';
 import { getConfig, refineConfig } from '@/lib/config';
 import { db, getStorage } from '@/lib/db';
 import { EmailService } from '@/lib/email.service';
-import { FavoriteUpdate,getBatchFavoriteUpdateEmailTemplate } from '@/lib/email.templates';
+import {
+  FavoriteUpdate,
+  getBatchFavoriteUpdateEmailTemplate,
+  getBatchMangaUpdateEmailTemplate,
+  MangaShelfUpdate,
+} from '@/lib/email.templates';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
-import { refreshLiveChannels } from '@/lib/live';
+import {
+  getLastGlobalLiveRefreshTime,
+  getLiveRefreshIntervalHours,
+  refreshLiveChannels,
+  setLastGlobalLiveRefreshTime,
+} from '@/lib/live';
+import { MangaChapter, MangaShelfItem } from '@/lib/manga.types';
 import { startOpenListRefresh } from '@/lib/openlist-refresh';
+import { getSuwayomiConfig, loginWithSimpleAuth, SuwayomiClient } from '@/lib/suwayomi.client';
 import { SearchResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
+const MAX_INLINE_MANGA_COVERS = 3;
+const MAX_INLINE_MANGA_COVER_BYTES = 350 * 1024;
+const TARGET_INLINE_MANGA_COVER_WIDTH = 480;
+
+function buildSuwayomiBasicAuthHeader(username: string, password: string): string {
+  return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+}
+
+async function fetchMangaCoverAsDataUri(coverUrl?: string): Promise<string | undefined> {
+  if (!coverUrl) return undefined;
+
+  try {
+    let requestUrl = coverUrl;
+    let headers: HeadersInit | undefined;
+
+    if (!/^https?:\/\//i.test(coverUrl)) {
+      if (!coverUrl.startsWith('/api/manga/image?')) {
+        return undefined;
+      }
+
+      const config = await getSuwayomiConfig();
+      const parsedProxyUrl = new URL(`http://localhost${coverUrl}`);
+      const rawPath = parsedProxyUrl.searchParams.get('path')?.trim();
+      if (!rawPath) return undefined;
+
+      if (/^https?:\/\//i.test(rawPath)) {
+        const target = new URL(rawPath);
+        const base = new URL(config.serverBaseUrl);
+        if (target.origin !== base.origin) {
+          return undefined;
+        }
+        requestUrl = target.toString();
+      } else {
+        requestUrl = `${config.serverBaseUrl}${rawPath.startsWith('/') ? rawPath : `/${rawPath}`}`;
+      }
+
+      if (config.authMode === 'basic_auth') {
+        if (!config.username || !config.password) return undefined;
+        headers = new Headers({
+          Authorization: buildSuwayomiBasicAuthHeader(config.username, config.password),
+        });
+      } else if (config.authMode === 'simple_login') {
+        headers = new Headers({
+          Cookie: await loginWithSimpleAuth(config),
+        });
+      }
+    }
+
+    const response = await fetch(requestUrl, {
+      headers,
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    if (!contentType.startsWith('image/')) {
+      return undefined;
+    }
+
+    let buffer = Buffer.from(await response.arrayBuffer());
+    if (!buffer.length) {
+      return undefined;
+    }
+
+    let finalContentType = contentType;
+
+    if (buffer.length > MAX_INLINE_MANGA_COVER_BYTES) {
+      const sharp = (await import('sharp')).default;
+      const transformer = sharp(buffer, { failOn: 'none' }).rotate().resize({
+        width: TARGET_INLINE_MANGA_COVER_WIDTH,
+        withoutEnlargement: true,
+      });
+      const metadata = await transformer.metadata();
+
+      if (metadata.hasAlpha) {
+        buffer = await transformer.png({
+          compressionLevel: 9,
+          palette: true,
+          quality: 80,
+          effort: 10,
+        }).toBuffer();
+        finalContentType = 'image/png';
+      } else {
+        const qualities = [72, 60, 48];
+        let compressed: Buffer | null = null;
+        for (const quality of qualities) {
+          const next = await sharp(buffer, { failOn: 'none' })
+            .rotate()
+            .resize({
+              width: TARGET_INLINE_MANGA_COVER_WIDTH,
+              withoutEnlargement: true,
+            })
+            .jpeg({
+              quality,
+              mozjpeg: true,
+            })
+            .toBuffer();
+          compressed = next;
+          if (next.length <= MAX_INLINE_MANGA_COVER_BYTES) {
+            break;
+          }
+        }
+        buffer = compressed || buffer;
+        finalContentType = 'image/jpeg';
+      }
+    }
+
+    if (buffer.length > MAX_INLINE_MANGA_COVER_BYTES) {
+      return undefined;
+    }
+
+    return `data:${finalContentType};base64,${buffer.toString('base64')}`;
+  } catch (error) {
+    console.warn('漫画封面转 base64 失败:', error);
+    return undefined;
+  }
+}
 
 // 内存中记录最后执行时间（毫秒时间戳）
 let lastExecutionTime = 0;
@@ -109,6 +241,17 @@ async function cronJob() {
 
 async function refreshAllLiveChannels() {
   const config = await getConfig();
+  const refreshIntervalHours = getLiveRefreshIntervalHours(config.LiveRefreshIntervalHours);
+  const lastRefreshTime = getLastGlobalLiveRefreshTime();
+  const now = Date.now();
+  const intervalMs = refreshIntervalHours * 60 * 60 * 1000;
+  const timeSinceLastRefresh = now - lastRefreshTime;
+
+  if (lastRefreshTime > 0 && timeSinceLastRefresh < intervalMs) {
+    const remainingHours = Math.ceil((intervalMs - timeSinceLastRefresh) / (60 * 60 * 1000));
+    console.log(`跳过刷新电视直播：距离上次刷新仅 ${Math.floor(timeSinceLastRefresh / (60 * 60 * 1000))} 小时，还需等待 ${remainingHours} 小时`);
+    return;
+  }
 
   // 并发刷新所有启用的直播源
   const refreshPromises = (config.LiveConfig || [])
@@ -125,6 +268,8 @@ async function refreshAllLiveChannels() {
 
   // 等待所有刷新任务完成
   await Promise.all(refreshPromises);
+
+  setLastGlobalLiveRefreshTime(Date.now());
 
   // 保存配置
   await db.saveAdminConfig(config);
@@ -200,6 +345,11 @@ async function refreshRecordAndFavorites() {
 
     // 函数级缓存：key 为 `${source}+${id}`，值为 Promise<VideoDetail | null>
     const detailCache = new Map<string, Promise<SearchResult | null>>();
+    const mangaDetailCache = new Map<
+      string,
+      Promise<{ chapters: MangaChapter[]; shelfItem: Partial<MangaShelfItem> } | null>
+    >();
+    const suwayomiClient = new SuwayomiClient();
 
     // 获取详情 Promise（带缓存和错误处理）
     const getDetail = async (
@@ -226,6 +376,55 @@ async function refreshRecordAndFavorites() {
             return null;
           });
         detailCache.set(key, promise);
+      }
+      return promise;
+    };
+
+    const getMangaDetail = async (
+      item: MangaShelfItem
+    ): Promise<{ chapters: MangaChapter[]; shelfItem: Partial<MangaShelfItem> } | null> => {
+      const key = `${item.sourceId}+${item.mangaId}`;
+      let promise = mangaDetailCache.get(key);
+      if (!promise) {
+        promise = suwayomiClient
+          .getMangaDetail({
+            mangaId: item.mangaId,
+            sourceId: item.sourceId,
+            title: item.title,
+            cover: item.cover,
+            sourceName: item.sourceName,
+            description: item.description,
+            author: item.author,
+            status: item.status,
+          })
+          .then((detail) => {
+            const chapters = [...(detail.chapters || [])].sort((a, b) => {
+              const diff = (a.chapterNumber || 0) - (b.chapterNumber || 0);
+              if (diff !== 0) return diff;
+              return a.id.localeCompare(b.id);
+            });
+
+            const latestChapter = chapters[chapters.length - 1];
+            return {
+              chapters,
+              shelfItem: {
+                title: detail.title || item.title,
+                cover: detail.cover || item.cover,
+                description: detail.description || item.description,
+                author: detail.author || item.author,
+                status: detail.status || item.status,
+                latestChapterId: latestChapter?.id,
+                latestChapterName: latestChapter?.name,
+                latestChapterCount: chapters.length,
+              },
+            };
+          })
+          .catch((err) => {
+            console.error(`获取漫画详情失败 (${key}):`, err);
+            mangaDetailCache.delete(key);
+            return null;
+          });
+        mangaDetailCache.set(key, promise);
       }
       return promise;
     };
@@ -428,6 +627,151 @@ async function refreshRecordAndFavorites() {
         }
       } catch (err) {
         console.error(`获取用户收藏失败 (${user}):`, err);
+      }
+
+      // 漫画书架
+      try {
+        const shelf = await db.getAllMangaShelf(user);
+        const totalShelfItems = Object.keys(shelf).length;
+        let processedShelfItems = 0;
+        const now = Date.now();
+        const mangaUpdates: MangaShelfUpdate[] = [];
+        let inlinedCoverCount = 0;
+
+        for (const [key, item] of Object.entries(shelf)) {
+          try {
+            const detail = await getMangaDetail(item);
+            if (!detail) {
+              continue;
+            }
+
+            const latestChapterCount = detail.chapters.length;
+            const previousChapterCount = item.latestChapterCount;
+            const latestChapterId = detail.shelfItem.latestChapterId;
+            const latestChapterName = detail.shelfItem.latestChapterName;
+            const baseItem: MangaShelfItem = {
+              ...item,
+              ...detail.shelfItem,
+            };
+
+            if (!latestChapterId || latestChapterCount <= 0) {
+              await db.saveMangaShelf(user, item.sourceId, item.mangaId, {
+                ...baseItem,
+                unreadChapterCount: item.unreadChapterCount ?? 0,
+              });
+              processedShelfItems++;
+              continue;
+            }
+
+            // 首次为老数据补齐基线，不触发通知
+            if (!previousChapterCount || !item.latestChapterId) {
+              await db.saveMangaShelf(user, item.sourceId, item.mangaId, {
+                ...baseItem,
+                latestChapterId,
+                latestChapterName,
+                latestChapterCount,
+                unreadChapterCount: item.unreadChapterCount ?? 0,
+              });
+              processedShelfItems++;
+              continue;
+            }
+
+            const addedChapters = latestChapterCount - previousChapterCount;
+            const hasNewChapters = addedChapters > 0 && latestChapterId !== item.latestChapterId;
+            const nextUnreadChapterCount = hasNewChapters
+              ? Math.max((item.unreadChapterCount || 0) + addedChapters, 0)
+              : item.unreadChapterCount ?? 0;
+
+            const nextItem: MangaShelfItem = {
+              ...baseItem,
+              latestChapterId,
+              latestChapterName,
+              latestChapterCount,
+              unreadChapterCount: nextUnreadChapterCount,
+            };
+
+            if (hasNewChapters) {
+              await storage.addNotification(user, {
+                id: `manga_update_${item.sourceId}_${item.mangaId}_${now}`,
+                type: 'manga_update',
+                title: '漫画更新',
+                message: `《${item.title}》新增 ${addedChapters} 话，已更新至 ${latestChapterName || '最新章节'}`,
+                timestamp: now,
+                read: false,
+                metadata: {
+                  sourceId: item.sourceId,
+                  mangaId: item.mangaId,
+                  title: item.title,
+                  cover: detail.shelfItem.cover || item.cover,
+                  sourceName: item.sourceName,
+                  latestChapterId,
+                  latestChapterName,
+                  unreadChapterCount: nextUnreadChapterCount,
+                },
+              });
+
+              const inlineCover =
+                inlinedCoverCount < MAX_INLINE_MANGA_COVERS
+                  ? await fetchMangaCoverAsDataUri(detail.shelfItem.cover || item.cover)
+                  : undefined;
+              if (inlineCover) {
+                inlinedCoverCount++;
+              }
+
+              mangaUpdates.push({
+                title: item.title,
+                previousChapterCount,
+                latestChapterCount,
+                latestChapterName,
+                url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/manga/detail?mangaId=${encodeURIComponent(item.mangaId)}&sourceId=${encodeURIComponent(item.sourceId)}&title=${encodeURIComponent(item.title)}&cover=${encodeURIComponent(detail.shelfItem.cover || item.cover || '')}&sourceName=${encodeURIComponent(item.sourceName)}`,
+                cover: inlineCover,
+              });
+            }
+
+            await db.saveMangaShelf(user, item.sourceId, item.mangaId, nextItem);
+            processedShelfItems++;
+          } catch (err) {
+            console.error(`处理漫画书架失败 (${key}):`, err);
+          }
+        }
+
+        console.log(`漫画书架处理完成: ${processedShelfItems}/${totalShelfItems}`);
+
+        if (mangaUpdates.length > 0) {
+          (async () => {
+            try {
+              const userEmail = storage.getUserEmail ? await storage.getUserEmail(user) : null;
+              const emailNotifications = storage.getEmailNotificationPreference
+                ? await storage.getEmailNotificationPreference(user)
+                : false;
+
+              if (userEmail && emailNotifications) {
+                const config = await getConfig();
+                const emailConfig = config?.EmailConfig;
+
+                if (emailConfig?.enabled) {
+                  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+                  const siteName = config?.SiteConfig?.SiteName || 'MoonTVPlus';
+
+                  await EmailService.send(emailConfig, {
+                    to: userEmail,
+                    subject: `漫画书架更新汇总 - ${mangaUpdates.length} 部漫画有新章节`,
+                    html: getBatchMangaUpdateEmailTemplate(
+                      user,
+                      mangaUpdates,
+                      siteUrl,
+                      siteName
+                    ),
+                  });
+                }
+              }
+            } catch (emailError) {
+              console.error(`发送漫画更新邮件失败 (${user}):`, emailError);
+            }
+          })().catch((err) => console.error(`漫画更新邮件异步任务失败 (${user}):`, err));
+        }
+      } catch (err) {
+        console.error(`获取用户漫画书架失败 (${user}):`, err);
       }
     };
 

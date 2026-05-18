@@ -5,12 +5,15 @@ import { randomUUID } from 'crypto';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { requireFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
 // GET - 获取用户的所有歌单
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'music', '无权限访问音乐功能');
+    if (authResult instanceof NextResponse) return authResult;
     // 从 cookie 获取用户信息
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
@@ -43,6 +46,8 @@ export async function GET(request: NextRequest) {
 // POST - 创建新歌单
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'music', '无权限访问音乐功能');
+    if (authResult instanceof NextResponse) return authResult;
     // 从 cookie 获取用户信息
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
@@ -93,6 +98,8 @@ export async function POST(request: NextRequest) {
 // PUT - 更新歌单信息
 export async function PUT(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'music', '无权限访问音乐功能');
+    if (authResult instanceof NextResponse) return authResult;
     // 从 cookie 获取用户信息
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
@@ -151,6 +158,8 @@ export async function PUT(request: NextRequest) {
 // DELETE - 删除歌单
 export async function DELETE(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'music', '无权限访问音乐功能');
+    if (authResult instanceof NextResponse) return authResult;
     // 从 cookie 获取用户信息
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {

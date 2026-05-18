@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireFeaturePermission } from '@/lib/permissions';
 import { getConfig } from '@/lib/config';
 import { PansouLink, searchPansou } from '@/lib/pansou.client';
 
@@ -9,6 +10,13 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(
+      request,
+      'netdisk_search',
+      '无权限使用网盘搜索'
+    );
+    if (authResult instanceof NextResponse) return authResult;
+
     const body = await request.json();
     const { keyword } = body;
 

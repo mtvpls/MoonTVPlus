@@ -1,12 +1,15 @@
 /* eslint-disable no-console */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
 // 代理音频流
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'music', '无权限访问音乐功能');
+    if (authResult instanceof NextResponse) return authResult;
     const { searchParams } = new URL(request.url);
     const url = searchParams.get('url');
 

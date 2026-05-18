@@ -17,8 +17,10 @@ export interface AdminConfig {
     DisableYellowFilter: boolean;
     FluidSearch: boolean;
     // 弹幕配置
+    DanmakuSourceType?: 'builtin' | 'custom';
     DanmakuApiBase: string;
     DanmakuApiToken: string;
+    DanmakuAutoLoadDefault?: boolean; // 是否默认自动加载弹幕（用户可在本地覆盖）
     // TMDB配置
     TMDBApiKey?: string;
     TMDBProxy?: string;
@@ -30,6 +32,11 @@ export interface AdminConfig {
     PansouUsername?: string;
     PansouPassword?: string;
     PansouKeywordBlocklist?: string;
+    // 磁链配置
+    MagnetProxy?: string;
+    MagnetMikanReverseProxy?: string;
+    MagnetDmhyReverseProxy?: string;
+    MagnetAcgripReverseProxy?: string;
     // 评论功能开关
     EnableComments: boolean;
     // 自定义去广告代码
@@ -37,6 +44,8 @@ export interface AdminConfig {
     CustomAdFilterVersion?: number; // 代码版本号（时间戳）
     // 注册相关配置
     EnableRegistration?: boolean; // 开启注册
+    RequireRegistrationInviteCode?: boolean; // 注册时要求邀请码
+    RegistrationInviteCode?: string; // 通用注册邀请码
     RegistrationRequireTurnstile?: boolean; // 注册启用Cloudflare Turnstile
     LoginRequireTurnstile?: boolean; // 登录启用Cloudflare Turnstile
     TurnstileSiteKey?: string; // Cloudflare Turnstile Site Key
@@ -68,6 +77,7 @@ export interface AdminConfig {
     Tags?: {
       name: string;
       enabledApis: string[];
+      permissions?: string[];
     }[];
   };
   SourceConfig: {
@@ -87,6 +97,7 @@ export interface AdminConfig {
     from: 'config' | 'custom';
     disabled?: boolean;
   }[];
+  LiveRefreshIntervalHours?: number; // 电视直播全局刷新间隔（小时），默认12小时
   LiveConfig?: {
     key: string;
     name: string;
@@ -116,6 +127,7 @@ export interface AdminConfig {
     cacheVersion: number; // CSS版本号（用于缓存控制）
     loginBackgroundImage?: string; // 登录界面背景图
     registerBackgroundImage?: string; // 注册界面背景图
+    homeBackgroundImage?: string; // 首页背景图
     // 进度条图标配置
     progressThumbType?: 'default' | 'preset' | 'custom'; // 图标类型
     progressThumbPresetId?: string; // 预制图标ID
@@ -134,6 +146,41 @@ export interface AdminConfig {
     ScanInterval?: number; // 定时扫描间隔（分钟），0表示关闭，最低60分钟
     ScanMode?: 'torrent' | 'name' | 'hybrid'; // 扫描模式：torrent=种子库匹配，name=名字匹配，hybrid=混合模式（默认）
     DisableVideoPreview?: boolean; // 禁用预览视频，直接返回直连链接
+  };
+  NetDiskConfig?: {
+    Quark?: {
+      Enabled: boolean;
+      Cookie: string;
+      SavePath: string;
+    };
+    Mobile?: {
+      Enabled: boolean;
+      Authorization: string;
+    };
+    Baidu?: {
+      Enabled: boolean;
+      Cookie: string;
+    };
+    Tianyi?: {
+      Enabled: boolean;
+      Account: string;
+      Password: string;
+    };
+    Pan123?: {
+      Enabled: boolean;
+      Account: string;
+      Password: string;
+    };
+    UC?: {
+      Enabled: boolean;
+      Cookie: string;
+      Token?: string;
+      SavePath: string;
+    };
+    Pan115?: {
+      Enabled: boolean;
+      Cookie: string;
+    };
   };
   AIConfig?: {
     Enabled: boolean; // 是否启用AI问片功能
@@ -171,8 +218,6 @@ export interface AdminConfig {
     EnableVideoCardEntry: boolean; // VideoCard入口开关
     EnablePlayPageEntry: boolean; // 播放页入口开关
     EnableAIComments: boolean; // AI评论生成开关
-    // 权限控制
-    AllowRegularUsers: boolean; // 是否允许普通用户使用AI问片（关闭后仅站长和管理员可用）
     // 高级设置
     Temperature?: number; // AI温度参数（0-2），默认0.7
     MaxTokens?: number; // 最大回复token数，默认1000
@@ -225,6 +270,34 @@ export interface AdminConfig {
     Password?: string; // 密码认证（备选）
     DisableVideoPreview?: boolean; // 禁用预览视频，直接返回直连链接
   };
+  SuwayomiConfig?: {
+    Enabled: boolean; // 是否启用漫画展馆
+    ServerURL: string; // Suwayomi 服务地址
+    AuthMode?: 'none' | 'basic_auth' | 'simple_login'; // 认证模式
+    Username?: string; // 登录用户名
+    Password?: string; // 登录密码
+    DefaultLang?: string; // 默认语言，如 zh
+    SourceIds?: string[]; // 限制可用源
+    MaxSources?: number; // 搜索时最多查询多少个源
+  };
+  OPDSConfig?: {
+    Enabled: boolean; // 是否启用电子书馆
+    Sources?: Array<{
+      id: string;
+      name: string;
+      url: string;
+      enabled?: boolean;
+      authMode?: 'none' | 'basic' | 'header';
+      username?: string;
+      password?: string;
+      headerName?: string;
+      headerValue?: string;
+      searchTemplate?: string;
+      preferFormat?: Array<'epub' | 'pdf'>;
+      language?: string;
+    }>;
+    CacheTTL?: number;
+  };
   EmailConfig?: {
     enabled: boolean; // 是否启用邮件通知
     provider: 'smtp' | 'resend'; // 邮件发送方式
@@ -244,17 +317,16 @@ export interface AdminConfig {
     };
   };
   MusicConfig?: {
-    // TuneHub音乐配置
-    TuneHubEnabled?: boolean; // 启用音乐功能
-    TuneHubBaseUrl?: string; // TuneHub API地址
-    TuneHubApiKey?: string; // TuneHub API Key
-    // OpenList缓存配置
-    OpenListCacheEnabled?: boolean; // 启用OpenList缓存
-    OpenListCacheURL?: string; // OpenList服务器地址
-    OpenListCacheUsername?: string; // OpenList用户名
-    OpenListCachePassword?: string; // OpenList密码
-    OpenListCachePath?: string; // OpenList缓存目录路径
-    OpenListCacheProxyEnabled?: boolean; // 启用缓存代理返回（默认开启）
+    Enabled?: boolean; // 启用音乐功能
+    BaseUrl?: string; // lxserver 地址
+    Token?: string; // lxserver x-user-token
+    ProxyEnabled?: boolean; // 是否走 stream 代理
+    OpenListCacheEnabled?: boolean;
+    OpenListCacheURL?: string;
+    OpenListCacheUsername?: string;
+    OpenListCachePassword?: string;
+    OpenListCachePath?: string;
+    OpenListCacheProxyEnabled?: boolean;
   };
   AnimeSubscriptionConfig?: {
     Enabled: boolean; // 是否启用追番功能

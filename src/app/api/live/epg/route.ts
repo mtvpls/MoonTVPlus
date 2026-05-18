@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getCachedLiveChannels } from '@/lib/live';
+import { requireFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'live', '无权限访问电视直播');
+    if (authResult instanceof NextResponse) return authResult;
     const { searchParams } = new URL(request.url);
     const sourceKey = searchParams.get('source');
     const tvgId = searchParams.get('tvgId');

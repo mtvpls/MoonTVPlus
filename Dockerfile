@@ -45,11 +45,14 @@ ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV DOCKER_ENV=true
+ENV SQLITE_DB_PATH=/app/.data/moontv.db
 
 # 从构建器中复制 standalone 输出
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # 从构建器中复制 scripts 目录
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+# 从构建器中复制 migrations 目录
+COPY --from=builder --chown=nextjs:nodejs /app/migrations ./migrations
 # 从构建器中复制 start.js
 COPY --from=builder --chown=nextjs:nodejs /app/start.js ./start.js
 # 从构建器中复制自定义 server.js（包含 Socket.IO 支持）
@@ -58,8 +61,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# 从构建器中复制生产依赖（包含 Socket.IO）
+# 从构建器中复制生产依赖（包含 Socket.IO / better-sqlite3）
 COPY --from=builder --chown=nextjs:nodejs /tmp/prod-deps/node_modules ./node_modules
+
+# 准备 SQLite 数据目录
+RUN mkdir -p /app/.data && chown -R nextjs:nodejs /app/.data
 
 # 切换到非特权用户
 USER nextjs
@@ -67,4 +73,4 @@ USER nextjs
 EXPOSE 3000
 
 # 使用自定义启动脚本，先预加载配置再启动服务器
-CMD ["node", "start.js"] 
+CMD ["node", "start.js"]

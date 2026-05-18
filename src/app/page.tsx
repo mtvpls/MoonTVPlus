@@ -2,9 +2,8 @@
 
 'use client';
 
-import { Bot, ChevronRight, Link as LinkIcon, ListVideo, Music } from 'lucide-react';
+import { BookMarked, BookOpen, Bot, ChevronRight, Link as LinkIcon, ListVideo, Music } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 import {
@@ -24,6 +23,7 @@ import HttpWarningDialog from '@/components/HttpWarningDialog';
 import PageLayout from '@/components/PageLayout';
 import ScrollableRow from '@/components/ScrollableRow';
 import { useSite } from '@/components/SiteProvider';
+import Toast, { ToastProps } from '@/components/Toast';
 import VideoCard from '@/components/VideoCard';
 
 // 首页模块配置接口
@@ -46,8 +46,6 @@ function HomeClient() {
   >([]);
   const [loading, setLoading] = useState(true);
   const { announcement } = useSite();
-  const router = useRouter();
-
   // 首页模块配置状态
   const [homeModules, setHomeModules] = useState<HomeModule[]>([
     { id: 'hotMovies', name: '热门电影', enabled: true, order: 0 },
@@ -67,22 +65,159 @@ function HomeClient() {
   const [aiDefaultMessageNoVideo, setAiDefaultMessageNoVideo] = useState('你好！我是MoonTVPlus的AI影视助手。想看什么电影或剧集？需要推荐吗？');
   const [sourceSearchEnabled, setSourceSearchEnabled] = useState(true);
   const [musicEnabled, setMusicEnabled] = useState(false);
+  const [mangaEnabled, setMangaEnabled] = useState(false);
+  const [booksEnabled, setBooksEnabled] = useState(false);
   const [showDirectPlayDialog, setShowDirectPlayDialog] = useState(false);
   const [directPlayUrl, setDirectPlayUrl] = useState('');
+  const [directPlaySubmitting, setDirectPlaySubmitting] = useState(false);
+  const [toast, setToast] = useState<ToastProps | null>(null);
+
+  const detectNetdiskLink = (url: string): {
+    provider: 'quark' | 'mobile' | 'baidu' | 'tianyi' | '123' | 'uc' | '115';
+    shareUrl: string;
+    passcode?: string;
+  } | null => {
+    const trimmed = url.trim();
+
+    const pickPasscode = (...values: Array<string | undefined>) =>
+      values.map((item) => item?.trim()).find(Boolean);
+
+    const inlinePasscode = (text: string) =>
+      pickPasscode(
+        text.match(/(?:提取码|访问码|密码)\s*[:：=]?\s*([a-zA-Z0-9]{4,8})/i)?.[1],
+        text.match(/[?&](?:pwd|passcode|accessCode)=([^&\s]+)/i)?.[1]
+      );
+
+    if (/https:\/\/(?:www\.)?123(?:684|865|912|pan)\.(?:com|cn)\/s\//i.test(trimmed)) {
+      return {
+        provider: '123',
+        shareUrl: trimmed,
+        passcode: pickPasscode(
+          trimmed.match(/[?&]pwd=([^&]+)/i)?.[1],
+          inlinePasscode(trimmed)
+        ),
+      };
+    }
+
+    if (/https:\/\/cloud\.189\.cn\/(web\/share\?code=|t\/)/i.test(trimmed) || /https:\/\/h5\.cloud\.189\.cn\/share\.html#\/t\//i.test(trimmed)) {
+      return {
+        provider: 'tianyi',
+        shareUrl: trimmed,
+        passcode: pickPasscode(
+          trimmed.match(/[?&]pwd=([^&]+)/i)?.[1],
+          inlinePasscode(trimmed)
+        ),
+      };
+    }
+
+    if (/pan\.baidu\.com\/(s\/|wap\/init\?surl=)/i.test(trimmed)) {
+      return {
+        provider: 'baidu',
+        shareUrl: trimmed,
+        passcode: pickPasscode(
+          trimmed.match(/[?&](?:pwd|accessCode)=([^&]+)/i)?.[1],
+          inlinePasscode(trimmed)
+        ),
+      };
+    }
+
+    if (/https:\/\/pan\.quark\.cn\/s\//i.test(trimmed)) {
+      return {
+        provider: 'quark',
+        shareUrl: trimmed,
+        passcode: pickPasscode(
+          trimmed.match(/[?&](?:pwd|passcode)=([^&]+)/i)?.[1],
+          inlinePasscode(trimmed)
+        ),
+      };
+    }
+
+    if (/https:\/\/drive\.uc\.cn\/s\//i.test(trimmed)) {
+      return {
+        provider: 'uc',
+        shareUrl: trimmed,
+        passcode: pickPasscode(
+          trimmed.match(/[?&](?:pwd|passcode)=([^&]+)/i)?.[1],
+          inlinePasscode(trimmed)
+        ),
+      };
+    }
+
+    if (/https:\/\/(?:yun|caiyun)\.139\.com\//i.test(trimmed)) {
+      return { provider: 'mobile', shareUrl: trimmed };
+    }
+
+    if (/https:\/\/(?:115|anxia|115cdn)\.com\/s\//i.test(trimmed)) {
+      return {
+        provider: '115',
+        shareUrl: trimmed,
+        passcode: pickPasscode(
+          trimmed.match(/[?&](?:password|pwd|passcode)=([^&]+)/i)?.[1],
+          inlinePasscode(trimmed)
+        ),
+      };
+    }
+
+    return null;
+  };
 
   const handleDirectPlay = () => {
     setDirectPlayUrl('');
     setShowDirectPlayDialog(true);
   };
 
-  const submitDirectPlay = () => {
+  const submitDirectPlay = async () => {
     const trimmed = directPlayUrl.trim();
     if (!trimmed) return;
-    const encoded = base58Encode(trimmed);
-    if (!encoded) return;
-    setShowDirectPlayDialog(false);
-    setDirectPlayUrl('');
-    router.push(`/play?source=directplay&id=${encodeURIComponent(encoded)}`);
+    setDirectPlaySubmitting(true);
+    try {
+      const netdisk = detectNetdiskLink(trimmed);
+      if (netdisk) {
+        const source =
+          netdisk.provider === 'mobile'
+            ? 'netdisk-mobile'
+            : netdisk.provider === 'baidu'
+                ? 'netdisk-baidu'
+              : netdisk.provider === 'tianyi'
+                ? 'netdisk-tianyi'
+                : netdisk.provider === '115'
+                  ? 'netdisk-115'
+                : netdisk.provider === 'uc'
+                  ? 'netdisk-uc'
+                : netdisk.provider === '123'
+                  ? 'netdisk-123'
+                  : 'netdisk-quark';
+        const id = base58Encode(
+          JSON.stringify({
+            shareUrl: netdisk.shareUrl,
+            passcode: netdisk.passcode || '',
+          })
+        );
+        if (!id) {
+          throw new Error('网盘链接编码失败');
+        }
+        const targetUrl = `/play?source=${encodeURIComponent(source)}&id=${encodeURIComponent(id)}&title=${encodeURIComponent('网盘直链播放')}`;
+        setShowDirectPlayDialog(false);
+        setDirectPlayUrl('');
+        window.location.assign(targetUrl);
+        return;
+      }
+
+      const encoded = base58Encode(trimmed);
+      if (!encoded) return;
+      const targetUrl = `/play?source=directplay&id=${encodeURIComponent(encoded)}`;
+      setShowDirectPlayDialog(false);
+      setDirectPlayUrl('');
+      window.location.assign(targetUrl);
+    } catch (error) {
+      setToast({
+        message: error instanceof Error ? error.message : '播放失败',
+        type: 'error',
+        onClose: () => setToast(null),
+      });
+    } finally {
+      setDirectPlaySubmitting(false);
+    }
   };
 
   const loadHomeLayoutSettings = () => {
@@ -152,8 +287,24 @@ function HomeClient() {
   // 检查音乐功能是否启用
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const enabled = (window as any).RUNTIME_CONFIG?.TUNEHUB_ENABLED === true;
+      const enabled = !!(window as any).RUNTIME_CONFIG?.MUSIC_ENABLED;
       setMusicEnabled(enabled);
+    }
+  }, []);
+
+  // 检查漫画功能是否启用
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const enabled = !!(window as any).RUNTIME_CONFIG?.SUWAYOMI_ENABLED;
+      setMangaEnabled(enabled);
+    }
+  }, []);
+
+  // 检查电子书功能是否启用
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const enabled = !!(window as any).RUNTIME_CONFIG?.BOOKS_ENABLED;
+      setBooksEnabled(enabled);
     }
   }, []);
 
@@ -350,6 +501,13 @@ function HomeClient() {
               <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                 热播短剧
               </h2>
+              <Link
+                href='/duanju'
+                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+              >
+                查看更多
+                <ChevronRight className='w-4 h-4 ml-1' />
+              </Link>
             </div>
             <ScrollableRow>
               {loading
@@ -613,14 +771,35 @@ function HomeClient() {
                 <LinkIcon size={18} />
               </button>
 
-              {/* 音乐视听入口 */}
               {musicEnabled && (
                 <Link href='/music'>
                   <button
-                    className='p-2 rounded-lg text-green-500 hover:text-green-600 transition-colors'
+                    className='p-1.5 rounded-lg text-green-500 hover:text-green-600 transition-colors'
                     title='音乐视听'
                   >
-                    <Music size={20} />
+                    <Music size={18} />
+                  </button>
+                </Link>
+              )}
+
+              {mangaEnabled && (
+                <Link href='/manga'>
+                  <button
+                    className='p-1.5 rounded-lg text-emerald-500 hover:text-emerald-600 transition-colors'
+                    title='漫画展馆'
+                  >
+                    <BookOpen size={18} />
+                  </button>
+                </Link>
+              )}
+
+              {booksEnabled && (
+                <Link href='/books'>
+                  <button
+                    className='p-1.5 rounded-lg text-amber-500 hover:text-amber-600 transition-colors'
+                    title='电子书馆'
+                  >
+                    <BookMarked size={18} />
                   </button>
                 </Link>
               )}
@@ -720,6 +899,9 @@ function HomeClient() {
               <div className='text-sm text-gray-600 dark:text-gray-300'>
                 请输入可直接播放的视频链接。
               </div>
+              <div className='text-xs text-gray-500 dark:text-gray-400'>
+                支持夸克、UC、百度、天翼、移动、123、115 网盘在线播放。
+              </div>
               <input
                 value={directPlayUrl}
                 onChange={(event) => setDirectPlayUrl(event.target.value)}
@@ -740,16 +922,18 @@ function HomeClient() {
                 </button>
                 <button
                   onClick={submitDirectPlay}
-                  disabled={!directPlayUrl.trim()}
+                  disabled={!directPlayUrl.trim() || directPlaySubmitting}
                   className='px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                 >
-                  开始播放
+                  {directPlaySubmitting ? '处理中...' : '开始播放'}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {toast && <Toast {...toast} />}
     </PageLayout>
   );
 }

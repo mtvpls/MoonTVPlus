@@ -4,11 +4,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getCachedEmbyViews, setCachedEmbyViews } from '@/lib/emby-cache';
 import { embyManager } from '@/lib/emby-manager';
+import { requireFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'emby', '无权限访问 Emby');
+    if (authResult instanceof NextResponse) return authResult;
     const { searchParams } = new URL(request.url);
     const embyKey = searchParams.get('embyKey') || undefined;
 

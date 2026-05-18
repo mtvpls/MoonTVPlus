@@ -73,6 +73,7 @@ function RegisterPageClient() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -108,6 +109,7 @@ function RegisterPageClient() {
       // 设置站点配置
       const config = {
         EnableRegistration: runtimeConfig?.ENABLE_REGISTRATION || false,
+        RequireRegistrationInviteCode: runtimeConfig?.REQUIRE_REGISTRATION_INVITE_CODE || false,
         RegistrationRequireTurnstile: runtimeConfig?.REGISTRATION_REQUIRE_TURNSTILE || false,
         TurnstileSiteKey: runtimeConfig?.TURNSTILE_SITE_KEY || '',
       };
@@ -167,6 +169,11 @@ function RegisterPageClient() {
       return;
     }
 
+    if (siteConfig?.RequireRegistrationInviteCode && !inviteCode.trim()) {
+      setError('请输入邀请码');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('两次输入的密码不一致');
       return;
@@ -191,6 +198,7 @@ function RegisterPageClient() {
         body: JSON.stringify({
           username,
           password,
+          inviteCode: siteConfig?.RequireRegistrationInviteCode ? inviteCode.trim() : undefined,
           turnstileToken: siteConfig?.RegistrationRequireTurnstile ? turnstileToken : undefined,
         }),
       });
@@ -340,6 +348,27 @@ function RegisterPageClient() {
             </div>
           </div>
 
+          {siteConfig?.RequireRegistrationInviteCode && (
+            <div>
+              <label htmlFor='inviteCode' className='sr-only'>
+                邀请码
+              </label>
+              <div className='relative'>
+                <div className='absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none'>
+                  <User className='h-5 w-5 text-gray-400 dark:text-gray-500' />
+                </div>
+                <input
+                  id='inviteCode'
+                  type='text'
+                  className='block w-full rounded-lg border-0 py-3 pl-10 pr-4 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-white/60 dark:ring-white/20 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none sm:text-base bg-white/60 dark:bg-zinc-800/60'
+                  placeholder='输入邀请码'
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Cloudflare Turnstile */}
           {siteConfig?.RegistrationRequireTurnstile && siteConfig?.TurnstileSiteKey && (
             <div id='turnstile-container' className='flex justify-center'></div>
@@ -354,6 +383,7 @@ function RegisterPageClient() {
             type='submit'
             disabled={
               !username || !password || !confirmPassword || loading ||
+              (siteConfig?.RequireRegistrationInviteCode && !inviteCode.trim()) ||
               (siteConfig?.RegistrationRequireTurnstile && !turnstileToken)
             }
             className='inline-flex w-full justify-center rounded-lg bg-green-600 py-3 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:from-green-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-50'

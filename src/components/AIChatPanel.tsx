@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { VideoContext } from '@/lib/ai-orchestrator';
 
 interface ChatMessage {
@@ -51,6 +52,7 @@ export default function AIChatPanel({
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [currentUsername, setCurrentUsername] = useState('用户');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const prevStorageKeyRef = useRef<string>(storageKey);
@@ -73,6 +75,13 @@ export default function AIChatPanel({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    const authInfo = getAuthInfoFromBrowserCookie();
+    setCurrentUsername(authInfo?.username || '用户');
+  }, []);
+
+  const userAvatarText = currentUsername.trim().charAt(0).toUpperCase() || '用';
 
   // 从sessionStorage加载消息记录
   useEffect(() => {
@@ -416,7 +425,7 @@ export default function AIChatPanel({
                   >
                     {message.role === 'user' ? (
                       <span className='text-xs font-semibold text-white'>
-                        U
+                        {userAvatarText}
                       </span>
                     ) : (
                       <Bot size={16} className='text-white' />
@@ -622,7 +631,7 @@ export default function AIChatPanel({
                   >
                     {message.role === 'user' ? (
                       <span className='text-xs font-semibold text-white'>
-                        U
+                        {userAvatarText}
                       </span>
                     ) : (
                       <Bot size={16} className='text-white' />

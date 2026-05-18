@@ -9,10 +9,12 @@ import Toast, { ToastProps } from '@/components/Toast';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 
-import type { ChatMessage, Member, Room, WatchRoomConfig } from '@/types/watch-room';
+import type { ChatMessage, Member, Room, RoomType, ScreenState, WatchRoomConfig } from '@/types/watch-room';
 
 // Import type from watch-room-socket
 type WatchRoomSocket = import('@/lib/watch-room-socket').WatchRoomSocket;
+const WATCH_ROOM_NO_CONNECT_KEY = 'watch_room_no_connect';
+const WATCH_ROOM_SCREEN_PATH = '/watch-room/screen';
 
 interface WatchRoomContextType {
   socket: WatchRoomSocket | null;
@@ -31,12 +33,14 @@ interface WatchRoomContextType {
     description: string;
     password?: string;
     isPublic: boolean;
+    roomType: RoomType;
     userName: string;
   }) => Promise<Room>;
   joinRoom: (data: {
     roomId: string;
     password?: string;
     userName: string;
+    ownerToken?: string;
   }) => Promise<{ room: Room; members: Member[] }>;
   leaveRoom: () => void;
   getRoomList: () => Promise<Room[]>;
@@ -51,6 +55,8 @@ interface WatchRoomContextType {
   pause: () => void;
   changeVideo: (state: any) => void;
   changeLiveChannel: (state: any) => void;
+  startScreenShare: (state: ScreenState) => void;
+  stopScreenShare: () => void;
   clearRoomState: () => void;
 
   // 重连
@@ -82,6 +88,7 @@ export function WatchRoomProvider({ children }: WatchRoomProviderProps) {
   const [toast, setToast] = useState<ToastProps | null>(null);
   const [reconnectFailed, setReconnectFailed] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [shouldDisableWatchRoomConnection, setShouldDisableWatchRoomConnection] = useState<boolean | null>(null);
 
   // 处理房间删除的回调
   const handleRoomDeleted = useCallback((data?: { reason?: string }) => {
@@ -118,6 +125,15 @@ export function WatchRoomProvider({ children }: WatchRoomProviderProps) {
   }, []);
 
   const watchRoom = useWatchRoom(handleRoomDeleted, handleStateCleared);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    setShouldDisableWatchRoomConnection(
+      window.location.pathname !== WATCH_ROOM_SCREEN_PATH
+      && window.localStorage.getItem(WATCH_ROOM_NO_CONNECT_KEY) === '1'
+    );
+  }, []);
 
   // 检查登录状态
   useEffect(() => {
@@ -156,6 +172,7 @@ export function WatchRoomProvider({ children }: WatchRoomProviderProps) {
             roomId: info.roomId,
             password: info.password,
             userName: info.userName,
+            ownerToken: info.ownerToken,
           });
         } catch (error) {
           console.error('[WatchRoomProvider] Failed to rejoin room after reconnect:', error);
@@ -169,6 +186,19 @@ export function WatchRoomProvider({ children }: WatchRoomProviderProps) {
 
   // 加载配置
   useEffect(() => {
+    if (shouldDisableWatchRoomConnection === null) {
+      return;
+    }
+
+    if (shouldDisableWatchRoomConnection) {
+      setConfig({
+        enabled: false,
+        serverType: 'internal',
+      });
+      setIsEnabled(false);
+      return;
+    }
+
     const loadConfig = async () => {
       try {
         // 使用公共 API 获取观影室配置（不需要管理员权限）
@@ -253,12 +283,14 @@ export function WatchRoomProvider({ children }: WatchRoomProviderProps) {
     };
 
     loadConfig();
+  }, [isLoggedIn, shouldDisableWatchRoomConnection]); // 添加 isLoggedIn 作为依赖
 
-    // 清理
+  // 仅在 Provider 卸载时断开，避免路由切换时误断开房间连接
+  useEffect(() => {
     return () => {
       watchRoom.disconnect();
     };
-  }, [isLoggedIn]); // 添加 isLoggedIn 作为依赖
+  }, []);
 
   const contextValue: WatchRoomContextType = {
     socket: watchRoom.socket,
@@ -281,6 +313,8 @@ export function WatchRoomProvider({ children }: WatchRoomProviderProps) {
     pause: watchRoom.pause,
     changeVideo: watchRoom.changeVideo,
     changeLiveChannel: watchRoom.changeLiveChannel,
+    startScreenShare: watchRoom.startScreenShare,
+    stopScreenShare: watchRoom.stopScreenShare,
     clearRoomState: watchRoom.clearRoomState,
     manualReconnect,
   };

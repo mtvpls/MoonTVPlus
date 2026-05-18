@@ -248,7 +248,7 @@ function LoginPageClient() {
         }
 
         const redirect = searchParams.get('redirect') || '/';
-        router.replace(redirect);
+        window.location.replace(redirect);
       } else {
         // 登录失败，重置Turnstile
         if (siteConfig?.LoginRequireTurnstile && turnstileWidgetId !== null && (window as any).turnstile) {

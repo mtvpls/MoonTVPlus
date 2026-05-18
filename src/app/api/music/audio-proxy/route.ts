@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
+import { requireFeaturePermission } from '@/lib/permissions';
 import { OpenListClient } from '@/lib/openlist.client';
 
 export const runtime = 'nodejs';
@@ -30,6 +31,8 @@ async function getOpenListClient(): Promise<OpenListClient | null> {
 // 代理OpenList缓存的音频文件
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireFeaturePermission(request, 'music', '无权限访问音乐功能');
+    if (authResult instanceof NextResponse) return authResult;
     const { searchParams } = new URL(request.url);
     const platform = searchParams.get('platform');
     const id = searchParams.get('id');

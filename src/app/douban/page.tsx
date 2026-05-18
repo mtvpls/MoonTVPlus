@@ -30,6 +30,7 @@ function DoubanPageClient() {
   const [selectorsReady, setSelectorsReady] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadingRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 用于存储最新参数值的 refs
@@ -598,6 +599,34 @@ function DoubanPageClient() {
     };
   }, [hasMore, isLoadingMore, loading]);
 
+  // 首屏如果未被撑满，仅在第一页时额外请求一次下一页
+  useEffect(() => {
+    if (
+      loading ||
+      !selectorsReady ||
+      isLoadingMore ||
+      !hasMore ||
+      doubanData.length === 0 ||
+      currentPage !== 0
+    ) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      const contentEl = contentRef.current;
+      if (!contentEl) return;
+
+      const rect = contentEl.getBoundingClientRect();
+      const preloadThreshold = window.innerHeight + 120;
+
+      if (rect.bottom < preloadThreshold) {
+        setCurrentPage(1);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [loading, selectorsReady, isLoadingMore, hasMore, doubanData.length, currentPage]);
+
   // 处理选择器变化
   const handlePrimaryChange = useCallback(
     (value: string) => {
@@ -781,7 +810,7 @@ function DoubanPageClient() {
         </div>
 
         {/* 内容展示区域 */}
-        <div className='max-w-[95%] mx-auto mt-8 overflow-visible'>
+        <div ref={contentRef} className='max-w-[95%] mx-auto mt-8 overflow-visible'>
           {/* 内容网格 */}
           <div className='justify-start grid grid-cols-3 gap-x-2 gap-y-12 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] sm:gap-x-8 sm:gap-y-20'>
             {loading || !selectorsReady

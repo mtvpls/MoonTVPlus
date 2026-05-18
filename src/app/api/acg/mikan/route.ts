@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { parseStringPromise } from 'xml2js';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
+import { getConfig } from '@/lib/config';
+import { getMagnetBaseUrl, universalMagnetFetch } from '@/lib/magnet.client';
+import { hasFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +23,7 @@ export async function POST(req: NextRequest) {
   try {
     // 检查权限
     const authInfo = getAuthInfoFromCookie(req);
-    if (!authInfo || (authInfo.role !== 'admin' && authInfo.role !== 'owner')) {
+    if (!authInfo?.username || !(await hasFeaturePermission(authInfo.username, 'magnet_search'))) {
       return NextResponse.json(
         { error: '无权限访问' },
         { status: 403 }
@@ -62,11 +65,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const searchUrl = `https://mikanani.me/RSS/Search?searchstr=${encodeURIComponent(trimmedKeyword)}`;
+    const config = await getConfig();
+    const searchBaseUrl = getMagnetBaseUrl(
+      'https://mikanani.me',
+      config.SiteConfig.MagnetMikanReverseProxy
+    );
+    const searchUrl = `${searchBaseUrl}/RSS/Search?searchstr=${encodeURIComponent(trimmedKeyword)}`;
 
-    const response = await fetch(searchUrl, {
+    const response = await universalMagnetFetch(searchUrl, config.SiteConfig.MagnetProxy, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       },
     });
 
@@ -144,4 +153,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
