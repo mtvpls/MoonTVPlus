@@ -1371,7 +1371,7 @@ export const UserMenu: React.FC = () => {
     setEnableOptimization(true);
     setPreferStrategy('fast');
     setFluidSearch(defaultFluidSearch);
-    setTmdbBackdropDisabled(false);
+    setTmdbBackdropDisabled(true);
     setEnableTrailers(false);
     setDoubanProxyUrl(defaultDoubanProxy);
     setDoubanDataSource(defaultDoubanProxyType);
