@@ -10,6 +10,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { UpdateNotification } from './UpdateNotification';
 import { UserMenu } from './UserMenu';
 import { VersionCheckProvider } from './VersionCheckProvider';
+import VisitStatsDisplay from './VisitStatsDisplay';
 
 interface PageLayoutProps {
   children: React.ReactNode;
@@ -114,6 +115,13 @@ const PageLayout = ({ children, activePath = '/', hideNavigation = false }: Page
         {!hideNavigation && (
           <div className='md:hidden'>
             <MobileBottomNav activePath={activePath} />
+          </div>
+        )}
+
+        {/* 访问统计 - 页面底部 */}
+        {!hideNavigation && (
+          <div className='fixed bottom-16 md:bottom-2 left-1/2 transform -translate-x-1/2 z-10'>
+            <VisitStatsDisplay />
           </div>
         )}
       </div>
