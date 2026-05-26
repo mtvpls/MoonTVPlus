@@ -1634,8 +1634,8 @@ function LivePageClient() {
       // 根据代理模式决定 URL
       let targetUrl = videoUrl;
       if (type === 'm3u8') {
-        if (proxyMode === 'direct') {
-          // 直连模式：直接使用原始 URL
+        if (proxyMode === 'direct' || proxyMode === 'play') {
+          // 直连模式 / play 模式：直接使用原始 URL（不走服务器代理）
           targetUrl = videoUrl;
         } else if (proxyMode === 'play') {
           // play 模式：沿用 /play 的直链代理逻辑，但保持留在直播页，不跳转页面
