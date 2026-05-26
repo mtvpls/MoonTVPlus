@@ -16,6 +16,7 @@ import {
 } from '@/lib/db.client';
 import { parseCustomTimeFormat } from '@/lib/time';
 import { useLiveSync } from '@/hooks/useLiveSync';
+import { base58Encode } from '@/lib/utils';
 
 import EpgScrollableRow from '@/components/EpgScrollableRow';
 import PageLayout from '@/components/PageLayout';
@@ -142,6 +143,13 @@ function LivePageClient() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [isRefreshingSource, setIsRefreshingSource] = useState(false);
   const [expandedMergedChannels, setExpandedMergedChannels] = useState<string[]>([]);
+  const isEmbeddedPlayMode = currentSource?.proxyMode === 'play';
+  const embeddedPlayUrl = useMemo(() => {
+    if (!isEmbeddedPlayMode || !currentChannel?.url) return '';
+    const encoded = base58Encode(currentChannel.url);
+    if (!encoded) return '';
+    return `/play?source=directplay&id=${encodeURIComponent(encoded)}&title=${encodeURIComponent(currentChannel.name || '直播点播')}`;
+  }, [isEmbeddedPlayMode, currentChannel?.url, currentChannel?.name]);
 
   // 节目单信息
   const [epgData, setEpgData] = useState<{
@@ -1580,6 +1588,12 @@ function LivePageClient() {
         return;
       }
 
+      if (currentSourceRef.current?.proxyMode === 'play') {
+        cleanupPlayer();
+        setIsVideoLoading(false);
+        return;
+      }
+
       console.log('视频URL:', videoUrl);
 
       // 销毁之前的播放器实例并创建新的
@@ -1591,8 +1605,8 @@ function LivePageClient() {
       let type = 'm3u8';
       const proxyMode = currentSourceRef.current?.proxyMode || 'full';
 
-      // 直连模式和 play 模式：跳过服务器预检查，按 m3u8 处理
-      if (proxyMode === 'direct' || proxyMode === 'play') {
+      // 直连模式：跳过服务器预检查，按 m3u8 处理
+      if (proxyMode === 'direct') {
         type = 'm3u8';
       } else {
         // 全量代理或仅代理m3u8：通过服务器预检查
@@ -1634,8 +1648,8 @@ function LivePageClient() {
       // 根据代理模式决定 URL
       let targetUrl = videoUrl;
       if (type === 'm3u8') {
-        if (proxyMode === 'direct' || proxyMode === 'play') {
-          // 直连模式 / play 模式：直接使用原始 URL（不走服务器代理）
+        if (proxyMode === 'direct') {
+          // 直连模式：直接使用原始 URL（不走服务器代理）
           targetUrl = videoUrl;
         } else if (proxyMode === 'play') {
           // play 模式：沿用 /play 的直链代理逻辑，但保持留在直播页，不跳转页面
@@ -2083,10 +2097,19 @@ function LivePageClient() {
             {/* 播放器 */}
             <div className={`h-full transition-all duration-300 ease-in-out ${isChannelListCollapsed ? 'col-span-1' : 'md:col-span-3'}`}>
               <div className='relative w-full h-[300px] lg:h-full'>
-                <div
-                  ref={artRef}
-                  className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
-                ></div>
+                {isEmbeddedPlayMode && embeddedPlayUrl ? (
+                  <iframe
+                    src={embeddedPlayUrl}
+                    className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
+                    allow='autoplay; fullscreen; picture-in-picture'
+                    referrerPolicy='no-referrer'
+                  />
+                ) : (
+                  <div
+                    ref={artRef}
+                    className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
+                  ></div>
+                )}
 
                 {/* 不支持的直播类型提示 */}
                 {unsupportedType && (
