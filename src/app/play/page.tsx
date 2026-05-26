@@ -120,10 +120,25 @@ function PlayPageClient() {
   const LOCAL_TRANSCODER_BASE_URL = 'http://localhost:19080';
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isEmbedMode = searchParams.get('embed') === '1';
   const enableComments = useEnableComments();
   const enableAIComments = useEnableAIComments();
   const { addDownloadTask } = useDownload();
   const { siteName } = useSite();
+
+  useEffect(() => {
+    if (!isEmbedMode) return;
+
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, [isEmbedMode]);
 
   // 获取 Proxy M3U8 Token
   const proxyToken = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_PROXY_M3U8_TOKEN || '' : '';
@@ -8605,7 +8620,7 @@ function PlayPageClient() {
 
   if (loading) {
     return (
-      <PageLayout activePath='/play' hideNavigation={isWebFullscreen}>
+      <PageLayout activePath='/play' hideNavigation={isWebFullscreen || isEmbedMode}>
         <div className='flex items-center justify-center min-h-screen bg-transparent'>
           <div className='text-center max-w-md mx-auto px-6'>
             {/* 动画影院图标 */}
@@ -8694,7 +8709,7 @@ function PlayPageClient() {
 
   if (error) {
     return (
-      <PageLayout activePath='/play' hideNavigation={isWebFullscreen}>
+      <PageLayout activePath='/play' hideNavigation={isWebFullscreen || isEmbedMode}>
         <div className='flex min-h-screen w-full items-center justify-center overflow-x-hidden bg-transparent px-4 py-6'>
           <div className='flex w-full flex-col items-center'>
             <div className='w-full max-w-md text-center'>
@@ -8805,7 +8820,7 @@ function PlayPageClient() {
 
 
   return (
-    <PageLayout activePath='/play' hideNavigation={isWebFullscreen}>
+    <PageLayout activePath='/play' hideNavigation={isWebFullscreen || isEmbedMode}>
       {/* TMDB背景图 */}
       {tmdbBackdrop && (
         <div
