@@ -30,6 +30,16 @@ jobs:
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
           git checkout "${GITHUB_SHA}"
 
+      - name: Verify checked out commit SHA
+        run: |
+          echo "GITHUB_REF=${GITHUB_REF}"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+          echo "HEAD_SHA=$(git rev-parse HEAD)"
+          if [ "$(git rev-parse HEAD)" != "${GITHUB_SHA}" ]; then
+            echo "Error: checked out HEAD does not match GITHUB_SHA"
+            exit 1
+          fi
+
       - name: Set vars
         run: |
           echo "IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/moontvplus-lite" >> "$GITHUB_ENV"
