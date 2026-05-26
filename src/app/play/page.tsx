@@ -8618,7 +8618,7 @@ function PlayPageClient() {
     };
   }, []);
 
-  if (loading) {
+  if (loading && !isEmbedMode) {
     return (
       <PageLayout activePath='/play' hideNavigation={isWebFullscreen || isEmbedMode}>
         <div className='flex items-center justify-center min-h-screen bg-transparent'>
@@ -8707,7 +8707,7 @@ function PlayPageClient() {
     );
   }
 
-  if (error) {
+  if (error && !isEmbedMode) {
     return (
       <PageLayout activePath='/play' hideNavigation={isWebFullscreen || isEmbedMode}>
         <div className='flex min-h-screen w-full items-center justify-center overflow-x-hidden bg-transparent px-4 py-6'>
@@ -8972,7 +8972,7 @@ function PlayPageClient() {
       )}
 
       {isEmbedMode ? (
-        <div className='relative z-10 h-screen w-full bg-black'>
+        <div className='relative z-10 h-full min-h-[300px] w-full bg-black'>
           <div ref={artRef} className='h-full w-full bg-black'></div>
         </div>
       ) : (
