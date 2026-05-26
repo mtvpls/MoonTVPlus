@@ -1,0 +1,14 @@
+name: Test Dispatch
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo
+        run: echo "hello from workflow_dispatch"

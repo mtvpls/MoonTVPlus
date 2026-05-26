@@ -68,7 +68,7 @@ interface LiveSource {
   from: 'config' | 'custom';
   channelNumber?: number;
   disabled?: boolean;
-  proxyMode?: 'full' | 'm3u8-only' | 'direct'; // 代理模式
+  proxyMode?: 'full' | 'm3u8-only' | 'direct' | 'play'; // 代理模式
 }
 
 function LivePageClient() {
@@ -140,6 +140,7 @@ function LivePageClient() {
 
   // 搜索关键词
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [isRefreshingSource, setIsRefreshingSource] = useState(false);
   const [expandedMergedChannels, setExpandedMergedChannels] = useState<string[]>([]);
 
   // 节目单信息
@@ -581,6 +582,18 @@ function LivePageClient() {
       setIsSwitchingSource(false);
       // 自动切换到频道 tab
       setActiveTab('channels');
+    }
+  };
+
+  const handleRefreshCurrentSource = async () => {
+    if (!currentSource || isSwitchingSource || isRefreshingSource) return;
+    try {
+      setIsRefreshingSource(true);
+      await fetchChannels(currentSource);
+    } catch (err) {
+      console.error('手动刷新当前订阅失败:', err);
+    } finally {
+      setIsRefreshingSource(false);
     }
   };
 
@@ -1578,8 +1591,8 @@ function LivePageClient() {
       let type = 'm3u8';
       const proxyMode = currentSourceRef.current?.proxyMode || 'full';
 
-      // 直连模式：跳过服务器预检查，直接使用 m3u8
-      if (proxyMode === 'direct') {
+      // 直连模式和 play 模式：跳过服务器预检查，按 m3u8 处理
+      if (proxyMode === 'direct' || proxyMode === 'play') {
         type = 'm3u8';
       } else {
         // 全量代理或仅代理m3u8：通过服务器预检查
@@ -1621,8 +1634,8 @@ function LivePageClient() {
       // 根据代理模式决定 URL
       let targetUrl = videoUrl;
       if (type === 'm3u8') {
-        if (proxyMode === 'direct') {
-          // 直连模式：直接使用原始 URL
+        if (proxyMode === 'direct' || proxyMode === 'play') {
+          // 直连模式 / play 模式：直接使用原始 URL（不走服务器代理）
           targetUrl = videoUrl;
         } else {
           // 全量代理或仅代理m3u8：使用代理 URL
@@ -2377,6 +2390,13 @@ function LivePageClient() {
                           </button>
                         )}
                       </div>
+                      <button
+                        onClick={handleRefreshCurrentSource}
+                        disabled={!currentSource || isSwitchingSource || isRefreshingSource}
+                        className='mt-2 w-full px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                      >
+                        {isRefreshingSource ? '刷新中...' : '手动刷新当前订阅'}
+                      </button>
                     </div>
 
                     {/* 分组标签 */}
