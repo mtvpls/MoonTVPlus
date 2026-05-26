@@ -16,6 +16,7 @@ import {
 } from '@/lib/db.client';
 import { parseCustomTimeFormat } from '@/lib/time';
 import { useLiveSync } from '@/hooks/useLiveSync';
+import { base58Encode } from '@/lib/utils';
 
 import EpgScrollableRow from '@/components/EpgScrollableRow';
 import PageLayout from '@/components/PageLayout';
@@ -68,7 +69,7 @@ interface LiveSource {
   from: 'config' | 'custom';
   channelNumber?: number;
   disabled?: boolean;
-  proxyMode?: 'full' | 'm3u8-only' | 'direct'; // 代理模式
+  proxyMode?: 'full' | 'm3u8-only' | 'direct' | 'play'; // 代理模式
 }
 
 function LivePageClient() {
@@ -140,7 +141,15 @@ function LivePageClient() {
 
   // 搜索关键词
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [isRefreshingSource, setIsRefreshingSource] = useState(false);
   const [expandedMergedChannels, setExpandedMergedChannels] = useState<string[]>([]);
+  const isEmbeddedPlayMode = currentSource?.proxyMode === 'play';
+  const embeddedPlayUrl = useMemo(() => {
+    if (!isEmbeddedPlayMode || !currentChannel?.url) return '';
+    const encoded = base58Encode(currentChannel.url);
+    if (!encoded) return '';
+    return `/play?source=directplay&id=${encodeURIComponent(encoded)}&title=${encodeURIComponent(currentChannel.name || '直播点播')}`;
+  }, [isEmbeddedPlayMode, currentChannel?.url, currentChannel?.name]);
 
   // 节目单信息
   const [epgData, setEpgData] = useState<{
@@ -581,6 +590,18 @@ function LivePageClient() {
       setIsSwitchingSource(false);
       // 自动切换到频道 tab
       setActiveTab('channels');
+    }
+  };
+
+  const handleRefreshCurrentSource = async () => {
+    if (!currentSource || isSwitchingSource || isRefreshingSource) return;
+    try {
+      setIsRefreshingSource(true);
+      await fetchChannels(currentSource);
+    } catch (err) {
+      console.error('手动刷新当前订阅失败:', err);
+    } finally {
+      setIsRefreshingSource(false);
     }
   };
 
@@ -1567,6 +1588,12 @@ function LivePageClient() {
         return;
       }
 
+      if (currentSourceRef.current?.proxyMode === 'play') {
+        cleanupPlayer();
+        setIsVideoLoading(false);
+        return;
+      }
+
       console.log('视频URL:', videoUrl);
 
       // 销毁之前的播放器实例并创建新的
@@ -1578,7 +1605,7 @@ function LivePageClient() {
       let type = 'm3u8';
       const proxyMode = currentSourceRef.current?.proxyMode || 'full';
 
-      // 直连模式：跳过服务器预检查，直接使用 m3u8
+      // 直连模式：跳过服务器预检查，按 m3u8 处理
       if (proxyMode === 'direct') {
         type = 'm3u8';
       } else {
@@ -1622,7 +1649,7 @@ function LivePageClient() {
       let targetUrl = videoUrl;
       if (type === 'm3u8') {
         if (proxyMode === 'direct') {
-          // 直连模式：直接使用原始 URL
+          // 直连模式：直接使用原始 URL（不走服务器代理）
           targetUrl = videoUrl;
         } else {
           // 全量代理或仅代理m3u8：使用代理 URL
@@ -2067,10 +2094,19 @@ function LivePageClient() {
             {/* 播放器 */}
             <div className={`h-full transition-all duration-300 ease-in-out ${isChannelListCollapsed ? 'col-span-1' : 'md:col-span-3'}`}>
               <div className='relative w-full h-[300px] lg:h-full'>
-                <div
-                  ref={artRef}
-                  className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
-                ></div>
+                {isEmbeddedPlayMode && embeddedPlayUrl ? (
+                  <iframe
+                    src={embeddedPlayUrl}
+                    className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
+                    allow='autoplay; fullscreen; picture-in-picture'
+                    referrerPolicy='no-referrer'
+                  />
+                ) : (
+                  <div
+                    ref={artRef}
+                    className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
+                  ></div>
+                )}
 
                 {/* 不支持的直播类型提示 */}
                 {unsupportedType && (
@@ -2377,6 +2413,13 @@ function LivePageClient() {
                           </button>
                         )}
                       </div>
+                      <button
+                        onClick={handleRefreshCurrentSource}
+                        disabled={!currentSource || isSwitchingSource || isRefreshingSource}
+                        className='mt-2 w-full px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                      >
+                        {isRefreshingSource ? '刷新中...' : '手动刷新当前订阅'}
+                      </button>
                     </div>
 
                     {/* 分组标签 */}
