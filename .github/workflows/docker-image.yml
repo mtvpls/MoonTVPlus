@@ -60,7 +60,7 @@ jobs:
         uses: docker/metadata-action@v5
 
         with:
-          images: ghcr.io/mtvpls/moontvplus
+          images: ghcr.io/${{ steps.lowercase.outputs.owner }}/moontvplus
           tags: |
             type=raw,value=${{ github.event.inputs.tag || 'latest' }},enable={{is_default_branch}}
 
@@ -72,8 +72,8 @@ jobs:
           file: ./Dockerfile
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          tags: ghcr.io/mtvpls/moontvplus:${{ github.event.inputs.tag || 'latest' }}
-          outputs: type=image,name=ghcr.io/mtvpls/moontvplus,name-canonical=true,push=true
+          tags: ghcr.io/${{ steps.lowercase.outputs.owner }}/moontvplus:${{ github.event.inputs.tag || 'latest' }}
+          outputs: type=image,name=ghcr.io/${{ steps.lowercase.outputs.owner }}/moontvplus,name-canonical=true,push=true
 
       - name: Export digest
         run: |
@@ -118,8 +118,8 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create -t ghcr.io/mtvpls/moontvplus:${{ github.event.inputs.tag || 'latest' }} \
-            $(printf 'ghcr.io/mtvpls/moontvplus@sha256:%s ' *)
+          docker buildx imagetools create -t ghcr.io/${{ steps.lowercase.outputs.owner }}/moontvplus:${{ github.event.inputs.tag || 'latest' }} \
+            $(printf 'ghcr.io/${{ steps.lowercase.outputs.owner }}/moontvplus@sha256:%s ' *)
 
   cleanup-refresh:
     runs-on: ubuntu-latest

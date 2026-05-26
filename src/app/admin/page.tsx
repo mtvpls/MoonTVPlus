@@ -419,7 +419,7 @@ interface LiveDataSource {
   channelNumber?: number;
   disabled?: boolean;
   from: 'config' | 'custom';
-  proxyMode?: 'full' | 'm3u8-only' | 'direct'; // 代理模式
+  proxyMode?: 'full' | 'm3u8-only' | 'direct' | 'play'; // 代理模式
 }
 
 // 自定义分类数据类型
@@ -14447,7 +14447,7 @@ const LiveSourceConfig = ({
 
   const handleSetProxyMode = (
     key: string,
-    mode: 'full' | 'm3u8-only' | 'direct'
+    mode: 'full' | 'm3u8-only' | 'direct' | 'play'
   ) => {
     withLoading(`setLiveProxyMode_${key}`, async () => {
       // 保存旧值用于回滚
@@ -14703,7 +14703,7 @@ const LiveSourceConfig = ({
             onChange={(e) => {
               handleSetProxyMode(
                 liveSource.key,
-                e.target.value as 'full' | 'm3u8-only' | 'direct'
+                e.target.value as 'full' | 'm3u8-only' | 'direct' | 'play'
               );
             }}
             disabled={isLoading(`setLiveProxyMode_${liveSource.key}`)}
@@ -14716,6 +14716,7 @@ const LiveSourceConfig = ({
             <option value='full'>全量代理</option>
             <option value='m3u8-only'>仅代理m3u8</option>
             <option value='direct'>直连</option>
+            <option value='play'>Play页直链</option>
           </select>
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2'>
