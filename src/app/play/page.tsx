@@ -8971,8 +8971,14 @@ function PlayPageClient() {
         </div>
       )}
 
+      {isEmbedMode ? (
+        <div className='relative z-10 h-screen w-full bg-black'>
+          <div ref={artRef} className='h-full w-full bg-black'></div>
+        </div>
+      ) : (
       <div className='relative z-10 flex flex-col gap-3 py-4 px-5 lg:px-[3rem] 2xl:px-20'>
         {/* 第一行：影片标题 */}
+        {!isEmbedMode && (
         <div className='py-1'>
           <h1 className={`text-xl font-semibold flex items-center gap-2 flex-wrap ${tmdbBackdrop ? 'text-white' : 'text-gray-900 dark:text-gray-100'}`}>
             <span>
@@ -9001,6 +9007,7 @@ function PlayPageClient() {
             })()}
           </h1>
         </div>
+        )}
         {/* 第二行：播放器和选集 */}
         <div className='space-y-2'>
           {/* 折叠控制 - 仅在 lg 及以上屏幕显示 */}
@@ -9930,6 +9937,7 @@ function PlayPageClient() {
           </>
         )}
       </div>
+      )}
 
       {/* Toast通知 */}
       {toast && <Toast {...toast} />}
