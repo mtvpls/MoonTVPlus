@@ -1651,6 +1651,9 @@ function LivePageClient() {
         if (proxyMode === 'direct') {
           // 直连模式：直接使用原始 URL（不走服务器代理）
           targetUrl = videoUrl;
+        } else if (proxyMode === 'play') {
+          // play 模式：沿用 /play 的直链代理逻辑，但保持留在直播页，不跳转页面
+          targetUrl = `/api/proxy-m3u8?url=${encodeURIComponent(videoUrl)}&source=directplay`;
         } else {
           // 全量代理或仅代理m3u8：使用代理 URL
           targetUrl = `/api/proxy/m3u8?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`;
