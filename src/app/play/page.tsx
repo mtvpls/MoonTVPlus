@@ -8998,6 +8998,11 @@ function PlayPageClient() {
         </div>
       )}
 
+      {isEmbedMode ? (
+        <div className='relative z-10 h-[100vh] w-full overflow-hidden bg-black'>
+          <div ref={artRef} className='h-full w-full bg-black'></div>
+        </div>
+      ) : (
       <div className='relative z-10 flex flex-col gap-3 py-4 px-5 lg:px-[3rem] 2xl:px-20'>
         {/* 第一行：影片标题 */}
         {!isEmbedMode && (
@@ -9959,6 +9964,7 @@ function PlayPageClient() {
           </>
         )}
       </div>
+      )}
 
       {/* Toast通知 */}
       {toast && <Toast {...toast} />}
