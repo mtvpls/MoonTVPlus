@@ -148,7 +148,7 @@ function LivePageClient() {
     if (!isEmbeddedPlayMode || !currentChannel?.url) return '';
     const encoded = base58Encode(currentChannel.url);
     if (!encoded) return '';
-    return `/play?source=directplay&id=${encodeURIComponent(encoded)}&title=${encodeURIComponent(currentChannel.name || '直播点播')}`;
+    return `/play?source=directplay&id=${encodeURIComponent(encoded)}&title=${encodeURIComponent(currentChannel.name || '直播点播')}&embed=1`;
   }, [isEmbeddedPlayMode, currentChannel?.url, currentChannel?.name]);
 
   // 节目单信息
@@ -385,12 +385,12 @@ function LivePageClient() {
   };
 
   // 获取频道列表
-  const fetchChannels = async (source: LiveSource) => {
+  const fetchChannels = async (source: LiveSource, forceRefresh = false) => {
     try {
       setIsVideoLoading(true);
 
       // 从 cachedLiveChannels 获取频道信息
-      const response = await fetch(`/api/live/channels?source=${source.key}`);
+      const response = await fetch(`/api/live/channels?source=${source.key}${forceRefresh ? '&refresh=1' : ''}`);
       if (!response.ok) {
         throw new Error('获取频道列表失败');
       }
@@ -597,7 +597,7 @@ function LivePageClient() {
     if (!currentSource || isSwitchingSource || isRefreshingSource) return;
     try {
       setIsRefreshingSource(true);
-      await fetchChannels(currentSource);
+      await fetchChannels(currentSource, true);
     } catch (err) {
       console.error('手动刷新当前订阅失败:', err);
     } finally {
@@ -2099,6 +2099,7 @@ function LivePageClient() {
                     src={embeddedPlayUrl}
                     className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
                     allow='autoplay; fullscreen; picture-in-picture'
+                    scrolling='no'
                     referrerPolicy='no-referrer'
                   />
                 ) : (
