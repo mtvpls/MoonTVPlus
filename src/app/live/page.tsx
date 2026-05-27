@@ -385,12 +385,12 @@ function LivePageClient() {
   };
 
   // 获取频道列表
-  const fetchChannels = async (source: LiveSource) => {
+  const fetchChannels = async (source: LiveSource, forceRefresh = false) => {
     try {
       setIsVideoLoading(true);
 
       // 从 cachedLiveChannels 获取频道信息
-      const response = await fetch(`/api/live/channels?source=${source.key}`);
+      const response = await fetch(`/api/live/channels?source=${source.key}${forceRefresh ? '&refresh=1' : ''}`);
       if (!response.ok) {
         throw new Error('获取频道列表失败');
       }
@@ -597,7 +597,7 @@ function LivePageClient() {
     if (!currentSource || isSwitchingSource || isRefreshingSource) return;
     try {
       setIsRefreshingSource(true);
-      await fetchChannels(currentSource);
+      await fetchChannels(currentSource, true);
     } catch (err) {
       console.error('手动刷新当前订阅失败:', err);
     } finally {

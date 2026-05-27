@@ -8829,21 +8829,19 @@ function PlayPageClient() {
 
   if (isEmbedMode) {
     return (
-      <PageLayout activePath='/play' hideNavigation>
-        <div className='relative z-10 h-[100vh] w-full overflow-hidden bg-black'>
-          <div ref={artRef} className='h-full w-full bg-black'></div>
-          {isVideoLoading && (
-            <div className='absolute inset-0 z-10 flex items-center justify-center bg-black text-white/80'>
-              正在加载...
-            </div>
-          )}
-          {videoError && (
-            <div className='absolute inset-0 z-10 flex items-center justify-center bg-black text-red-400 px-4 text-center'>
-              {videoError}
-            </div>
-          )}
-        </div>
-      </PageLayout>
+      <div className='fixed inset-0 z-[1] overflow-hidden bg-black'>
+        <div ref={artRef} className='h-full w-full bg-black'></div>
+        {isVideoLoading && (
+          <div className='absolute inset-0 z-10 flex items-center justify-center bg-black text-white/80'>
+            正在加载...
+          </div>
+        )}
+        {videoError && (
+          <div className='absolute inset-0 z-10 flex items-center justify-center bg-black px-4 text-center text-red-400'>
+            {videoError}
+          </div>
+        )}
+      </div>
     );
   }
 
