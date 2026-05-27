@@ -148,7 +148,7 @@ function LivePageClient() {
     if (!isEmbeddedPlayMode || !currentChannel?.url) return '';
     const encoded = base58Encode(currentChannel.url);
     if (!encoded) return '';
-    return `/play?source=directplay&id=${encodeURIComponent(encoded)}&title=${encodeURIComponent(currentChannel.name || '直播点播')}`;
+    return `/play?source=directplay&id=${encodeURIComponent(encoded)}&title=${encodeURIComponent(currentChannel.name || '直播点播')}&embed=1`;
   }, [isEmbeddedPlayMode, currentChannel?.url, currentChannel?.name]);
 
   // 节目单信息
@@ -2099,6 +2099,7 @@ function LivePageClient() {
                     src={embeddedPlayUrl}
                     className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
                     allow='autoplay; fullscreen; picture-in-picture'
+                    scrolling='no'
                     referrerPolicy='no-referrer'
                   />
                 ) : (
