@@ -131,12 +131,21 @@ function PlayPageClient() {
 
     const prevBodyOverflow = document.body.style.overflow;
     const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyHeight = document.body.style.height;
+    const prevHtmlHeight = document.documentElement.style.height;
+    const prevBodyMargin = document.body.style.margin;
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
+    document.body.style.height = '100vh';
+    document.documentElement.style.height = '100vh';
+    document.body.style.margin = '0';
 
     return () => {
       document.body.style.overflow = prevBodyOverflow;
       document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.height = prevBodyHeight;
+      document.documentElement.style.height = prevHtmlHeight;
+      document.body.style.margin = prevBodyMargin;
     };
   }, [isEmbedMode]);
 
@@ -8972,7 +8981,7 @@ function PlayPageClient() {
       )}
 
       {isEmbedMode ? (
-        <div className='relative z-10 h-full min-h-[300px] w-full bg-black'>
+        <div className='relative z-10 h-[100vh] w-full overflow-hidden bg-black'>
           <div ref={artRef} className='h-full w-full bg-black'></div>
         </div>
       ) : (
