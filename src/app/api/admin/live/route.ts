@@ -159,10 +159,10 @@ export async function POST(request: NextRequest) {
         if (!setProxySource) {
           return NextResponse.json({ error: '直播源不存在' }, { status: 404 });
         }
-        if (!proxyMode || !['full', 'm3u8-only', 'direct'].includes(proxyMode)) {
+        if (!proxyMode || !['full', 'm3u8-only', 'direct', 'play'].includes(proxyMode)) {
           return NextResponse.json({ error: '无效的代理模式' }, { status: 400 });
         }
-        setProxySource.proxyMode = proxyMode as 'full' | 'm3u8-only' | 'direct';
+        setProxySource.proxyMode = proxyMode as 'full' | 'm3u8-only' | 'direct' | 'play';
         break;
 
       default:
