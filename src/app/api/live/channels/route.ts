@@ -11,7 +11,6 @@ export async function GET(request: NextRequest) {
     if (authResult instanceof NextResponse) return authResult;
     const { searchParams } = new URL(request.url);
     const sourceKey = searchParams.get('source');
-
     if (!sourceKey) {
       return NextResponse.json({ error: '缺少直播源参数' }, { status: 400 });
     }

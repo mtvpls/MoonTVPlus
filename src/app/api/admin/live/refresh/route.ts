@@ -17,9 +17,33 @@ export async function POST(request: NextRequest) {
     const config = await getConfig();
     if (username !== process.env.USERNAME) {
       const userInfo = await db.getUserInfoV2(username || '');
-      if (!userInfo || userInfo.role !== 'admin' || userInfo.banned) {
+      if (!userInfo || (userInfo.role !== 'admin' && userInfo.role !== 'owner') || userInfo.banned) {
         return NextResponse.json({ error: '权限不足' }, { status: 401 });
       }
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const sourceKey = typeof body?.source === 'string' ? body.source : '';
+
+    if (sourceKey) {
+      const liveInfo = config.LiveConfig?.find((live) => live.key === sourceKey);
+      if (!liveInfo) {
+        return NextResponse.json({ error: '直播源配置未找到' }, { status: 404 });
+      }
+
+      const channelNumber = await refreshLiveChannels(liveInfo);
+      if (channelNumber === 0) {
+        return NextResponse.json({ error: '刷新频道失败或频道列表为空' }, { status: 400 });
+      }
+
+      liveInfo.channelNumber = channelNumber;
+      await db.saveAdminConfig(config);
+
+      return NextResponse.json({
+        success: true,
+        message: '直播源刷新成功',
+        channelNumber,
+      });
     }
 
     // 并发刷新所有启用的直播源

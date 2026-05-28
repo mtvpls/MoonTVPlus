@@ -120,10 +120,34 @@ function PlayPageClient() {
   const LOCAL_TRANSCODER_BASE_URL = 'http://localhost:19080';
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isEmbedMode = searchParams.get('embed') === '1';
   const enableComments = useEnableComments();
   const enableAIComments = useEnableAIComments();
   const { addDownloadTask } = useDownload();
   const { siteName } = useSite();
+
+  useEffect(() => {
+    if (!isEmbedMode) return;
+
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyHeight = document.body.style.height;
+    const prevHtmlHeight = document.documentElement.style.height;
+    const prevBodyMargin = document.body.style.margin;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.height = '100vh';
+    document.documentElement.style.height = '100vh';
+    document.body.style.margin = '0';
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.height = prevBodyHeight;
+      document.documentElement.style.height = prevHtmlHeight;
+      document.body.style.margin = prevBodyMargin;
+    };
+  }, [isEmbedMode]);
 
   // 获取 Proxy M3U8 Token
   const proxyToken = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_PROXY_M3U8_TOKEN || '' : '';
@@ -8603,9 +8627,9 @@ function PlayPageClient() {
     };
   }, []);
 
-  if (loading) {
+  if (loading && !isEmbedMode) {
     return (
-      <PageLayout activePath='/play' hideNavigation={isWebFullscreen}>
+      <PageLayout activePath='/play' hideNavigation={isWebFullscreen || isEmbedMode}>
         <div className='flex items-center justify-center min-h-screen bg-transparent'>
           <div className='text-center max-w-md mx-auto px-6'>
             {/* 动画影院图标 */}
@@ -8692,9 +8716,9 @@ function PlayPageClient() {
     );
   }
 
-  if (error) {
+  if (error && !isEmbedMode) {
     return (
-      <PageLayout activePath='/play' hideNavigation={isWebFullscreen}>
+      <PageLayout activePath='/play' hideNavigation={isWebFullscreen || isEmbedMode}>
         <div className='flex min-h-screen w-full items-center justify-center overflow-x-hidden bg-transparent px-4 py-6'>
           <div className='flex w-full flex-col items-center'>
             <div className='w-full max-w-md text-center'>
@@ -8803,9 +8827,27 @@ function PlayPageClient() {
     );
   }
 
+  if (isEmbedMode) {
+    return (
+      <div className='fixed inset-0 z-[1] overflow-hidden bg-black'>
+        <div ref={artRef} className='h-full w-full bg-black'></div>
+        {isVideoLoading && (
+          <div className='absolute inset-0 z-10 flex items-center justify-center bg-black text-white/80'>
+            正在加载...
+          </div>
+        )}
+        {videoError && (
+          <div className='absolute inset-0 z-10 flex items-center justify-center bg-black px-4 text-center text-red-400'>
+            {videoError}
+          </div>
+        )}
+      </div>
+    );
+  }
+
 
   return (
-    <PageLayout activePath='/play' hideNavigation={isWebFullscreen}>
+    <PageLayout activePath='/play' hideNavigation={isWebFullscreen || isEmbedMode}>
       {/* TMDB背景图 */}
       {tmdbBackdrop && (
         <div
