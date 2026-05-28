@@ -6,6 +6,7 @@ import { GitBranch, Heart, Radio, Tv } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import {
   deleteFavorite,
   generateStorageKey,
@@ -15,8 +16,8 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { parseCustomTimeFormat } from '@/lib/time';
-import { useLiveSync } from '@/hooks/useLiveSync';
 import { base58Encode } from '@/lib/utils';
+import { useLiveSync } from '@/hooks/useLiveSync';
 
 import EpgScrollableRow from '@/components/EpgScrollableRow';
 import PageLayout from '@/components/PageLayout';
@@ -142,6 +143,10 @@ function LivePageClient() {
   // 搜索关键词
   const [searchKeyword, setSearchKeyword] = useState('');
   const [isRefreshingSource, setIsRefreshingSource] = useState(false);
+  const [isLiveRefreshAdmin] = useState(() => {
+    const authInfo = getAuthInfoFromBrowserCookie();
+    return authInfo?.role === 'owner' || authInfo?.role === 'admin';
+  });
   const [expandedMergedChannels, setExpandedMergedChannels] = useState<string[]>([]);
   const isEmbeddedPlayMode = currentSource?.proxyMode === 'play';
   const embeddedPlayUrl = useMemo(() => {
@@ -385,12 +390,12 @@ function LivePageClient() {
   };
 
   // 获取频道列表
-  const fetchChannels = async (source: LiveSource, forceRefresh = false) => {
+  const fetchChannels = async (source: LiveSource) => {
     try {
       setIsVideoLoading(true);
 
       // 从 cachedLiveChannels 获取频道信息
-      const response = await fetch(`/api/live/channels?source=${source.key}${forceRefresh ? '&refresh=1' : ''}`);
+      const response = await fetch(`/api/live/channels?source=${encodeURIComponent(source.key)}`);
       if (!response.ok) {
         throw new Error('获取频道列表失败');
       }
@@ -594,10 +599,21 @@ function LivePageClient() {
   };
 
   const handleRefreshCurrentSource = async () => {
-    if (!currentSource || isSwitchingSource || isRefreshingSource) return;
+    if (!currentSource || isSwitchingSource || isRefreshingSource || !isLiveRefreshAdmin) return;
     try {
       setIsRefreshingSource(true);
-      await fetchChannels(currentSource, true);
+      const response = await fetch('/api/admin/live/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ source: currentSource.key }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '刷新当前订阅失败');
+      }
+      await fetchChannels(currentSource);
     } catch (err) {
       console.error('手动刷新当前订阅失败:', err);
     } finally {
@@ -2414,13 +2430,15 @@ function LivePageClient() {
                           </button>
                         )}
                       </div>
-                      <button
-                        onClick={handleRefreshCurrentSource}
-                        disabled={!currentSource || isSwitchingSource || isRefreshingSource}
-                        className='mt-2 w-full px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
-                      >
-                        {isRefreshingSource ? '刷新中...' : '手动刷新当前订阅'}
-                      </button>
+                      {isLiveRefreshAdmin && (
+                        <button
+                          onClick={handleRefreshCurrentSource}
+                          disabled={!currentSource || isSwitchingSource || isRefreshingSource}
+                          className='mt-2 w-full px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                        >
+                          {isRefreshingSource ? '刷新中...' : '手动刷新当前订阅'}
+                        </button>
+                      )}
                     </div>
 
                     {/* 分组标签 */}
