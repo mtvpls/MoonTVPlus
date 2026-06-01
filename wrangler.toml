@@ -3,6 +3,9 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 main = ".open-next/worker.js"
 minify = true
+routes = [
+  { pattern = "howtime.dpdns.org", custom_domain = true }
+]
 
 # 静态资源配置
 # Cloudflare Workers Assets 用于服务静态文件
@@ -14,8 +17,14 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "moontvplus"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "f578e55f-54ef-4bde-a1bd-2e2617d00bf4"
 
 [vars]
 NODE_ENV = "production"
 BUILD_TARGET = "cloudflare"
+NEXT_PUBLIC_STORAGE_TYPE = "d1"
+NEXT_PUBLIC_SITE_NAME = "MoonTVPlus"
+SITE_BASE = "https://howtime.dpdns.org"
+USERNAME = "admin"
+NEXT_PUBLIC_ENABLE_SOURCE_SEARCH = "true"
+WATCH_ROOM_ENABLED = "false"
