@@ -1,0 +1,36 @@
+name: Upstream Sync
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    - cron: "0 0 * * *"  # 每天 0 点执行一次
+  workflow_dispatch:     # 支持手动触发
+
+jobs:
+  sync_with_upstream:
+    name: Sync with Upstream
+    runs-on: ubuntu-latest
+    if: ${{ github.event.repository.fork }}
+    
+    steps:
+      - name: Checkout target repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Sync Upstream
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
+        with:
+          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
+          upstream_sync_repo: mtvpls/MoonTVPlus  # 替换为上游仓库路径
+          upstream_sync_branch: main
+          target_sync_branch: main
+          test_mode: false
+      
+      - name: Check for Failure
+        if: failure()
+        run: |
+          echo "[Error] 同步失败，可能是上游 workflow 文件变更导致 GitHub 暂停了定时任务，需要手动同步。"
+          exit 1
