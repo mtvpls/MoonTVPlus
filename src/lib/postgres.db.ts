@@ -72,13 +72,15 @@ export class PostgresStorage implements IStorage {
       try {
         const result = await this.db.prepare(statement).run();
         if (!result.success && result.error) {
-          console.warn(
-            'PostgresStorage.ensureMangaShelfColumns warning:',
-            result.error
-          );
+          if (!/duplicate column|already exists|relation .* does not exist|no such table/i.test(result.error)) {
+            throw new Error(result.error);
+          }
         }
       } catch (err) {
-        console.warn('PostgresStorage.ensureMangaShelfColumns warning:', err);
+        const message = err instanceof Error ? err.message : String(err);
+        if (!/duplicate column|already exists|relation .* does not exist|no such table/i.test(message)) {
+          throw err;
+        }
       }
     }
   }

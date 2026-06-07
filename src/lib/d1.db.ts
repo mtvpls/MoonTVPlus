@@ -70,20 +70,15 @@ export class D1Storage implements IStorage {
     for (const statement of statements) {
       try {
         const result = await this.db.prepare(statement).run();
-        if (
-          !result.success &&
-          result.error &&
-          !/duplicate column|already exists/i.test(result.error)
-        ) {
-          console.warn(
-            'D1Storage.ensureMangaShelfColumns warning:',
-            result.error
-          );
+        if (!result.success && result.error) {
+          if (!/duplicate column|already exists|no such table/i.test(result.error)) {
+            throw new Error(result.error);
+          }
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (!/duplicate column|already exists|no such table/i.test(message)) {
-          console.warn('D1Storage.ensureMangaShelfColumns warning:', err);
+          throw err;
         }
       }
     }
