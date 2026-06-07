@@ -42,12 +42,17 @@ import {
  */
 export class PostgresStorage implements IStorage {
   private db: DatabaseAdapter;
-  private schemaReady: Promise<void>;
+  private _schemaReady: Promise<void> | null = null;
+  private get schemaReady(): Promise<void> {
+    if (!this._schemaReady) {
+      this._schemaReady = this.ensureMangaShelfColumns();
+    }
+    return this._schemaReady;
+  }
   public adapter: any; // 用于兼容
 
   constructor(adapter: DatabaseAdapter) {
     this.db = adapter;
-    this.schemaReady = this.ensureMangaShelfColumns();
     // 创建一个简单的适配器用于设备管理
     this.adapter = new PostgresRedisHashAdapter(adapter);
   }

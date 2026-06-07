@@ -41,12 +41,17 @@ import { userInfoCache } from './user-cache';
  */
 export class D1Storage implements IStorage {
   private db: DatabaseAdapter;
-  private schemaReady: Promise<void>;
+  private _schemaReady: Promise<void> | null = null;
+  private get schemaReady(): Promise<void> {
+    if (!this._schemaReady) {
+      this._schemaReady = this.ensureMangaShelfColumns();
+    }
+    return this._schemaReady;
+  }
   public adapter: RedisHashAdapter;
 
   constructor(adapter: DatabaseAdapter) {
     this.db = adapter;
-    this.schemaReady = this.ensureMangaShelfColumns();
     // 创建 Redis Hash 兼容适配器用于设备管理
     this.adapter = new RedisHashAdapter(adapter);
   }
