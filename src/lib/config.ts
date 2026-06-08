@@ -71,6 +71,8 @@ export const API_CONFIG = {
 
 // 在模块加载时根据环境决定配置来源
 let cachedConfig: AdminConfig;
+let lastConfigFetchTime = 0;
+const CACHE_TTL = 5000; // 5秒缓存过期时间，防止多实例配置不同步
 let configInitPromise: Promise<AdminConfig> | null = null;
 
 // 从配置文件补充管理员配置
@@ -366,8 +368,11 @@ async function getInitConfig(
 }
 
 export async function getConfig(): Promise<AdminConfig> {
-  // 直接使用内存缓存
-  if (cachedConfig) {
+  const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
+  const now = Date.now();
+
+  // localStorage 模式下不需要 TTL 缓存过期（环境变量在运行时不会改变）
+  if (cachedConfig && (storageType === 'localstorage' || (now - lastConfigFetchTime < CACHE_TTL))) {
     return cachedConfig;
   }
 
@@ -385,6 +390,7 @@ export async function getConfig(): Promise<AdminConfig> {
       console.log('localStorage 模式：从环境变量初始化配置');
       const adminConfig = await getInitConfig('');
       cachedConfig = configSelfCheck(adminConfig);
+      lastConfigFetchTime = Date.now();
       configInitPromise = null;
       return cachedConfig;
     }
@@ -421,6 +427,7 @@ export async function getConfig(): Promise<AdminConfig> {
 
     adminConfig = configSelfCheck(adminConfig);
     cachedConfig = adminConfig;
+    lastConfigFetchTime = Date.now();
 
     // 如果进行了Emby配置迁移，保存到数据库
     if (!dbReadFailed && needsEmbyMigration) {
@@ -448,6 +455,7 @@ export async function getConfig(): Promise<AdminConfig> {
           adminConfig.UserConfig.Users = [];
           await db.saveAdminConfig(adminConfig);
           cachedConfig = adminConfig;
+          lastConfigFetchTime = Date.now();
           console.log('用户自动迁移完成');
         }
       } catch (error) {
@@ -953,6 +961,7 @@ export async function resetConfig() {
     originConfig.ConfigSubscribtion
   );
   cachedConfig = adminConfig;
+  lastConfigFetchTime = Date.now();
   await db.saveAdminConfig(adminConfig);
 
   return;
@@ -1030,9 +1039,11 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
 
 export async function setCachedConfig(config: AdminConfig) {
   cachedConfig = config;
+  lastConfigFetchTime = Date.now();
 }
 
 export async function clearConfigCache() {
   cachedConfig = null as any;
+  lastConfigFetchTime = 0;
   configInitPromise = null;
 }
