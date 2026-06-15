@@ -2,7 +2,7 @@
 
 'use client';
 
-import { AlertCircle, Cloud, Heart, Loader2, Router, Sparkles, X } from 'lucide-react';
+import { AlertCircle, Cloud, Heart, Keyboard, Loader2, Router, Sparkles, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -48,6 +48,7 @@ import {
 } from '@/lib/db.client';
 import { getDoubanDetail } from '@/lib/douban.client';
 import { isEpisodeHiddenByFilter, normalizeEpisodeFilterConfig } from '@/lib/episode-filter';
+import { appendSpecialSourceParam, isSpecialSourcesEnabledOnDevice } from '@/lib/special-source.client';
 import {
   buildEpisodeProgressContentKey,
   loadLocalEpisodeProgress,
@@ -60,6 +61,10 @@ import {
   recommendationCacheKeys,
   setRecommendationCache,
 } from '@/lib/recommendations/cache';
+import {
+  convertSubtitleFileToVttObjectUrl,
+  CUSTOM_SUBTITLE_ACCEPT,
+} from '@/lib/subtitle-converter';
 import { getTMDBImageUrl } from '@/lib/tmdb.search';
 import { DanmakuFilterConfig, EpisodeFilterConfig, SearchResult } from '@/lib/types';
 import { base58Decode, getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
@@ -116,6 +121,41 @@ interface SearchCachePayload {
   updatedAt: number;
 }
 
+interface CustomSubtitleState {
+  name: string;
+  url: string;
+  format: string;
+  episodeIndex: number;
+}
+
+const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+const PLAY_SHORTCUT_GROUPS = [
+  {
+    title: '播放控制',
+    items: [
+      { keys: ['空格'], description: '播放 / 暂停' },
+      { keys: ['←', '→'], description: '快退 / 快进 10 秒' },
+      { keys: ['↑', '↓'], description: '音量增加 / 减少' },
+      { keys: ['F'], description: '切换全屏' },
+    ],
+  },
+  {
+    title: '剧集切换',
+    items: [
+      { keys: ['Alt', '←'], description: '上一集' },
+      { keys: ['Alt', '→'], description: '下一集' },
+    ],
+  },
+  {
+    title: '倍速控制',
+    items: [
+      { keys: ['小键盘 +'], description: '提高一档倍速' },
+      { keys: ['小键盘 -'], description: '降低一档倍速' },
+      { keys: ['小键盘 /'], description: '恢复 1x' },
+    ],
+  },
+];
+
 function PlayPageClient() {
   const LOCAL_TRANSCODER_BASE_URL = 'http://localhost:19080';
   const router = useRouter();
@@ -168,6 +208,26 @@ function PlayPageClient() {
 
   // 详情面板状态
   const [showDetailPanel, setShowDetailPanel] = useState(false);
+
+  // 快捷键说明弹窗状态
+  const [showShortcutDialog, setShowShortcutDialog] = useState(false);
+
+  useEffect(() => {
+    if (!showShortcutDialog) {
+      return;
+    }
+
+    const handleShortcutDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowShortcutDialog(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleShortcutDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleShortcutDialogKeyDown);
+    };
+  }, [showShortcutDialog]);
 
   // 大屏设备检测（判断选集面板是否在右侧）
   const [isLargeScreen, setIsLargeScreen] = useState(false);
@@ -1598,6 +1658,55 @@ function PlayPageClient() {
     localStorage.setItem('preferredPlaybackRate', String(rate));
   };
 
+  const adjustPlaybackRateByStep = (direction: 1 | -1) => {
+    if (!artPlayerRef.current) {
+      return false;
+    }
+
+    const currentRate = artPlayerRef.current.playbackRate || 1;
+    const currentIndex = PLAYBACK_RATE_OPTIONS.reduce((nearestIndex, rate, index) => {
+      return Math.abs(rate - currentRate) < Math.abs(PLAYBACK_RATE_OPTIONS[nearestIndex] - currentRate)
+        ? index
+        : nearestIndex;
+    }, 0);
+    let nextIndex = -1;
+    if (direction > 0) {
+      nextIndex = PLAYBACK_RATE_OPTIONS.findIndex((rate) => rate > currentRate + 0.01);
+    } else {
+      for (let index = PLAYBACK_RATE_OPTIONS.length - 1; index >= 0; index--) {
+        if (PLAYBACK_RATE_OPTIONS[index] < currentRate - 0.01) {
+          nextIndex = index;
+          break;
+        }
+      }
+    }
+    const boundedNextIndex = nextIndex === -1 ? currentIndex : nextIndex;
+    const effectiveNextIndex = Math.min(
+      Math.max(boundedNextIndex, 0),
+      PLAYBACK_RATE_OPTIONS.length - 1
+    );
+    const nextRate = PLAYBACK_RATE_OPTIONS[effectiveNextIndex];
+
+    artPlayerRef.current.playbackRate = nextRate;
+    artPlayerRef.current.notice.show =
+      effectiveNextIndex === currentIndex
+        ? direction > 0
+          ? `已是最高倍速：${nextRate}x`
+          : `已是最低倍速：${nextRate}x`
+        : `倍速：${nextRate}x`;
+    return true;
+  };
+
+  const resetPlaybackRate = () => {
+    if (!artPlayerRef.current) {
+      return false;
+    }
+
+    artPlayerRef.current.playbackRate = 1;
+    artPlayerRef.current.notice.show = '倍速：1x';
+    return true;
+  };
+
   const isDanmakuAutoLoadDisabled = () => {
     if (typeof window === 'undefined') {
       return false;
@@ -1782,6 +1891,22 @@ function PlayPageClient() {
 
   const artPlayerRef = useRef<any>(null);
   const artRef = useRef<HTMLDivElement | null>(null);
+  const syncAnime4KCanvasFlip = (flip?: string) => {
+    const canvas = anime4kRef.current?.canvas as HTMLCanvasElement | undefined;
+    if (!canvas) return;
+
+    const currentFlip = flip || artPlayerRef.current?.flip || 'normal';
+    canvas.style.transformOrigin = 'center center';
+    canvas.style.transform =
+      currentFlip === 'horizontal'
+        ? 'scaleX(-1)'
+        : currentFlip === 'vertical'
+          ? 'scaleY(-1)'
+          : 'none';
+  };
+  const customSubtitleInputRef = useRef<HTMLInputElement | null>(null);
+  const customSubtitleRef = useRef<CustomSubtitleState | null>(null);
+  const currentSubtitleLabelRef = useRef<string>('关闭');
 
   // Wake Lock 相关
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -1802,6 +1927,137 @@ function PlayPageClient() {
   // -----------------------------------------------------------------------------
   // 工具函数（Utils）
   // -----------------------------------------------------------------------------
+
+  const getSubtitleStyle = () => ({
+    color: '#fff',
+    fontSize: typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em',
+  });
+
+  const revokeCustomSubtitle = () => {
+    if (customSubtitleRef.current) {
+      URL.revokeObjectURL(customSubtitleRef.current.url);
+      customSubtitleRef.current = null;
+    }
+  };
+
+  const switchSubtitle = (url: string, label: string) => {
+    if (!artPlayerRef.current) return;
+
+    artPlayerRef.current.subtitle.switch(url, {
+      name: label,
+      type: 'vtt',
+      style: getSubtitleStyle(),
+      encoding: 'utf-8',
+    });
+    artPlayerRef.current.subtitle.show = true;
+    currentSubtitleLabelRef.current = label;
+  };
+
+  const removeSubtitleSetting = () => {
+    try {
+      artPlayerRef.current?.setting.remove('subtitle-selector');
+    } catch (e) {
+      // 忽略错误，可能设置项不存在
+    }
+  };
+
+  const updateSubtitleSetting = () => {
+    if (!artPlayerRef.current) return;
+
+    const sourceSubtitles = detailRef.current?.subtitles?.[currentEpisodeIndexRef.current] || [];
+    const customSubtitle =
+      customSubtitleRef.current?.episodeIndex === currentEpisodeIndexRef.current
+        ? customSubtitleRef.current
+        : null;
+
+    removeSubtitleSetting();
+
+    const subtitleOptions = [
+      { html: '关闭', action: 'close' },
+      { html: '上传本地字幕', action: 'upload' },
+      ...sourceSubtitles.map((sub: any) => ({
+        html: sub.label,
+        action: 'switch',
+        url: sub.url,
+      })),
+      ...(customSubtitle
+        ? [
+          {
+            html: `本地：${customSubtitle.name}`,
+            action: 'switch',
+            url: customSubtitle.url,
+          },
+        ]
+        : []),
+    ];
+
+    artPlayerRef.current.setting.add({
+      name: 'subtitle-selector',
+      html: '字幕',
+      selector: subtitleOptions,
+      onSelect: function (item: any) {
+        if (!artPlayerRef.current) {
+          return currentSubtitleLabelRef.current;
+        }
+
+        if (item.action === 'close') {
+          artPlayerRef.current.subtitle.show = false;
+          currentSubtitleLabelRef.current = '关闭';
+          return item.html;
+        }
+
+        if (item.action === 'upload') {
+          customSubtitleInputRef.current?.click();
+          return currentSubtitleLabelRef.current;
+        }
+
+        if (item.url) {
+          switchSubtitle(item.url, item.html);
+          return item.html;
+        }
+
+        return currentSubtitleLabelRef.current;
+      },
+      default: currentSubtitleLabelRef.current,
+    });
+  };
+
+  const handleCustomSubtitleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) return;
+
+    try {
+      const convertedSubtitle = await convertSubtitleFileToVttObjectUrl(file);
+      revokeCustomSubtitle();
+
+      customSubtitleRef.current = {
+        ...convertedSubtitle,
+        episodeIndex: currentEpisodeIndexRef.current,
+      };
+
+      switchSubtitle(
+        convertedSubtitle.url,
+        `本地：${convertedSubtitle.name}`
+      );
+      updateSubtitleSetting();
+      setToast({
+        message: `已加载本地字幕：${convertedSubtitle.name}`,
+        type: 'success',
+        onClose: () => setToast(null),
+      });
+    } catch (error) {
+      console.warn('[Subtitle] 自定义字幕加载失败:', error);
+      setToast({
+        message: error instanceof Error ? error.message : '字幕加载失败',
+        type: 'error',
+        onClose: () => setToast(null),
+      });
+    }
+  };
 
   // 判断剧集状态
   const getSeriesStatus = (detail: SearchResult | null): 'completed' | 'ongoing' | 'unknown' => {
@@ -2953,6 +3209,8 @@ function PlayPageClient() {
 
   // 清理播放器资源的统一函数
   const cleanupPlayer = async () => {
+    revokeCustomSubtitle();
+
     // 清除刷新定时器
     clearRefreshTimer();
 
@@ -3277,6 +3535,7 @@ function PlayPageClient() {
         handleCanvasClick,
         handleCanvasDblClick,
       };
+      syncAnime4KCanvasFlip();
 
       console.log('Anime4K超分已启用，模式:', anime4kModeRef.current, '倍数:', scale);
       if (artPlayerRef.current) {
@@ -3619,7 +3878,7 @@ function PlayPageClient() {
       fileNameParam?: string
     ): Promise<SearchResult[]> => {
       try {
-        let url = `/api/source-detail?source=${source}&id=${id}&title=${encodeURIComponent(title)}`;
+        let url = appendSpecialSourceParam(`/api/source-detail?source=${source}&id=${id}&title=${encodeURIComponent(title)}`);
         // 如果有fileName参数（小雅源），添加到URL
         if (fileNameParam) {
           url += `&fileName=${encodeURIComponent(fileNameParam)}`;
@@ -3787,7 +4046,7 @@ function PlayPageClient() {
       }
 
       try {
-        const cacheKey = `search_cache_${query.trim()}`;
+        const cacheKey = `search_cache_${query.trim()}${isSpecialSourcesEnabledOnDevice() ? '_special' : ''}`;
         const cached = sessionStorage.getItem(cacheKey);
         if (!cached) return null;
 
@@ -3808,7 +4067,7 @@ function PlayPageClient() {
       if (typeof window === 'undefined' || !query.trim()) return;
 
       try {
-        const cacheKey = `search_cache_${query.trim()}`;
+        const cacheKey = `search_cache_${query.trim()}${isSpecialSourcesEnabledOnDevice() ? '_special' : ''}`;
         const payload: SearchCachePayload = {
           status: 'complete',
           results,
@@ -3864,7 +4123,7 @@ function PlayPageClient() {
 
         // 没有缓存或只有 partial 缓存时，重新请求完整搜索结果
         const response = await fetch(
-          `/api/search?q=${encodeURIComponent(query.trim())}`
+          appendSpecialSourceParam(`/api/search?q=${encodeURIComponent(query.trim())}`)
         );
         if (!response.ok) {
           throw new Error('搜索失败');
@@ -4342,62 +4601,18 @@ function PlayPageClient() {
   useEffect(() => {
     if (!artPlayerRef.current || !detail) return;
 
+    revokeCustomSubtitle();
     const currentSubtitles = detail.subtitles?.[currentEpisodeIndex] || [];
-    const savedSubtitleSize = typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em';
 
     // 如果有字幕，更新播放器字幕
     if (currentSubtitles.length > 0) {
-      artPlayerRef.current.subtitle.switch(currentSubtitles[0].url, {
-        type: 'vtt',
-        style: {
-          color: '#fff',
-          fontSize: savedSubtitleSize,
-        },
-        encoding: 'utf-8',
-      });
-
-      // 移除旧的字幕设置，添加新的
-      try {
-        artPlayerRef.current.setting.remove('subtitle-selector');
-      } catch (e) {
-        // 忽略错误，可能设置项不存在
-      }
-
-      const subtitleOptions = [
-        { html: '关闭', url: '' },
-        ...currentSubtitles.map((sub: any) => ({
-          html: sub.label,
-          url: sub.url,
-        })),
-      ];
-
-      artPlayerRef.current.setting.add({
-        name: 'subtitle-selector',
-        html: '字幕',
-        selector: subtitleOptions,
-        onSelect: function (item: any) {
-          if (artPlayerRef.current) {
-            if (item.url === '') {
-              artPlayerRef.current.subtitle.show = false;
-            } else {
-              artPlayerRef.current.subtitle.switch(item.url, {
-                name: item.html,
-              });
-              artPlayerRef.current.subtitle.show = true;
-            }
-          }
-          return item.html;
-        },
-      });
+      switchSubtitle(currentSubtitles[0].url, currentSubtitles[0].label);
     } else {
-      // 没有字幕时，隐藏字幕并移除字幕设置
       artPlayerRef.current.subtitle.show = false;
-      try {
-        artPlayerRef.current.setting.remove('subtitle-selector');
-      } catch (e) {
-        // 忽略错误，可能设置项不存在
-      }
+      currentSubtitleLabelRef.current = '关闭';
     }
+
+    updateSubtitleSetting();
   }, [detail, currentEpisodeIndex]);
 
   const getSourceSwitchResumeTime = async (
@@ -4480,7 +4695,7 @@ function PlayPageClient() {
       // 这类源统一通过详情接口补全播放数据
       if (isLazyDetailSource(newDetail.source) && (!newDetail.episodes || newDetail.episodes.length === 0)) {
         try {
-          const detailResponse = await fetch(`/api/source-detail?source=${newSource}&id=${newId}&title=${encodeURIComponent(newTitle)}`);
+          const detailResponse = await fetch(appendSpecialSourceParam(`/api/source-detail?source=${newSource}&id=${newId}&title=${encodeURIComponent(newTitle)}`));
           if (detailResponse.ok) {
             const detailData = await detailResponse.json();
             if (!detailData) {
@@ -5677,6 +5892,27 @@ function PlayPageClient() {
       }
     }
 
+    // 小键盘 + = 倍速+
+    if (e.code === 'NumpadAdd') {
+      if (adjustPlaybackRateByStep(1)) {
+        e.preventDefault();
+      }
+    }
+
+    // 小键盘 - = 倍速-
+    if (e.code === 'NumpadSubtract') {
+      if (adjustPlaybackRateByStep(-1)) {
+        e.preventDefault();
+      }
+    }
+
+    // 小键盘 / = 恢复 1x
+    if (e.code === 'NumpadDivide') {
+      if (resetPlaybackRate()) {
+        e.preventDefault();
+      }
+    }
+
     // f 键 = 切换全屏
     if (e.key === 'f' || e.key === 'F') {
       if (artPlayerRef.current) {
@@ -6024,15 +6260,17 @@ function PlayPageClient() {
         }
 
         // 动态导入播放器库
-        const [ArtplayerModule, HlsModule, DanmukuPlugin] = await Promise.all([
+        const [ArtplayerModule, HlsModule, DanmukuPlugin, AutoThumbnailPlugin] = await Promise.all([
           import('artplayer'),
           import('hls.js'),
           import('artplayer-plugin-danmuku'),
+          import('artplayer-plugin-auto-thumbnail'),
         ]);
 
         const Artplayer = ArtplayerModule.default;
         const Hls = HlsModule.default;
         const artplayerPluginDanmuku = DanmukuPlugin.default as any;
+        const artplayerPluginAutoThumbnail = AutoThumbnailPlugin.default as any;
         const playerTimeouts = new Set<number>();
         const clearTrackedTimeout = (timeoutId: number | null) => {
           if (timeoutId == null) {
@@ -6161,12 +6399,13 @@ function PlayPageClient() {
         const CustomHlsJsLoader = createCustomHlsLoader(Hls);
 
         // 创建新的播放器实例
-        Artplayer.PLAYBACK_RATE = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+        Artplayer.PLAYBACK_RATE = PLAYBACK_RATE_OPTIONS;
         Artplayer.USE_RAF = true;
 
         // 获取当前集的字幕
         const currentSubtitles = detailRef.current?.subtitles?.[currentEpisodeIndex] || [];
         const savedSubtitleSize = typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em';
+        currentSubtitleLabelRef.current = currentSubtitles[0]?.label || '关闭';
 
         artPlayerRef.current = new Artplayer({
           container: artRef.current!,
@@ -6183,7 +6422,7 @@ function PlayPageClient() {
           screenshot: true,
           setting: true,
           loop: false,
-          flip: false,
+          flip: true,
           playbackRate: true,
           aspectRatio: false,
           fullscreen: !isIOS,  // iOS 禁用原生全屏按钮，避免触发系统播放器
@@ -6444,8 +6683,13 @@ function PlayPageClient() {
               });
             },
           },
-          // 弹幕插件
           plugins: [
+            artplayerPluginAutoThumbnail({
+              url: videoUrl,
+              width: 160,
+              number: 100,
+              scale: 1,
+            }),
             artplayerPluginDanmuku({
               danmuku: [],
               speed: danmakuSettingsRef.current.speed,
@@ -7209,6 +7453,8 @@ function PlayPageClient() {
           clearPlayerTimeouts();
         });
 
+        artPlayerRef.current.on('flip', syncAnime4KCanvasFlip);
+
         // 监听播放器事件
         artPlayerRef.current.on('ready', async () => {
           setError(null);
@@ -7298,40 +7544,8 @@ function PlayPageClient() {
 
           applyProgressThumbConfig();
 
-          // 添加字幕切换功能
-          const currentSubtitles = detailRef.current?.subtitles?.[currentEpisodeIndex] || [];
-          if (currentSubtitles.length > 0 && artPlayerRef.current) {
-            const subtitleOptions = [
-              {
-                html: '关闭',
-                url: '',
-              },
-              ...currentSubtitles.map((sub: any) => ({
-                html: sub.label,
-                url: sub.url,
-              })),
-            ];
-
-            artPlayerRef.current.setting.add({
-              html: '字幕',
-              selector: subtitleOptions,
-              onSelect: function (item: any) {
-                if (artPlayerRef.current) {
-                  if (item.url === '') {
-                    // 关闭字幕
-                    artPlayerRef.current.subtitle.show = false;
-                  } else {
-                    // 切换字幕
-                    artPlayerRef.current.subtitle.switch(item.url, {
-                      name: item.html,
-                    });
-                    artPlayerRef.current.subtitle.show = true;
-                  }
-                }
-                return item.html;
-              },
-            });
-          }
+          // 添加字幕切换和本地字幕上传功能
+          updateSubtitleSetting();
 
           // 添加字幕大小设置
           if (artPlayerRef.current) {
@@ -9341,6 +9555,22 @@ function PlayPageClient() {
                           </button>
                         )}
 
+                        {/* 快捷键说明 */}
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setShowShortcutDialog(true);
+                          }}
+                          className='group relative flex items-center justify-center gap-1 w-8 h-8 lg:w-auto lg:h-auto lg:px-2 lg:py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-500 dark:hover:bg-gray-400 text-xs font-medium rounded-md transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer overflow-hidden border border-gray-300 dark:border-gray-500 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950'
+                          title='快捷键说明'
+                          aria-label='查看播放快捷键说明'
+                        >
+                          <Keyboard className='w-4 h-4 flex-shrink-0 text-gray-700 dark:text-gray-200' />
+                          <span className='hidden lg:inline max-w-0 group-hover:max-w-[100px] overflow-hidden whitespace-nowrap transition-all duration-200 ease-in-out text-gray-700 dark:text-gray-200'>
+                            快捷键
+                          </span>
+                        </button>
+
                         {/* PotPlayer */}
                         <button
                           onClick={(e) => {
@@ -9593,6 +9823,7 @@ function PlayPageClient() {
                 sourceSearchError={sourceSearchError}
                 backgroundSourcesLoading={backgroundSourcesLoading}
                 precomputedVideoInfo={precomputedVideoInfo}
+                useLightTextOnBackdrop={!!tmdbBackdrop}
                 onDanmakuSelect={(selection) => handleDanmakuSelect(selection, true)}
                 currentDanmakuSelection={currentDanmakuSelection}
                 onUploadDanmaku={handleUploadDanmaku}
@@ -9748,11 +9979,11 @@ function PlayPageClient() {
                           })}
                         </div>
                         {/* 评分数值 */}
-                        <span className='text-gray-700 dark:text-gray-300 font-semibold'>
+                        <span className={`font-semibold ${tmdbBackdrop ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
                           {doubanRating.value.toFixed(1)}
                         </span>
                         {/* 评分人数 */}
-                        <span className='text-gray-500 dark:text-gray-400 text-sm'>
+                        <span className={`text-sm ${tmdbBackdrop ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
                           ({doubanRating.count.toLocaleString()}人评价)
                         </span>
                       </div>
@@ -9919,6 +10150,14 @@ function PlayPageClient() {
       {/* Toast通知 */}
       {toast && <Toast {...toast} />}
 
+      <input
+        ref={customSubtitleInputRef}
+        type='file'
+        accept={CUSTOM_SUBTITLE_ACCEPT}
+        className='hidden'
+        onChange={handleCustomSubtitleFileChange}
+      />
+
       {/* 下载选集面板 */}
       <DownloadEpisodeSelector
         isOpen={showDownloadSelector}
@@ -9958,6 +10197,83 @@ function PlayPageClient() {
           });
         }}
       />
+
+      {/* 快捷键说明弹窗 */}
+      {showShortcutDialog && (
+        <div
+          className='fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm'
+          onClick={() => setShowShortcutDialog(false)}
+        >
+          <div
+            className='relative w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white text-gray-900 shadow-2xl shadow-black/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:shadow-black/40'
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role='dialog'
+            aria-modal='true'
+            aria-labelledby='shortcut-dialog-title'
+          >
+            <div className='absolute inset-x-0 top-0 h-24 bg-gradient-to-br from-green-500/15 via-cyan-500/10 to-transparent pointer-events-none' />
+            <div className='relative flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4 dark:border-gray-700'>
+              <div className='flex items-center gap-3'>
+                <div className='flex h-10 w-10 items-center justify-center rounded-xl border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-300'>
+                  <Keyboard className='h-5 w-5' />
+                </div>
+                <div>
+                  <h2 id='shortcut-dialog-title' className='text-base font-semibold text-gray-950 dark:text-white'>
+                    播放快捷键
+                  </h2>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowShortcutDialog(false)}
+                className='rounded-lg p-2 text-gray-500 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 cursor-pointer dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
+                aria-label='关闭快捷键说明'
+              >
+                <X className='h-5 w-5' />
+              </button>
+            </div>
+
+            <div className='relative max-h-[70vh] overflow-y-auto px-5 py-4'>
+              <div className='grid gap-3'>
+                {PLAY_SHORTCUT_GROUPS.map((group) => (
+                  <section
+                    key={group.title}
+                    className='rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/60'
+                  >
+                    <h3 className='mb-3 text-sm font-medium text-gray-800 dark:text-gray-200'>
+                      {group.title}
+                    </h3>
+                    <div className='space-y-2'>
+                      {group.items.map((item) => (
+                        <div
+                          key={`${group.title}-${item.description}`}
+                          className='flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 transition-colors duration-200 hover:bg-white dark:hover:bg-gray-700/70'
+                        >
+                          <div className='flex flex-wrap items-center gap-1.5'>
+                            {item.keys.map((key, index) => (
+                              <span key={`${item.description}-${key}`} className='flex items-center gap-1.5'>
+                                {index > 0 && (
+                                  <span className='text-xs text-gray-400 dark:text-gray-500'>+</span>
+                                )}
+                                <kbd className='min-w-7 rounded-md border border-gray-300 bg-white px-2 py-1 text-center text-xs font-semibold text-gray-800 shadow-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:shadow-inner dark:shadow-white/5'>
+                                  {key}
+                                </kbd>
+                              </span>
+                            ))}
+                          </div>
+                          <span className='text-right text-xs text-gray-600 dark:text-gray-300'>
+                            {item.description}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 网盘搜索弹窗 */}
       {showPansouDialog && (

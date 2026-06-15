@@ -173,7 +173,7 @@ export class WatchRoomServer {
       // 播放进度跳转
       socket.on('play:seek', (currentTime) => {
         const roomInfo = this.socketToRoom.get(socket.id);
-        if (!roomInfo) return;
+        if (!roomInfo || !roomInfo.isOwner) return;
 
         socket.to(roomInfo.roomId).emit('play:seek', currentTime);
       });
@@ -181,7 +181,7 @@ export class WatchRoomServer {
       // 播放
       socket.on('play:play', () => {
         const roomInfo = this.socketToRoom.get(socket.id);
-        if (!roomInfo) return;
+        if (!roomInfo || !roomInfo.isOwner) return;
 
         socket.to(roomInfo.roomId).emit('play:play');
       });
@@ -189,7 +189,7 @@ export class WatchRoomServer {
       // 暂停
       socket.on('play:pause', () => {
         const roomInfo = this.socketToRoom.get(socket.id);
-        if (!roomInfo) return;
+        if (!roomInfo || !roomInfo.isOwner) return;
 
         socket.to(roomInfo.roomId).emit('play:pause');
       });
@@ -217,6 +217,78 @@ export class WatchRoomServer {
           room.currentState = state;
           this.rooms.set(roomInfo.roomId, room);
           socket.to(roomInfo.roomId).emit('live:change', state);
+        }
+      });
+
+      socket.on('music:change', (state) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        if (!roomInfo || !roomInfo.isOwner) return;
+
+        const room = this.rooms.get(roomInfo.roomId);
+        if (room?.roomType === 'music') {
+          room.currentState = state;
+          this.rooms.set(roomInfo.roomId, room);
+          socket.to(roomInfo.roomId).emit('music:change', state);
+        }
+      });
+
+      socket.on('music:update', (state) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        if (!roomInfo || !roomInfo.isOwner) return;
+
+        const room = this.rooms.get(roomInfo.roomId);
+        if (room?.roomType === 'music') {
+          room.currentState = state;
+          this.rooms.set(roomInfo.roomId, room);
+          socket.to(roomInfo.roomId).emit('music:update', state);
+        }
+      });
+
+      socket.on('music:queue', (state) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        if (!roomInfo || !roomInfo.isOwner) return;
+
+        const room = this.rooms.get(roomInfo.roomId);
+        if (room?.roomType === 'music') {
+          room.currentState = state;
+          this.rooms.set(roomInfo.roomId, room);
+          socket.to(roomInfo.roomId).emit('music:queue', state);
+        }
+      });
+
+      socket.on('music:play', (state) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        if (!roomInfo || !roomInfo.isOwner) return;
+
+        const room = this.rooms.get(roomInfo.roomId);
+        if (room?.roomType === 'music') {
+          room.currentState = { ...state, isPlaying: true };
+          this.rooms.set(roomInfo.roomId, room);
+          socket.to(roomInfo.roomId).emit('music:play', state);
+        }
+      });
+
+      socket.on('music:pause', (state) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        if (!roomInfo || !roomInfo.isOwner) return;
+
+        const room = this.rooms.get(roomInfo.roomId);
+        if (room?.roomType === 'music') {
+          room.currentState = { ...state, isPlaying: false };
+          this.rooms.set(roomInfo.roomId, room);
+          socket.to(roomInfo.roomId).emit('music:pause', state);
+        }
+      });
+
+      socket.on('music:seek', (state) => {
+        const roomInfo = this.socketToRoom.get(socket.id);
+        if (!roomInfo || !roomInfo.isOwner) return;
+
+        const room = this.rooms.get(roomInfo.roomId);
+        if (room?.roomType === 'music') {
+          room.currentState = { ...state };
+          this.rooms.set(roomInfo.roomId, room);
+          socket.to(roomInfo.roomId).emit('music:seek', state);
         }
       });
 
@@ -503,6 +575,11 @@ export class WatchRoomServer {
 
       this.rooms.forEach((room, roomId) => {
         const timeSinceHeartbeat = now - room.lastOwnerHeartbeat;
+        const isScreenSharing = room.currentState?.type === 'screen' && room.currentState.status === 'sharing';
+
+        if (isScreenSharing) {
+          return;
+        }
 
         // 如果房主心跳超过30秒，清除播放状态
         if (timeSinceHeartbeat > clearStateTimeout && room.currentState !== null) {

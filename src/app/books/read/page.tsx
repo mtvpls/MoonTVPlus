@@ -1,12 +1,36 @@
 'use client';
 
-import { BookOpen, ChevronRight, ChevronUp, Gauge, Headphones, Loader2, Moon, Pause, Play, SkipBack, SkipForward, Square, Sun, Volume2, Waves, X } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronRight,
+  ChevronUp,
+  Gauge,
+  Headphones,
+  Loader2,
+  Moon,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  Square,
+  Sun,
+  Volume2,
+  Waves,
+  X,
+} from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { saveBookReadRecord } from '@/lib/book.db.client';
-import { BookChapter, BookChapterContent, BookReadManifest, BookReadRecord, BookTtsProgress, BookTtsVoice } from '@/lib/book.types';
+import {
+  BookChapter,
+  BookChapterContent,
+  BookReadManifest,
+  BookReadRecord,
+  BookTtsProgress,
+  BookTtsVoice,
+} from '@/lib/book.types';
 import {
   buildBookCacheKey,
   enforceBookCacheLimit,
@@ -14,7 +38,10 @@ import {
   putCachedBookFile,
   touchCachedBookFile,
 } from '@/lib/book-cache.client';
-import { cacheBookDetail, getBookRouteCache } from '@/lib/book-route-cache.client';
+import {
+  cacheBookDetail,
+  getBookRouteCache,
+} from '@/lib/book-route-cache.client';
 import {
   buildBookTtsCacheKey,
   enforceBookTtsCacheLimit,
@@ -22,7 +49,10 @@ import {
   putCachedBookTtsChunk,
   touchCachedBookTtsChunk,
 } from '@/lib/book-tts-cache.client';
-import { getBookTtsProgress, saveBookTtsProgress } from '@/lib/book-tts-progress.client';
+import {
+  getBookTtsProgress,
+  saveBookTtsProgress,
+} from '@/lib/book-tts-progress.client';
 
 declare global {
   interface Window {
@@ -54,7 +84,10 @@ interface EpubThemes {
 }
 
 interface EpubBookInstance {
-  renderTo: (element: HTMLElement, options: Record<string, string | boolean>) => EpubRendition;
+  renderTo: (
+    element: HTMLElement,
+    options: Record<string, string | boolean>
+  ) => EpubRendition;
   locations?: {
     percentageFromCfi?: (cfi: string) => number;
     generate?: (chars?: number) => Promise<void>;
@@ -70,6 +103,7 @@ interface EpubBookInstance {
 interface EpubRendition {
   display: (target?: string) => Promise<void>;
   on: (event: 'relocated', callback: (location: EpubLocation) => void) => void;
+  currentLocation?: () => EpubLocation;
   prev?: () => void;
   next?: () => void;
   destroy?: () => void;
@@ -78,7 +112,12 @@ interface EpubRendition {
 
 type ReaderTheme = 'light' | 'sepia' | 'dark';
 type ReaderMode = 'paginated' | 'scrolled';
-type FileLoadState = 'preparing' | 'checking-cache' | 'downloading' | 'opening' | 'ready';
+type FileLoadState =
+  | 'preparing'
+  | 'checking-cache'
+  | 'downloading'
+  | 'opening'
+  | 'ready';
 
 interface ReaderSettings {
   fontSize: number;
@@ -102,6 +141,12 @@ interface TtsSettings {
   autoPlayNext: boolean;
 }
 
+interface TtsVoicesCache {
+  voices: BookTtsVoice[];
+  defaults?: Partial<TtsSettings>;
+  savedAt: number;
+}
+
 interface ScrolledReadingPosition {
   href: string;
   scrollTop: number;
@@ -114,7 +159,8 @@ type TtsStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
 
 const SETTINGS_STORAGE_KEY = 'books_epub_reader_settings';
 const SCROLLED_POSITION_STORAGE_KEY = 'books_epub_scrolled_positions';
-const TTS_SETTINGS_STORAGE_KEY = 'books_epub_tts_settings';
+const TTS_SETTINGS_STORAGE_KEY = 'books_tts_settings';
+const TTS_VOICES_STORAGE_KEY = 'books_tts_voices_cache';
 const DEFAULT_SETTINGS: ReaderSettings = {
   fontSize: 100,
   lineHeight: 1.7,
@@ -134,7 +180,10 @@ const TTS_RATE_STEPS = [-20, -10, 0, 10, 20, 35];
 const TTS_PITCH_STEPS = [-10, 0, 10, 20];
 const TTS_VOLUME_STEPS = [-10, 0, 10, 20];
 
-const THEME_STYLES: Record<ReaderTheme, { bodyBg: string; bodyColor: string; panelBg: string }> = {
+const THEME_STYLES: Record<
+  ReaderTheme,
+  { bodyBg: string; bodyColor: string; panelBg: string }
+> = {
   light: { bodyBg: '#ffffff', bodyColor: '#111827', panelBg: '#ffffff' },
   sepia: { bodyBg: '#f6efe3', bodyColor: '#5b4636', panelBg: '#f7f1e7' },
   dark: { bodyBg: '#111827', bodyColor: '#e5e7eb', panelBg: '#030712' },
@@ -145,10 +194,51 @@ function loadTtsSettings(): TtsSettings {
   try {
     const raw = localStorage.getItem(TTS_SETTINGS_STORAGE_KEY);
     if (!raw) return DEFAULT_TTS_SETTINGS;
-    return { ...DEFAULT_TTS_SETTINGS, ...(JSON.parse(raw) as Partial<TtsSettings>) };
+    return {
+      ...DEFAULT_TTS_SETTINGS,
+      ...(JSON.parse(raw) as Partial<TtsSettings>),
+    };
   } catch {
     return DEFAULT_TTS_SETTINGS;
   }
+}
+
+function loadCachedTtsVoices(): TtsVoicesCache | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(TTS_VOICES_STORAGE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw) as Partial<TtsVoicesCache>;
+    if (!Array.isArray(cache.voices) || cache.voices.length === 0) return null;
+    return {
+      voices: cache.voices,
+      defaults: cache.defaults || {},
+      savedAt: typeof cache.savedAt === 'number' ? cache.savedAt : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedTtsVoices(cache: Omit<TtsVoicesCache, 'savedAt'>) {
+  if (typeof window === 'undefined' || cache.voices.length === 0) return;
+  localStorage.setItem(
+    TTS_VOICES_STORAGE_KEY,
+    JSON.stringify({ ...cache, savedAt: Date.now() })
+  );
+}
+
+function applyTtsDefaults(
+  settings: TtsSettings,
+  defaults?: Partial<TtsSettings>
+): TtsSettings {
+  return {
+    ...settings,
+    voice: settings.voice || defaults?.voice || '',
+    rate: settings.rate || defaults?.rate || '+0%',
+    pitch: settings.pitch || defaults?.pitch || '+0Hz',
+    volume: settings.volume || defaults?.volume || '+0%',
+  };
 }
 
 function parseSignedNumber(value: string, _suffix: '%' | 'Hz') {
@@ -163,14 +253,20 @@ function formatSignedValue(value: number, suffix: '%' | 'Hz') {
 
 function loadScriptOnce(selector: string, src: string, errorMessage: string) {
   return new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector(selector) as HTMLScriptElement | null;
+    const existing = document.querySelector(
+      selector
+    ) as HTMLScriptElement | null;
     if (existing) {
       if (existing.dataset.loaded === 'true') {
         resolve();
         return;
       }
       existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error(errorMessage)), { once: true });
+      existing.addEventListener(
+        'error',
+        () => reject(new Error(errorMessage)),
+        { once: true }
+      );
       return;
     }
 
@@ -191,10 +287,18 @@ function loadScriptOnce(selector: string, src: string, errorMessage: string) {
 async function loadEpubScript() {
   if (window.ePub && window.JSZip) return;
   if (!window.JSZip) {
-    await loadScriptOnce('script[data-jszip]', 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', 'JSZip 加载失败');
+    await loadScriptOnce(
+      'script[data-jszip]',
+      'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+      'JSZip 加载失败'
+    );
   }
   if (!window.ePub) {
-    await loadScriptOnce('script[data-epubjs]', 'https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js', 'epub.js 加载失败');
+    await loadScriptOnce(
+      'script[data-epubjs]',
+      'https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js',
+      'epub.js 加载失败'
+    );
   }
 }
 
@@ -203,14 +307,20 @@ function loadReaderSettings(): ReaderSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<ReaderSettings>) };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...(JSON.parse(raw) as Partial<ReaderSettings>),
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }
 }
 
-
-function buildScrolledPositionKey(sourceId: string, bookId: string, href?: string) {
+function buildScrolledPositionKey(
+  sourceId: string,
+  bookId: string,
+  href?: string
+) {
   return `${sourceId}::${bookId}::${normalizeHrefForMatch(href)}`;
 }
 
@@ -218,20 +328,30 @@ function loadScrolledPositions(): Record<string, ScrolledReadingPosition> {
   if (typeof window === 'undefined') return {};
   try {
     const raw = localStorage.getItem(SCROLLED_POSITION_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, ScrolledReadingPosition>) : {};
+    return raw
+      ? (JSON.parse(raw) as Record<string, ScrolledReadingPosition>)
+      : {};
   } catch {
     return {};
   }
 }
 
-function saveScrolledPosition(sourceId: string, bookId: string, position: ScrolledReadingPosition) {
+function saveScrolledPosition(
+  sourceId: string,
+  bookId: string,
+  position: ScrolledReadingPosition
+) {
   if (typeof window === 'undefined') return;
   const all = loadScrolledPositions();
   all[buildScrolledPositionKey(sourceId, bookId, position.href)] = position;
   localStorage.setItem(SCROLLED_POSITION_STORAGE_KEY, JSON.stringify(all));
 }
 
-function getScrolledPosition(sourceId: string, bookId: string, href?: string): ScrolledReadingPosition | null {
+function getScrolledPosition(
+  sourceId: string,
+  bookId: string,
+  href?: string
+): ScrolledReadingPosition | null {
   const all = loadScrolledPositions();
   return all[buildScrolledPositionKey(sourceId, bookId, href)] || null;
 }
@@ -259,15 +379,25 @@ function getIframeScrollMetrics(viewer: HTMLDivElement | null) {
     }
   }
 
-  const root = doc ? (doc.scrollingElement || doc.documentElement || doc.body) : null;
-  const rootOverflow = root ? Math.max((root.scrollHeight || 0) - (root.clientHeight || win?.innerHeight || 0), 0) : 0;
+  const root = doc
+    ? doc.scrollingElement || doc.documentElement || doc.body
+    : null;
+  const rootOverflow = root
+    ? Math.max(
+        (root.scrollHeight || 0) - (root.clientHeight || win?.innerHeight || 0),
+        0
+      )
+    : 0;
 
   if (root && rootOverflow >= bestOverflow) {
     return {
       iframe,
       root,
       scrollTop: Math.max(0, win?.scrollY || root.scrollTop || 0),
-      scrollHeight: Math.max(root.scrollHeight || 0, doc?.body?.scrollHeight || 0),
+      scrollHeight: Math.max(
+        root.scrollHeight || 0,
+        doc?.body?.scrollHeight || 0
+      ),
       clientHeight: root.clientHeight || win?.innerHeight || 0,
       setScrollTop: (value: number) => {
         if (typeof root.scrollTo === 'function') {
@@ -276,8 +406,10 @@ function getIframeScrollMetrics(viewer: HTMLDivElement | null) {
           root.scrollTop = value;
         }
       },
-      addScrollListener: (listener: () => void) => win?.addEventListener('scroll', listener, { passive: true }),
-      removeScrollListener: (listener: () => void) => win?.removeEventListener('scroll', listener),
+      addScrollListener: (listener: () => void) =>
+        win?.addEventListener('scroll', listener, { passive: true }),
+      removeScrollListener: (listener: () => void) =>
+        win?.removeEventListener('scroll', listener),
       interactionTarget: root,
     };
   }
@@ -293,8 +425,10 @@ function getIframeScrollMetrics(viewer: HTMLDivElement | null) {
       setScrollTop: (value: number) => {
         scrollElement.scrollTo({ top: value, behavior: 'auto' });
       },
-      addScrollListener: (listener: () => void) => scrollElement.addEventListener('scroll', listener, { passive: true }),
-      removeScrollListener: (listener: () => void) => scrollElement.removeEventListener('scroll', listener),
+      addScrollListener: (listener: () => void) =>
+        scrollElement.addEventListener('scroll', listener, { passive: true }),
+      removeScrollListener: (listener: () => void) =>
+        scrollElement.removeEventListener('scroll', listener),
       interactionTarget: scrollElement,
     };
   }
@@ -302,7 +436,11 @@ function getIframeScrollMetrics(viewer: HTMLDivElement | null) {
   return null;
 }
 
-function computeScrolledTargetScrollTop(position: ScrolledReadingPosition, currentScrollHeight: number, currentClientHeight: number) {
+function computeScrolledTargetScrollTop(
+  position: ScrolledReadingPosition,
+  currentScrollHeight: number,
+  currentClientHeight: number
+) {
   const maxSaved = Math.max(0, position.scrollHeight - position.clientHeight);
   const maxCurrent = Math.max(0, currentScrollHeight - currentClientHeight);
   if (maxCurrent <= 0) return 0;
@@ -311,9 +449,15 @@ function computeScrolledTargetScrollTop(position: ScrolledReadingPosition, curre
   return ratio * maxCurrent;
 }
 
-function encodeChapterScrollLocator(href: string, scrollTop: number, scrollHeight: number, clientHeight: number) {
+function encodeChapterScrollLocator(
+  href: string,
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number
+) {
   const maxScrollTop = Math.max(0, scrollHeight - clientHeight);
-  const ratio = maxScrollTop > 0 ? Math.max(0, Math.min(1, scrollTop / maxScrollTop)) : 0;
+  const ratio =
+    maxScrollTop > 0 ? Math.max(0, Math.min(1, scrollTop / maxScrollTop)) : 0;
   return `${href}#scroll=${ratio.toFixed(6)}`;
 }
 
@@ -326,12 +470,98 @@ function parseChapterScrollLocator(value?: string) {
   return Math.max(0, Math.min(1, ratio));
 }
 
+function getHrefFromScrollLocator(value?: string) {
+  if (!value || parseChapterScrollLocator(value) === null) return '';
+  return value.split('#scroll=')[0] || '';
+}
+
+function getScrolledPositionFromRecord(
+  record?: BookReadRecord | null
+): ScrolledReadingPosition | null {
+  const ratio = parseChapterScrollLocator(record?.locator?.value);
+  if (ratio === null) return null;
+  const href =
+    record?.chapterHref ||
+    record?.locator?.href ||
+    getHrefFromScrollLocator(record?.locator?.value);
+  if (!href) return null;
+  return {
+    href,
+    scrollTop: ratio,
+    scrollHeight: 2,
+    clientHeight: 1,
+    updatedAt: record?.saveTime || Date.now(),
+  };
+}
+
+function getWindowScrollMetrics() {
+  if (typeof window === 'undefined' || typeof document === 'undefined')
+    return null;
+  const root = document.scrollingElement || document.documentElement;
+  const scrollTop = Math.max(
+    0,
+    window.scrollY || root?.scrollTop || document.body?.scrollTop || 0
+  );
+  const scrollHeight = Math.max(
+    root?.scrollHeight || 0,
+    document.documentElement?.scrollHeight || 0,
+    document.body?.scrollHeight || 0
+  );
+  const clientHeight =
+    root?.clientHeight || document.documentElement?.clientHeight || window.innerHeight || 0;
+  const maxScrollTop = Math.max(0, scrollHeight - clientHeight);
+  return { scrollTop, scrollHeight, clientHeight, maxScrollTop };
+}
+
+function getChapterScrollMetrics(node: HTMLDivElement | null) {
+  const nodeScrollHeight = node?.scrollHeight || 0;
+  const nodeClientHeight = node?.clientHeight || 0;
+  const nodeScrollTop = Math.max(0, node?.scrollTop || 0);
+  const nodeMaxScrollTop = Math.max(0, nodeScrollHeight - nodeClientHeight);
+  const windowMetrics = getWindowScrollMetrics();
+
+  if (
+    windowMetrics &&
+    windowMetrics.maxScrollTop > 0 &&
+    (windowMetrics.scrollTop > 0 || nodeMaxScrollTop <= 0)
+  ) {
+    return windowMetrics;
+  }
+
+  return {
+    scrollTop: nodeScrollTop,
+    scrollHeight: nodeScrollHeight,
+    clientHeight: nodeClientHeight,
+    maxScrollTop: nodeMaxScrollTop,
+  };
+}
+
+function setChapterScrollTop(node: HTMLDivElement | null, top: number) {
+  const metrics = getChapterScrollMetrics(node);
+  const targetTop = Math.max(0, Math.min(metrics.maxScrollTop, top));
+  const windowMetrics = getWindowScrollMetrics();
+  if (
+    windowMetrics &&
+    metrics.scrollHeight === windowMetrics.scrollHeight &&
+    metrics.clientHeight === windowMetrics.clientHeight
+  ) {
+    window.scrollTo({ top: targetTop, behavior: 'auto' });
+    return;
+  }
+  node?.scrollTo({ top: targetTop, behavior: 'auto' });
+}
+
 function flattenToc(items: TocItem[]): TocItem[] {
   return items.flatMap((item) => [item, ...flattenToc(item.subitems || [])]);
 }
 
 function tocItemIsActive(item: TocItem, currentHref: string): boolean {
-  return isSameTocTarget(currentHref, item.href) || (item.subitems || []).some((subitem) => tocItemIsActive(subitem, currentHref));
+  return (
+    isSameTocTarget(currentHref, item.href) ||
+    (item.subitems || []).some((subitem) =>
+      tocItemIsActive(subitem, currentHref)
+    )
+  );
 }
 
 function findTocLabelByHref(items: TocItem[], currentHref: string): string {
@@ -343,7 +573,11 @@ function findTocLabelByHref(items: TocItem[], currentHref: string): string {
   return '';
 }
 
-async function fetchJsonWithRetry<T>(url: string, init?: RequestInit, retries = 2): Promise<T> {
+async function fetchJsonWithRetry<T>(
+  url: string,
+  init?: RequestInit,
+  retries = 2
+): Promise<T> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
@@ -354,7 +588,9 @@ async function fetchJsonWithRetry<T>(url: string, init?: RequestInit, retries = 
     } catch (error) {
       lastError = error;
       if (attempt < retries) {
-        await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 300 * (attempt + 1))
+        );
       }
     }
   }
@@ -401,7 +637,9 @@ async function downloadBookWithProgress(
     }
   }
 
-  return new Blob(chunks, { type: response.headers.get('content-type') || 'application/epub+zip' });
+  return new Blob(chunks, {
+    type: response.headers.get('content-type') || 'application/epub+zip',
+  });
 }
 
 function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
@@ -418,12 +656,16 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
   const [error, setError] = useState('');
   const [ttsVoices, setTtsVoices] = useState<BookTtsVoice[]>([]);
   const [ttsAvailable, setTtsAvailable] = useState(false);
-  const [ttsSettings, setTtsSettings] = useState<TtsSettings>(DEFAULT_TTS_SETTINGS);
+  const [ttsSettings, setTtsSettings] = useState<TtsSettings>(() =>
+    loadTtsSettings()
+  );
   const [ttsStatus, setTtsStatus] = useState<TtsStatus>('idle');
   const [ttsError, setTtsError] = useState('');
   const [ttsChunks, setTtsChunks] = useState<TtsChunk[]>([]);
   const [ttsCurrentChunkIndex, setTtsCurrentChunkIndex] = useState(0);
-  const [ttsLoadingChunkIndex, setTtsLoadingChunkIndex] = useState<number | null>(null);
+  const [ttsLoadingChunkIndex, setTtsLoadingChunkIndex] = useState<
+    number | null
+  >(null);
   const [ttsBarVisible, setTtsBarVisible] = useState(false);
   const [ttsPanelOpen, setTtsPanelOpen] = useState(false);
   const [ttsCurrentTime, setTtsCurrentTime] = useState(0);
@@ -434,9 +676,14 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
   const restoredChapterPositionRef = useRef(false);
   const chapterSaveTimerRef = useRef<number | null>(null);
   const pendingChapterRestoreRatioRef = useRef<number | null>(null);
+  const lastChapterScrollMetricsRef = useRef<ReturnType<
+    typeof getChapterScrollMetrics
+  > | null>(null);
   const currentIndexRef = useRef(0);
   const lastChapterSavedAtRef = useRef(0);
-  const lastChapterSavedLocatorValueRef = useRef(manifest.lastRecord?.locator?.value || '');
+  const lastChapterSavedLocatorValueRef = useRef(
+    manifest.lastRecord?.locator?.value || ''
+  );
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsChunksRef = useRef<TtsChunk[]>([]);
   const ttsCurrentChunkIndexRef = useRef(0);
@@ -445,28 +692,44 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
   const ttsSeekingRef = useRef(false);
   const ttsResumeTimeRef = useRef(0);
   const currentChapterHref = chapters[currentIndex]?.href || '';
-  const currentChapterTitle = chapters[currentIndex]?.title || chapter?.title || '';
+  const currentChapterTitle =
+    chapters[currentIndex]?.title || chapter?.title || '';
 
-  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
   useEffect(() => {
     setSettings(loadReaderSettings());
-    setTtsSettings(loadTtsSettings());
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    if (typeof window !== 'undefined')
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   }, [settings]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem(TTS_SETTINGS_STORAGE_KEY, JSON.stringify(ttsSettings));
+    if (typeof window !== 'undefined')
+      localStorage.setItem(
+        TTS_SETTINGS_STORAGE_KEY,
+        JSON.stringify(ttsSettings)
+      );
     ttsSettingsRef.current = ttsSettings;
   }, [ttsSettings]);
 
-  useEffect(() => { ttsChunksRef.current = ttsChunks; }, [ttsChunks]);
-  useEffect(() => { ttsCurrentChunkIndexRef.current = ttsCurrentChunkIndex; }, [ttsCurrentChunkIndex]);
-  useEffect(() => { ttsStatusRef.current = ttsStatus; }, [ttsStatus]);
-  useEffect(() => { ttsSeekingRef.current = ttsSeeking; if (!ttsSeeking) setTtsSeekValue(ttsCurrentTime); }, [ttsCurrentTime, ttsSeeking]);
+  useEffect(() => {
+    ttsChunksRef.current = ttsChunks;
+  }, [ttsChunks]);
+  useEffect(() => {
+    ttsCurrentChunkIndexRef.current = ttsCurrentChunkIndex;
+  }, [ttsCurrentChunkIndex]);
+  useEffect(() => {
+    ttsStatusRef.current = ttsStatus;
+  }, [ttsStatus]);
+  useEffect(() => {
+    ttsSeekingRef.current = ttsSeeking;
+    if (!ttsSeeking) setTtsSeekValue(ttsCurrentTime);
+  }, [ttsCurrentTime, ttsSeeking]);
 
   const stopTts = useCallback((clearQueue = false) => {
     const audio = audioRef.current;
@@ -490,20 +753,45 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
   }, []);
 
   useEffect(() => {
-    const handleToggleChapters = () => { setTocOpen((prev) => !prev); setSettingsOpen(false); setTtsPanelOpen(false); };
-    const handleToggleSettings = () => { setSettingsOpen((prev) => !prev); setTocOpen(false); setTtsPanelOpen(false); };
-    const handleToggleTts = () => { setTtsBarVisible((prev) => !prev); setTocOpen(false); setSettingsOpen(false); };
+    const handleToggleChapters = () => {
+      setTocOpen((prev) => !prev);
+      setSettingsOpen(false);
+      setTtsPanelOpen(false);
+    };
+    const handleToggleSettings = () => {
+      setSettingsOpen((prev) => !prev);
+      setTocOpen(false);
+      setTtsPanelOpen(false);
+    };
+    const handleToggleTts = () => {
+      setTtsBarVisible((prev) => !prev);
+      setTocOpen(false);
+      setSettingsOpen(false);
+    };
     window.addEventListener('books-read-toggle-chapters', handleToggleChapters);
     window.addEventListener('books-read-toggle-settings', handleToggleSettings);
     window.addEventListener('books-read-toggle-tts', handleToggleTts);
     return () => {
-      window.removeEventListener('books-read-toggle-chapters', handleToggleChapters);
-      window.removeEventListener('books-read-toggle-settings', handleToggleSettings);
+      window.removeEventListener(
+        'books-read-toggle-chapters',
+        handleToggleChapters
+      );
+      window.removeEventListener(
+        'books-read-toggle-settings',
+        handleToggleSettings
+      );
       window.removeEventListener('books-read-toggle-tts', handleToggleTts);
     };
   }, []);
 
   useEffect(() => {
+    const cachedVoices = loadCachedTtsVoices();
+    if (cachedVoices) {
+      setTtsAvailable(true);
+      setTtsVoices(cachedVoices.voices);
+      setTtsSettings((prev) => applyTtsDefaults(prev, cachedVoices.defaults));
+      return;
+    }
     let cancelled = false;
     fetch('/api/books/tts/voices')
       .then(async (res) => {
@@ -512,7 +800,11 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
         if (cancelled) return;
         setTtsAvailable(true);
         setTtsVoices(json.voices || []);
-        setTtsSettings((prev) => ({ ...prev, voice: prev.voice || json.defaults?.voice || '' }));
+        setTtsSettings((prev) => applyTtsDefaults(prev, json.defaults));
+        saveCachedTtsVoices({
+          voices: json.voices || [],
+          defaults: json.defaults || {},
+        });
       })
       .catch((err) => {
         if (!cancelled) {
@@ -521,53 +813,77 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
           setTtsError(err.message || '朗读能力不可用');
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const buildChapterReadRecord = useCallback((item: BookChapter, index: number): BookReadRecord => {
-    const node = scrollRef.current;
-    const scrollTop = node?.scrollTop || 0;
-    const scrollHeight = node?.scrollHeight || 0;
-    const clientHeight = node?.clientHeight || 0;
-    const chapterCount = Math.max(1, chapters.length);
-    const maxScrollTop = Math.max(0, scrollHeight - clientHeight);
-    const chapterRatio = maxScrollTop > 0 ? Math.max(0, Math.min(1, scrollTop / maxScrollTop)) : 0;
-    const progressPercent = chapters.length > 0
-      ? Math.max(0, Math.min(100, ((index + chapterRatio) / chapterCount) * 100))
-      : 0;
+  const buildChapterReadRecord = useCallback(
+    (item: BookChapter, index: number): BookReadRecord => {
+      const currentMetrics = getChapterScrollMetrics(scrollRef.current);
+      const savedMetrics = lastChapterScrollMetricsRef.current;
+      const { scrollTop, scrollHeight, clientHeight, maxScrollTop } =
+        currentMetrics.scrollTop === 0 &&
+        savedMetrics &&
+        savedMetrics.scrollTop > 0
+          ? savedMetrics
+          : currentMetrics;
+      const chapterCount = Math.max(1, chapters.length);
+      const chapterRatio =
+        maxScrollTop > 0
+          ? Math.max(0, Math.min(1, scrollTop / maxScrollTop))
+          : 0;
+      const progressPercent =
+        chapters.length > 0
+          ? Math.max(
+              0,
+              Math.min(100, ((index + chapterRatio) / chapterCount) * 100)
+            )
+          : 0;
 
-    return {
-      sourceId: manifest.book.sourceId,
-      sourceName: manifest.book.sourceName,
-      bookId: manifest.book.id,
-      title: manifest.book.title,
-      author: manifest.book.author,
-      cover: manifest.book.cover,
-      detailHref: manifest.book.detailHref,
-      acquisitionHref: manifest.acquisitionHref,
-      format: 'chapters',
-      locator: {
-        type: 'chapter',
-        value: encodeChapterScrollLocator(item.href, scrollTop, scrollHeight, clientHeight),
-        href: item.href,
+      return {
+        sourceId: manifest.book.sourceId,
+        sourceName: manifest.book.sourceName,
+        bookId: manifest.book.id,
+        title: manifest.book.title,
+        author: manifest.book.author,
+        cover: manifest.book.cover,
+        detailHref: manifest.book.detailHref,
+        acquisitionHref: manifest.acquisitionHref,
+        format: 'chapters',
+        locator: {
+          type: 'chapter',
+          value: encodeChapterScrollLocator(
+            item.href,
+            scrollTop,
+            scrollHeight,
+            clientHeight
+          ),
+          href: item.href,
+          chapterTitle: item.title,
+        },
         chapterTitle: item.title,
-      },
-      chapterTitle: item.title,
-      chapterHref: item.href,
-      progressPercent,
-      saveTime: Date.now(),
-    };
-  }, [chapters.length, manifest]);
+        chapterHref: item.href,
+        progressPercent,
+        saveTime: Date.now(),
+      };
+    },
+    [chapters.length, manifest]
+  );
 
-  const persistChapterProgress = useCallback((index = currentIndexRef.current) => {
-    const item = chapters[index];
-    if (!item) return;
-    const record = buildChapterReadRecord(item, index);
-    if (record.locator.value === lastChapterSavedLocatorValueRef.current) return;
-    lastChapterSavedLocatorValueRef.current = record.locator.value;
-    lastChapterSavedAtRef.current = Date.now();
-    void saveBookReadRecord(record.sourceId, record.bookId, record);
-  }, [buildChapterReadRecord, chapters]);
+  const persistChapterProgress = useCallback(
+    (index = currentIndexRef.current) => {
+      const item = chapters[index];
+      if (!item) return;
+      const record = buildChapterReadRecord(item, index);
+      if (record.locator.value === lastChapterSavedLocatorValueRef.current)
+        return;
+      lastChapterSavedLocatorValueRef.current = record.locator.value;
+      lastChapterSavedAtRef.current = Date.now();
+      void saveBookReadRecord(record.sourceId, record.bookId, record);
+    },
+    [buildChapterReadRecord, chapters]
+  );
 
   const scheduleChapterProgressSave = useCallback(() => {
     if (chapterSaveTimerRef.current) return;
@@ -589,22 +905,39 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
     restoredChapterPositionRef.current = false;
     pendingChapterRestoreRatioRef.current = null;
     lastChapterSavedAtRef.current = 0;
-    lastChapterSavedLocatorValueRef.current = manifest.lastRecord?.locator?.value || '';
+    lastChapterSavedLocatorValueRef.current =
+      manifest.lastRecord?.locator?.value || '';
     setLoading(true);
     setError('');
-    const url = manifest.chaptersUrl || `/api/books/read/chapters?sourceId=${encodeURIComponent(manifest.book.sourceId)}&bookId=${encodeURIComponent(manifest.book.id)}`;
+    const url =
+      manifest.chaptersUrl ||
+      `/api/books/read/chapters?sourceId=${encodeURIComponent(
+        manifest.book.sourceId
+      )}&bookId=${encodeURIComponent(manifest.book.id)}`;
     fetchJsonWithRetry<{ chapters?: BookChapter[] }>(url, { cache: 'no-store' })
       .then((json) => {
         if (cancelled) return;
         const list = (json.chapters || []) as BookChapter[];
         setChapters(list);
         setChaptersLoaded(true);
-        const savedHref = initialChapterHref || manifest.lastRecord?.chapterHref || manifest.lastRecord?.locator?.href || manifest.lastRecord?.locator?.value?.split('#scroll=')[0] || '';
+        const savedHref =
+          initialChapterHref ||
+          manifest.lastRecord?.chapterHref ||
+          manifest.lastRecord?.locator?.href ||
+          manifest.lastRecord?.locator?.value?.split('#scroll=')[0] ||
+          '';
         const savedIndex = list.findIndex((item) => item.href === savedHref);
         setCurrentIndex(savedIndex >= 0 ? savedIndex : 0);
       })
-      .catch((err) => { if (!cancelled) { setError(err.message || '获取目录失败'); setChaptersLoaded(true); } });
-    return () => { cancelled = true; };
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message || '获取目录失败');
+          setChaptersLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [initialChapterHref, manifest]);
 
   useEffect(() => {
@@ -616,30 +949,60 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
     stopTts(true);
     setLoading(true);
     setError('');
-    scrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+    lastChapterScrollMetricsRef.current = null;
+    setChapterScrollTop(scrollRef.current, 0);
     pendingChapterRestoreRatioRef.current = null;
-    const params = new URLSearchParams({ sourceId: manifest.book.sourceId, href: item.href });
-    if (manifest.acquisitionHref) params.set('tocHref', manifest.acquisitionHref);
-    fetchJsonWithRetry<BookChapterContent>(`/api/books/read/chapter?${params.toString()}`, { cache: 'no-store' })
+    const params = new URLSearchParams({
+      sourceId: manifest.book.sourceId,
+      href: item.href,
+    });
+    if (manifest.acquisitionHref)
+      params.set('tocHref', manifest.acquisitionHref);
+    fetchJsonWithRetry<BookChapterContent>(
+      `/api/books/read/chapter?${params.toString()}`,
+      { cache: 'no-store' }
+    )
       .then((json) => {
-        const shouldRestore = !restoredChapterPositionRef.current
-          && !initialChapterHref
-          && (manifest.lastRecord?.chapterHref === item.href || manifest.lastRecord?.locator?.href === item.href);
-        pendingChapterRestoreRatioRef.current = shouldRestore ? parseChapterScrollLocator(manifest.lastRecord?.locator?.value) : null;
-        setChapter({ ...(json as BookChapterContent), title: (json as BookChapterContent).title || item.title });
+        const shouldRestore =
+          !restoredChapterPositionRef.current &&
+          !initialChapterHref &&
+          (manifest.lastRecord?.chapterHref === item.href ||
+            manifest.lastRecord?.locator?.href === item.href);
+        pendingChapterRestoreRatioRef.current = shouldRestore
+          ? parseChapterScrollLocator(manifest.lastRecord?.locator?.value)
+          : null;
+        setChapter({
+          ...(json as BookChapterContent),
+          title: (json as BookChapterContent).title || item.title,
+        });
       })
       .catch((err) => setError(err.message || '获取章节失败'))
       .finally(() => setLoading(false));
-  }, [chapters, chaptersLoaded, currentIndex, initialChapterHref, manifest, persistChapterProgress, stopTts]);
+  }, [
+    chapters,
+    chaptersLoaded,
+    currentIndex,
+    initialChapterHref,
+    manifest,
+    persistChapterProgress,
+    stopTts,
+  ]);
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('books-read-update-header', {
-      detail: {
-        title: manifest.book.title,
-        subtitle: currentChapterTitle || manifest.book.author || (settings.mode === 'scrolled' ? '滚动阅读' : '翻页阅读'),
-        backHref: `/books/detail?sourceId=${encodeURIComponent(manifest.book.sourceId)}&bookId=${encodeURIComponent(manifest.book.id)}`,
-      },
-    }));
+    window.dispatchEvent(
+      new CustomEvent('books-read-update-header', {
+        detail: {
+          title: manifest.book.title,
+          subtitle:
+            currentChapterTitle ||
+            manifest.book.author ||
+            (settings.mode === 'scrolled' ? '滚动阅读' : '翻页阅读'),
+          backHref: `/books/detail?sourceId=${encodeURIComponent(
+            manifest.book.sourceId
+          )}&bookId=${encodeURIComponent(manifest.book.id)}`,
+        },
+      })
+    );
   }, [manifest, currentChapterTitle, settings.mode]);
 
   const goPrevChapter = useCallback(() => {
@@ -651,77 +1014,92 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
     setCurrentIndex((prev) => Math.min(chapters.length - 1, prev + 1));
   }, [chapters.length, persistChapterProgress]);
 
-  const turnPage = useCallback((direction: 1 | -1) => {
-    const node = scrollRef.current;
-    if (!node) return;
-    if (settings.mode === 'scrolled') return;
-    const delta = Math.max(240, node.clientHeight * 0.88) * direction;
-    const maxTop = Math.max(0, node.scrollHeight - node.clientHeight);
-    const nextTop = Math.max(0, Math.min(maxTop, node.scrollTop + delta));
-    if (direction > 0 && node.scrollTop >= maxTop - 8) {
-      if (currentIndex < chapters.length - 1) goNextChapter();
-      return;
-    }
-    if (direction < 0 && node.scrollTop <= 8) {
-      if (currentIndex > 0) goPrevChapter();
-      return;
-    }
-    node.scrollTo({ top: nextTop, behavior: 'smooth' });
-  }, [chapters.length, currentIndex, goNextChapter, goPrevChapter, settings.mode]);
+  const turnPage = useCallback(
+    (direction: 1 | -1) => {
+      const node = scrollRef.current;
+      if (!node) return;
+      if (settings.mode === 'scrolled') return;
+      const metrics = getChapterScrollMetrics(node);
+      const delta = Math.max(240, metrics.clientHeight * 0.88) * direction;
+      const nextTop = Math.max(
+        0,
+        Math.min(metrics.maxScrollTop, metrics.scrollTop + delta)
+      );
+      if (direction > 0 && metrics.scrollTop >= metrics.maxScrollTop - 8) {
+        if (currentIndex < chapters.length - 1) goNextChapter();
+        return;
+      }
+      if (direction < 0 && metrics.scrollTop <= 8) {
+        if (currentIndex > 0) goPrevChapter();
+        return;
+      }
+      setChapterScrollTop(node, nextTop);
+    },
+    [chapters.length, currentIndex, goNextChapter, goPrevChapter, settings.mode]
+  );
 
   const getChapterPlainText = useCallback(() => {
     const html = chapter?.content || '';
     if (!html) return '';
-    if (typeof document === 'undefined') return sanitizeTtsText(html.replace(/<[^>]*>/g, ' '));
+    if (typeof document === 'undefined')
+      return sanitizeTtsText(html.replace(/<[^>]*>/g, ' '));
     const div = document.createElement('div');
     div.innerHTML = html;
     div.querySelectorAll('script,style,img').forEach((node) => node.remove());
     return sanitizeTtsText(div.innerText || div.textContent || '');
   }, [chapter]);
 
-  const fetchTtsChunkAudioUrl = useCallback(async (chunk: TtsChunk, chapterHref: string) => {
-    if (!manifest) throw new Error('书籍信息未准备好');
-    const response = await fetch('/api/books/tts/synthesize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sourceId: manifest.book.sourceId,
-        bookId: manifest.book.id,
-        chapterHref,
-        text: chunk.text,
-        voice: ttsSettingsRef.current.voice,
-        rate: ttsSettingsRef.current.rate,
-        pitch: ttsSettingsRef.current.pitch,
-        volume: ttsSettingsRef.current.volume,
-      }),
-    });
-    const json = await response.json();
-    if (!response.ok) throw new Error(json.error || '朗读音频生成失败');
-    return URL.createObjectURL(decodeBase64Audio(json.audioBase64 || '', json.mimeType || 'audio/mpeg'));
-  }, [manifest]);
+  const fetchTtsChunkAudioUrl = useCallback(
+    async (chunk: TtsChunk, chapterHref: string) => {
+      if (!manifest) throw new Error('书籍信息未准备好');
+      const response = await fetch('/api/books/tts/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceId: manifest.book.sourceId,
+          bookId: manifest.book.id,
+          chapterHref,
+          text: chunk.text,
+          voice: ttsSettingsRef.current.voice,
+          rate: ttsSettingsRef.current.rate,
+          pitch: ttsSettingsRef.current.pitch,
+          volume: ttsSettingsRef.current.volume,
+        }),
+      });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error || '朗读音频生成失败');
+      return URL.createObjectURL(
+        decodeBase64Audio(json.audioBase64 || '', json.mimeType || 'audio/mpeg')
+      );
+    },
+    [manifest]
+  );
 
-  const playTtsChunk = useCallback(async (index: number) => {
-    const chunks = ttsChunksRef.current;
-    const chunk = chunks[index];
-    if (!chunk || !currentChapterHref) return;
-    try {
-      setTtsError('');
-      setTtsLoadingChunkIndex(index);
-      setTtsStatus('loading');
-      const url = await fetchTtsChunkAudioUrl(chunk, currentChapterHref);
-      if (!audioRef.current) audioRef.current = new Audio();
-      audioRef.current.src = url;
-      await audioRef.current.play();
-      ttsCurrentChunkIndexRef.current = index;
-      setTtsCurrentChunkIndex(index);
-      setTtsStatus('playing');
-      setTtsLoadingChunkIndex(null);
-    } catch (err) {
-      setTtsStatus('error');
-      setTtsLoadingChunkIndex(null);
-      setTtsError((err as Error).message || '朗读失败');
-    }
-  }, [currentChapterHref, fetchTtsChunkAudioUrl]);
+  const playTtsChunk = useCallback(
+    async (index: number) => {
+      const chunks = ttsChunksRef.current;
+      const chunk = chunks[index];
+      if (!chunk || !currentChapterHref) return;
+      try {
+        setTtsError('');
+        setTtsLoadingChunkIndex(index);
+        setTtsStatus('loading');
+        const url = await fetchTtsChunkAudioUrl(chunk, currentChapterHref);
+        if (!audioRef.current) audioRef.current = new Audio();
+        audioRef.current.src = url;
+        await audioRef.current.play();
+        ttsCurrentChunkIndexRef.current = index;
+        setTtsCurrentChunkIndex(index);
+        setTtsStatus('playing');
+        setTtsLoadingChunkIndex(null);
+      } catch (err) {
+        setTtsStatus('error');
+        setTtsLoadingChunkIndex(null);
+        setTtsError((err as Error).message || '朗读失败');
+      }
+    },
+    [currentChapterHref, fetchTtsChunkAudioUrl]
+  );
 
   const bootstrapTts = useCallback(async () => {
     if (!ttsAvailable) return;
@@ -776,12 +1154,12 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
         if (attempt < 20) window.setTimeout(() => restore(attempt + 1), 100);
         return;
       }
-      const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+      const { maxScrollTop } = getChapterScrollMetrics(node);
       if (maxScrollTop <= 0 && attempt < 20) {
         window.setTimeout(() => restore(attempt + 1), 100);
         return;
       }
-      node.scrollTo({ top: maxScrollTop * savedRatio, behavior: 'auto' });
+      setChapterScrollTop(node, maxScrollTop * savedRatio);
       restoredChapterPositionRef.current = true;
       pendingChapterRestoreRatioRef.current = null;
       window.setTimeout(() => persistChapterProgress(), 0);
@@ -796,16 +1174,34 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
   useEffect(() => {
     const node = scrollRef.current;
     if (!node) return;
-    node.addEventListener('scroll', scheduleChapterProgressSave, { passive: true });
+    const handleScroll = () => {
+      lastChapterScrollMetricsRef.current = getChapterScrollMetrics(
+        scrollRef.current
+      );
+      scheduleChapterProgressSave();
+    };
+    node.addEventListener('scroll', handleScroll, {
+      passive: true,
+    });
+    window.addEventListener('scroll', handleScroll, {
+      passive: true,
+    });
     return () => {
-      node.removeEventListener('scroll', scheduleChapterProgressSave);
+      node.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll);
       if (chapterSaveTimerRef.current) {
         window.clearTimeout(chapterSaveTimerRef.current);
         chapterSaveTimerRef.current = null;
       }
       persistChapterProgress();
     };
-  }, [chapter, currentChapterHref, loading, persistChapterProgress, scheduleChapterProgressSave]);
+  }, [
+    chapter,
+    currentChapterHref,
+    loading,
+    persistChapterProgress,
+    scheduleChapterProgressSave,
+  ]);
 
   useEffect(() => {
     const flush = () => persistChapterProgress();
@@ -836,9 +1232,16 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
       setTtsDuration(audio.duration || 0);
       if (!ttsSeekingRef.current) setTtsSeekValue(audio.currentTime || 0);
     };
-    const handlePause = () => { if (!audio.ended && ttsStatusRef.current === 'playing') setTtsStatus('paused'); };
+    const handlePause = () => {
+      if (!audio.ended && ttsStatusRef.current === 'playing')
+        setTtsStatus('paused');
+    };
     const handleLoadedMetadata = () => {
-      if (ttsResumeTimeRef.current > 0 && audio.duration > 0) audio.currentTime = Math.min(ttsResumeTimeRef.current, Math.max(0, audio.duration - 0.25));
+      if (ttsResumeTimeRef.current > 0 && audio.duration > 0)
+        audio.currentTime = Math.min(
+          ttsResumeTimeRef.current,
+          Math.max(0, audio.duration - 0.25)
+        );
       ttsResumeTimeRef.current = 0;
       setTtsDuration(audio.duration || 0);
     };
@@ -855,13 +1258,18 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
     };
   }, [playTtsChunk, stopTts]);
 
-  const selectedVoice = ttsVoices.find((item) => item.shortName === ttsSettings.voice);
+  const selectedVoice = ttsVoices.find(
+    (item) => item.shortName === ttsSettings.voice
+  );
   const currentChunk = ttsChunks[ttsCurrentChunkIndex];
   const ttsRateValue = parseSignedNumber(ttsSettings.rate, '%');
   const ttsPitchValue = parseSignedNumber(ttsSettings.pitch, 'Hz');
   const ttsVolumeValue = parseSignedNumber(ttsSettings.volume, '%');
   const displayedTtsTime = ttsSeeking ? ttsSeekValue : ttsCurrentTime;
-  const ttsChunkPercent = ttsChunks.length > 0 ? ((ttsCurrentChunkIndex + 1) / ttsChunks.length) * 100 : 0;
+  const ttsChunkPercent =
+    ttsChunks.length > 0
+      ? ((ttsCurrentChunkIndex + 1) / ttsChunks.length) * 100
+      : 0;
   const palette = THEME_STYLES[settings.theme];
 
   if (error) return <div className='p-4 text-sm text-red-500'>{error}</div>;
@@ -872,7 +1280,9 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
           <div className='reader-book-loader'>
             <BookOpen className='h-10 w-10' strokeWidth={1.75} />
           </div>
-          <div className='text-sm text-gray-500 dark:text-gray-400'>章节加载中...</div>
+          <div className='text-sm text-gray-500 dark:text-gray-400'>
+            章节加载中...
+          </div>
         </div>
       </div>
     );
@@ -881,62 +1291,525 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
     return (
       <div className='mx-auto max-w-2xl p-4'>
         <div className='rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200'>
-          暂无章节。该 Legado 源返回的是章节/图片接口，不是 EPUB 文件；如果详情接口显示章节数为 0，说明源站当前还没放出可读章节，请换一本有章节的结果再试。
+          暂无章节。该 Legado 源返回的是章节/图片接口，不是 EPUB
+          文件；如果详情接口显示章节数为
+          0，说明源站当前还没放出可读章节，请换一本有章节的结果再试。
         </div>
       </div>
     );
   }
 
   return (
-    <div className='relative h-[calc(100vh-3.5rem)] overflow-hidden' style={{ backgroundColor: palette.panelBg, color: palette.bodyColor }}>
-      {tocOpen && typeof document !== 'undefined' ? createPortal(
-        <div className='fixed inset-0 z-40 bg-black/30' onClick={() => setTocOpen(false)}>
-          <div className='absolute right-0 top-0 h-screen w-[22rem] max-w-[88vw] overflow-y-auto border-l border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-950' onClick={(event) => event.stopPropagation()}>
-            <div className='space-y-2 p-4'>
-              {chapters.map((item, index) => {
-                const active = index === currentIndex;
-                return <button key={`${item.href}-${item.order}-${index}`} onClick={() => { persistChapterProgress(); setCurrentIndex(index); setTocOpen(false); }} className={`block w-full rounded-2xl px-4 py-3 text-left text-sm transition ${active ? 'bg-sky-600 text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-900'}`} title={item.title}>{item.title}</button>;
-              })}
-            </div>
-          </div>
-        </div>, document.body
+    <div
+      className='relative h-[calc(100vh-3.5rem)] overflow-hidden'
+      style={{ backgroundColor: palette.panelBg, color: palette.bodyColor }}
+    >
+      {tocOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className='fixed inset-0 z-40 bg-black/30'
+              onClick={() => setTocOpen(false)}
+            >
+              <div
+                className='absolute right-0 top-0 h-screen w-[22rem] max-w-[88vw] overflow-y-auto border-l border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-950'
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className='space-y-2 p-4'>
+                  {chapters.map((item, index) => {
+                    const active = index === currentIndex;
+                    return (
+                      <button
+                        key={`${item.href}-${item.order}-${index}`}
+                        onClick={() => {
+                          persistChapterProgress();
+                          setCurrentIndex(index);
+                          setTocOpen(false);
+                        }}
+                        className={`block w-full rounded-2xl px-4 py-3 text-left text-sm transition ${
+                          active
+                            ? 'bg-emerald-600 text-white'
+                            : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-900'
+                        }`}
+                        title={item.title}
+                      >
+                        {item.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+
+      {settingsOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className='fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4'
+              onClick={() => setSettingsOpen(false)}
+            >
+              <div
+                className='w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-5 shadow-xl dark:border-gray-700 dark:bg-gray-950'
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className='mb-4'>
+                  <div className='text-base font-semibold text-gray-900 dark:text-gray-100'>
+                    阅读设置
+                  </div>
+                  <div className='mt-1 text-xs text-gray-500'>
+                    Legado 源支持翻页和滚动阅读
+                  </div>
+                </div>
+                <div className='space-y-6 p-1 text-sm'>
+                  <div>
+                    <div className='mb-2 font-medium'>阅读模式</div>
+                    <div className='grid grid-cols-2 gap-2'>
+                      {(
+                        [
+                          {
+                            key: 'paginated',
+                            label: '翻页模式',
+                            desc: '左右点击翻页/章节',
+                          },
+                          {
+                            key: 'scrolled',
+                            label: '滚动模式',
+                            desc: '上下连续滚动',
+                          },
+                        ] as { key: ReaderMode; label: string; desc: string }[]
+                      ).map((mode) => (
+                        <button
+                          key={mode.key}
+                          onClick={() =>
+                            setSettings((prev) => ({ ...prev, mode: mode.key }))
+                          }
+                          className={`rounded-2xl border px-3 py-3 text-left ${
+                            settings.mode === mode.key
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                              : 'border-gray-200 dark:border-gray-700'
+                          }`}
+                        >
+                          <div className='font-medium'>{mode.label}</div>
+                          <div className='mt-1 text-xs opacity-70'>
+                            {mode.desc}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className='mb-2 font-medium'>主题</div>
+                    <div className='grid grid-cols-3 gap-2'>
+                      {(['light', 'sepia', 'dark'] as ReaderTheme[]).map(
+                        (theme) => (
+                          <button
+                            key={theme}
+                            onClick={() =>
+                              setSettings((prev) => ({ ...prev, theme }))
+                            }
+                            className={`rounded-2xl border px-3 py-2 ${
+                              settings.theme === theme
+                                ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                : 'border-gray-200 dark:border-gray-700'
+                            }`}
+                          >
+                            {theme === 'light'
+                              ? '浅色'
+                              : theme === 'sepia'
+                              ? '护眼'
+                              : '深色'}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <div className='mb-2 flex items-center justify-between font-medium'>
+                      字号 <span>{settings.fontSize}%</span>
+                    </div>
+                    <input
+                      type='range'
+                      min='85'
+                      max='140'
+                      step='5'
+                      value={settings.fontSize}
+                      onChange={(e) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          fontSize: Number(e.target.value),
+                        }))
+                      }
+                      className='w-full'
+                    />
+                  </div>
+                  <div>
+                    <div className='mb-2 flex items-center justify-between font-medium'>
+                      行距 <span>{settings.lineHeight.toFixed(1)}</span>
+                    </div>
+                    <input
+                      type='range'
+                      min='1.4'
+                      max='2.2'
+                      step='0.1'
+                      value={settings.lineHeight}
+                      onChange={(e) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          lineHeight: Number(e.target.value),
+                        }))
+                      }
+                      className='w-full'
+                    />
+                  </div>
+                  <div className='flex justify-end'>
+                    <button
+                      type='button'
+                      className='rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white'
+                      onClick={() => setSettingsOpen(false)}
+                    >
+                      完成
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+
+      {settings.mode === 'paginated' && !tocOpen && !settingsOpen ? (
+        <>
+          <button
+            aria-label='上一页'
+            className='absolute inset-y-0 left-0 z-10 w-[28%] cursor-pointer bg-transparent'
+            onClick={() => turnPage(-1)}
+          />
+          <button
+            aria-label='下一页'
+            className='absolute inset-y-0 right-0 z-10 w-[28%] cursor-pointer bg-transparent'
+            onClick={() => turnPage(1)}
+          />
+        </>
       ) : null}
 
-      {settingsOpen && typeof document !== 'undefined' ? createPortal(
-        <div className='fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4' onClick={() => setSettingsOpen(false)}>
-          <div className='w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-5 shadow-xl dark:border-gray-700 dark:bg-gray-950' onClick={(event) => event.stopPropagation()}>
-            <div className='mb-4'><div className='text-base font-semibold text-gray-900 dark:text-gray-100'>阅读设置</div><div className='mt-1 text-xs text-gray-500'>Legado 源支持翻页和滚动阅读</div></div>
-            <div className='space-y-6 p-1 text-sm'>
-              <div><div className='mb-2 font-medium'>阅读模式</div><div className='grid grid-cols-2 gap-2'>{([{ key: 'paginated', label: '翻页模式', desc: '左右点击翻页/章节' }, { key: 'scrolled', label: '滚动模式', desc: '上下连续滚动' }] as { key: ReaderMode; label: string; desc: string }[]).map((mode) => <button key={mode.key} onClick={() => setSettings((prev) => ({ ...prev, mode: mode.key }))} className={`rounded-2xl border px-3 py-3 text-left ${settings.mode === mode.key ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300' : 'border-gray-200 dark:border-gray-700'}`}><div className='font-medium'>{mode.label}</div><div className='mt-1 text-xs opacity-70'>{mode.desc}</div></button>)}</div></div>
-              <div><div className='mb-2 font-medium'>主题</div><div className='grid grid-cols-3 gap-2'>{(['light', 'sepia', 'dark'] as ReaderTheme[]).map((theme) => <button key={theme} onClick={() => setSettings((prev) => ({ ...prev, theme }))} className={`rounded-2xl border px-3 py-2 ${settings.theme === theme ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300' : 'border-gray-200 dark:border-gray-700'}`}>{theme === 'light' ? '浅色' : theme === 'sepia' ? '护眼' : '深色'}</button>)}</div></div>
-              <div><div className='mb-2 flex items-center justify-between font-medium'>字号 <span>{settings.fontSize}%</span></div><input type='range' min='85' max='140' step='5' value={settings.fontSize} onChange={(e) => setSettings((prev) => ({ ...prev, fontSize: Number(e.target.value) }))} className='w-full' /></div>
-              <div><div className='mb-2 flex items-center justify-between font-medium'>行距 <span>{settings.lineHeight.toFixed(1)}</span></div><input type='range' min='1.4' max='2.2' step='0.1' value={settings.lineHeight} onChange={(e) => setSettings((prev) => ({ ...prev, lineHeight: Number(e.target.value) }))} className='w-full' /></div>
-              <div className='flex justify-end'><button type='button' className='rounded-2xl bg-sky-600 px-4 py-2 text-sm font-medium text-white' onClick={() => setSettingsOpen(false)}>完成</button></div>
+      <div
+        ref={scrollRef}
+        className='h-full overflow-y-auto px-4 py-6'
+        style={{
+          scrollSnapType:
+            settings.mode === 'paginated' ? 'y mandatory' : undefined,
+        }}
+      >
+        <article
+          className='mx-auto max-w-3xl text-gray-800 dark:text-gray-100'
+          style={{
+            fontSize: `${settings.fontSize}%`,
+            lineHeight: settings.lineHeight,
+            color: palette.bodyColor,
+          }}
+        >
+          {loading ? (
+            <div className='flex min-h-[45vh] items-center justify-center px-4'>
+              <div className='rounded-[2rem] border border-emerald-100/80 bg-white/80 px-6 py-5 text-center shadow-sm shadow-emerald-950/5 backdrop-blur dark:border-emerald-500/10 dark:bg-gray-950/70'>
+                <Loader2 className='mx-auto h-6 w-6 animate-spin text-emerald-600 dark:text-emerald-300' />
+                <div className='mt-3 text-sm font-medium text-slate-600 dark:text-slate-300'>
+                  加载中...
+                </div>
+              </div>
             </div>
-          </div>
-        </div>, document.body
-      ) : null}
-
-      {settings.mode === 'paginated' && !tocOpen && !settingsOpen ? <><button aria-label='上一页' className='absolute inset-y-0 left-0 z-10 w-[28%] cursor-pointer bg-transparent' onClick={() => turnPage(-1)} /><button aria-label='下一页' className='absolute inset-y-0 right-0 z-10 w-[28%] cursor-pointer bg-transparent' onClick={() => turnPage(1)} /></> : null}
-
-      <div ref={scrollRef} className='h-full overflow-y-auto px-4 py-6' style={{ scrollSnapType: settings.mode === 'paginated' ? 'y mandatory' : undefined }}>
-        <article className='mx-auto max-w-3xl text-gray-800 dark:text-gray-100' style={{ fontSize: `${settings.fontSize}%`, lineHeight: settings.lineHeight, color: palette.bodyColor }}>
-          {loading ? '加载中...' : chapter?.content?.includes('<img')
-            ? <div className='space-y-2 [&_img]:mx-auto [&_img]:block [&_img]:max-w-full' dangerouslySetInnerHTML={{ __html: chapter.content }} />
-            : <div className='whitespace-pre-wrap'>{chapter?.content || '本章暂无内容'}</div>}
+          ) : chapter?.content?.includes('<img') ? (
+            <div
+              className='space-y-2 [&_img]:mx-auto [&_img]:block [&_img]:max-w-full'
+              dangerouslySetInnerHTML={{ __html: chapter.content }}
+            />
+          ) : chapter?.content ? (
+            <div className='whitespace-pre-wrap'>{chapter.content}</div>
+          ) : (
+            <div className='flex min-h-[45vh] items-center justify-center px-4'>
+              <div className='rounded-[2rem] border border-dashed border-emerald-200 bg-white/80 px-6 py-5 text-center shadow-sm shadow-emerald-950/5 backdrop-blur dark:border-emerald-500/20 dark:bg-gray-950/70'>
+                <BookOpen className='mx-auto h-7 w-7 text-emerald-600 dark:text-emerald-300' />
+                <div className='mt-3 text-sm font-medium text-slate-600 dark:text-slate-300'>
+                  本章暂无内容
+                </div>
+              </div>
+            </div>
+          )}
         </article>
-        {settings.mode === 'scrolled' ? <div className='mx-auto mt-5 flex max-w-3xl justify-between gap-3 pb-8'><button disabled={currentIndex <= 0} onClick={goPrevChapter} className='rounded-2xl border border-gray-200 px-4 py-2 text-sm disabled:text-gray-400 dark:border-gray-700'>上一章</button><button disabled={currentIndex >= chapters.length - 1} onClick={goNextChapter} className='rounded-2xl bg-sky-600 px-4 py-2 text-sm text-white disabled:bg-gray-300'>下一章</button></div> : null}
+        {settings.mode === 'scrolled' ? (
+          <div className='mx-auto mt-5 flex max-w-3xl justify-between gap-3 pb-8'>
+            <button
+              disabled={currentIndex <= 0}
+              onClick={goPrevChapter}
+              className='rounded-2xl border border-gray-200 px-4 py-2 text-sm disabled:text-gray-400 dark:border-gray-700'
+            >
+              上一章
+            </button>
+            <button
+              disabled={currentIndex >= chapters.length - 1}
+              onClick={goNextChapter}
+              className='rounded-2xl bg-emerald-600 px-4 py-2 text-sm text-white disabled:bg-gray-300'
+            >
+              下一章
+            </button>
+          </div>
+        ) : null}
       </div>
 
-      {ttsBarVisible ? <>
-        <div className='absolute inset-x-0 bottom-3 z-20 mx-auto w-[min(94vw,34rem)]'>
-          <div className='overflow-hidden rounded-3xl border border-gray-200 bg-white/95 shadow-xl backdrop-blur dark:border-gray-800 dark:bg-gray-950/95'>
-            <div className='px-2 pt-2'><input type='range' min={0} max={Math.max(ttsDuration, 0)} step={0.1} value={Math.min(ttsSeekValue, Math.max(ttsDuration, 0))} disabled={!ttsAvailable || ttsDuration <= 0} onPointerDown={() => setTtsSeeking(true)} onChange={(e) => setTtsSeekValue(Number(e.target.value))} onPointerUp={(e) => { const next = Number((e.target as HTMLInputElement).value); if (audioRef.current && Number.isFinite(next)) audioRef.current.currentTime = next; setTtsCurrentTime(next); setTtsSeeking(false); }} className='w-full accent-sky-500' /></div>
-            <div className='px-3 py-2.5'><div className='flex items-center gap-2'><button type='button' onClick={() => void toggleTtsPlayback()} disabled={!ttsAvailable || ttsLoadingChunkIndex !== null} className='flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-600 text-white disabled:opacity-50'>{ttsLoadingChunkIndex !== null ? <Loader2 className='h-4 w-4 animate-spin' /> : ttsStatus === 'playing' ? <Pause className='h-4 w-4' /> : <Play className='h-4 w-4' />}</button><div className='min-w-0 flex-1'><div className='truncate text-sm font-medium text-gray-900 dark:text-gray-100'>{currentChapterTitle || '语音朗读'}</div><div className='mt-0.5 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400'><span>{!ttsAvailable ? '服务异常' : ttsStatus === 'playing' ? '正在播放' : ttsStatus === 'paused' ? '已暂停' : ttsLoadingChunkIndex !== null ? '生成语音中...' : '待播放'}</span>{ttsChunks.length > 0 ? <span>{ttsCurrentChunkIndex + 1}/{ttsChunks.length}</span> : null}</div></div><button type='button' onClick={() => setTtsPanelOpen((prev) => !prev)} className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-200'><ChevronUp className={`h-4 w-4 transition-transform ${ttsPanelOpen ? 'rotate-180' : ''}`} /></button></div><div className='mt-2 flex items-center justify-between text-[11px] text-gray-400'><span>{selectedVoice?.displayName || '默认音色'}</span><span>{formatDurationTime(displayedTtsTime)} / {formatDurationTime(ttsDuration || 0)}</span></div></div>
+      {ttsBarVisible ? (
+        <>
+          <div className='absolute inset-x-0 bottom-3 z-20 mx-auto w-[min(94vw,34rem)]'>
+            <div className='overflow-hidden rounded-3xl border border-gray-200 bg-white/95 shadow-xl backdrop-blur dark:border-gray-800 dark:bg-gray-950/95'>
+              <div className='px-2 pt-2'>
+                <input
+                  type='range'
+                  min={0}
+                  max={Math.max(ttsDuration, 0)}
+                  step={0.1}
+                  value={Math.min(ttsSeekValue, Math.max(ttsDuration, 0))}
+                  disabled={!ttsAvailable || ttsDuration <= 0}
+                  onPointerDown={() => setTtsSeeking(true)}
+                  onChange={(e) => setTtsSeekValue(Number(e.target.value))}
+                  onPointerUp={(e) => {
+                    const next = Number((e.target as HTMLInputElement).value);
+                    if (audioRef.current && Number.isFinite(next))
+                      audioRef.current.currentTime = next;
+                    setTtsCurrentTime(next);
+                    setTtsSeeking(false);
+                  }}
+                  className='w-full accent-emerald-500'
+                />
+              </div>
+              <div className='px-3 py-2.5'>
+                <div className='flex items-center gap-2'>
+                  <button
+                    type='button'
+                    onClick={() => void toggleTtsPlayback()}
+                    disabled={!ttsAvailable || ttsLoadingChunkIndex !== null}
+                    className='flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white disabled:opacity-50'
+                  >
+                    {ttsLoadingChunkIndex !== null ? (
+                      <Loader2 className='h-4 w-4 animate-spin' />
+                    ) : ttsStatus === 'playing' ? (
+                      <Pause className='h-4 w-4' />
+                    ) : (
+                      <Play className='h-4 w-4' />
+                    )}
+                  </button>
+                  <div className='min-w-0 flex-1'>
+                    <div className='truncate text-sm font-medium text-gray-900 dark:text-gray-100'>
+                      {currentChapterTitle || '语音朗读'}
+                    </div>
+                    <div className='mt-0.5 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400'>
+                      <span>
+                        {!ttsAvailable
+                          ? '服务异常'
+                          : ttsStatus === 'playing'
+                          ? '正在播放'
+                          : ttsStatus === 'paused'
+                          ? '已暂停'
+                          : ttsLoadingChunkIndex !== null
+                          ? '生成语音中...'
+                          : '待播放'}
+                      </span>
+                      {ttsChunks.length > 0 ? (
+                        <span>
+                          {ttsCurrentChunkIndex + 1}/{ttsChunks.length}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <button
+                    type='button'
+                    onClick={() => setTtsPanelOpen((prev) => !prev)}
+                    className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-200'
+                  >
+                    <ChevronUp
+                      className={`h-4 w-4 transition-transform ${
+                        ttsPanelOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div className='mt-2 flex items-center justify-between text-[11px] text-gray-400'>
+                  <span>{selectedVoice?.displayName || '默认音色'}</span>
+                  <span>
+                    {formatDurationTime(displayedTtsTime)} /{' '}
+                    {formatDurationTime(ttsDuration || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        {ttsPanelOpen ? <div className='absolute inset-x-0 bottom-20 z-30 mx-auto w-[min(94vw,34rem)]'><div className='rounded-[2rem] border border-gray-200 bg-white/98 p-4 shadow-2xl backdrop-blur dark:border-gray-800 dark:bg-gray-950/98'><div className='mb-3 flex items-center justify-between'><div className='flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100'><Headphones className='h-4 w-4 text-sky-500' />听书控制</div><button type='button' onClick={() => setTtsPanelOpen(false)} className='flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300'><X className='h-4 w-4' /></button></div><div className='mb-4 flex items-center justify-between rounded-2xl bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-gray-900 dark:text-gray-300'><span className='truncate'>{currentChunk?.text.slice(0, 28) || '当前章节可开始朗读'}</span><span className='ml-2 shrink-0'>{Math.round(ttsChunkPercent)}%</span></div><select value={ttsSettings.voice} onChange={(e) => { stopTts(true); setTtsSettings((prev) => ({ ...prev, voice: e.target.value })); }} className='mb-4 w-full rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100'>{ttsVoices.map((voice) => <option key={voice.shortName} value={voice.shortName}>{voice.displayName || voice.shortName}</option>)}</select><label className='mb-3 block text-xs text-gray-500'>语速 {ttsSettings.rate}<input type='range' min={0} max={TTS_RATE_STEPS.length - 1} step={1} value={Math.max(0, TTS_RATE_STEPS.indexOf(ttsRateValue))} onChange={(e) => { stopTts(true); setTtsSettings((prev) => ({ ...prev, rate: formatSignedValue(TTS_RATE_STEPS[Number(e.target.value)] ?? 0, '%') })); }} className='w-full' /></label><label className='mb-3 block text-xs text-gray-500'>音调 {ttsSettings.pitch}<input type='range' min={0} max={TTS_PITCH_STEPS.length - 1} step={1} value={Math.max(0, TTS_PITCH_STEPS.indexOf(ttsPitchValue))} onChange={(e) => { stopTts(true); setTtsSettings((prev) => ({ ...prev, pitch: formatSignedValue(TTS_PITCH_STEPS[Number(e.target.value)] ?? 0, 'Hz') })); }} className='w-full' /></label><label className='block text-xs text-gray-500'>音量 {ttsSettings.volume}<input type='range' min={0} max={TTS_VOLUME_STEPS.length - 1} step={1} value={Math.max(0, TTS_VOLUME_STEPS.indexOf(ttsVolumeValue))} onChange={(e) => { stopTts(true); setTtsSettings((prev) => ({ ...prev, volume: formatSignedValue(TTS_VOLUME_STEPS[Number(e.target.value)] ?? 0, '%') })); }} className='w-full' /></label>{ttsError ? <div className='mt-3 text-xs text-red-500'>{ttsError}</div> : null}</div></div> : null}
-      </> : null}
+          {ttsPanelOpen ? (
+            <div className='absolute inset-x-0 bottom-20 z-30 mx-auto w-[min(94vw,34rem)]'>
+              <div className='rounded-[2rem] border border-gray-200 bg-white/98 p-4 shadow-2xl backdrop-blur dark:border-gray-800 dark:bg-gray-950/98'>
+                <div className='mb-3 flex items-center justify-between'>
+                  <div className='flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100'>
+                    <Headphones className='h-4 w-4 text-emerald-500' />
+                    听书控制
+                  </div>
+                  <button
+                    type='button'
+                    onClick={() => setTtsPanelOpen(false)}
+                    className='flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300'
+                  >
+                    <X className='h-4 w-4' />
+                  </button>
+                </div>
+                <div className='mb-4 flex items-center justify-between rounded-2xl bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-gray-900 dark:text-gray-300'>
+                  <span className='truncate'>
+                    {currentChunk?.text.slice(0, 28) || '当前章节可开始朗读'}
+                  </span>
+                  <span className='ml-2 shrink-0'>
+                    {Math.round(ttsChunkPercent)}%
+                  </span>
+                </div>
+                <div className='mb-4 flex items-center justify-center gap-3'>
+                  <button
+                    type='button'
+                    aria-label='上一段'
+                    onClick={() => {
+                      const next = Math.max(0, ttsCurrentChunkIndex - 1);
+                      if (ttsChunks[next]) void playTtsChunk(next);
+                    }}
+                    disabled={
+                      ttsCurrentChunkIndex <= 0 || ttsChunks.length === 0
+                    }
+                    className='flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-700 disabled:opacity-40 dark:bg-gray-900 dark:text-gray-200'
+                  >
+                    <SkipBack className='h-5 w-5' />
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => void toggleTtsPlayback()}
+                    disabled={!ttsAvailable || ttsLoadingChunkIndex !== null}
+                    className='flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg disabled:opacity-50'
+                  >
+                    {ttsLoadingChunkIndex !== null ? (
+                      <Loader2 className='h-5 w-5 animate-spin' />
+                    ) : ttsStatus === 'playing' ? (
+                      <Pause className='h-5 w-5' />
+                    ) : (
+                      <Play className='h-5 w-5' />
+                    )}
+                  </button>
+                  <button
+                    type='button'
+                    aria-label='下一段'
+                    onClick={() => {
+                      const next = ttsCurrentChunkIndex + 1;
+                      if (ttsChunks[next]) void playTtsChunk(next);
+                    }}
+                    disabled={
+                      ttsCurrentChunkIndex >= ttsChunks.length - 1 ||
+                      ttsChunks.length === 0
+                    }
+                    className='flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-700 disabled:opacity-40 dark:bg-gray-900 dark:text-gray-200'
+                  >
+                    <SkipForward className='h-5 w-5' />
+                  </button>
+                  <button
+                    type='button'
+                    aria-label='停止'
+                    onClick={() => stopTts(true)}
+                    disabled={ttsStatus === 'idle' && ttsChunks.length === 0}
+                    className='flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-700 disabled:opacity-40 dark:bg-gray-900 dark:text-gray-200'
+                  >
+                    <Square className='h-4 w-4' />
+                  </button>
+                </div>
+                <select
+                  value={ttsSettings.voice}
+                  onChange={(e) => {
+                    stopTts(true);
+                    setTtsSettings((prev) => ({
+                      ...prev,
+                      voice: e.target.value,
+                    }));
+                  }}
+                  className='mb-4 w-full rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100'
+                >
+                  {ttsVoices.map((voice) => (
+                    <option key={voice.shortName} value={voice.shortName}>
+                      {voice.displayName || voice.shortName}
+                    </option>
+                  ))}
+                </select>
+                <label className='mb-3 block text-xs text-gray-500'>
+                  语速 {ttsSettings.rate}
+                  <input
+                    type='range'
+                    min={0}
+                    max={TTS_RATE_STEPS.length - 1}
+                    step={1}
+                    value={Math.max(0, TTS_RATE_STEPS.indexOf(ttsRateValue))}
+                    onChange={(e) => {
+                      stopTts(true);
+                      setTtsSettings((prev) => ({
+                        ...prev,
+                        rate: formatSignedValue(
+                          TTS_RATE_STEPS[Number(e.target.value)] ?? 0,
+                          '%'
+                        ),
+                      }));
+                    }}
+                    className='w-full'
+                  />
+                </label>
+                <label className='mb-3 block text-xs text-gray-500'>
+                  音调 {ttsSettings.pitch}
+                  <input
+                    type='range'
+                    min={0}
+                    max={TTS_PITCH_STEPS.length - 1}
+                    step={1}
+                    value={Math.max(0, TTS_PITCH_STEPS.indexOf(ttsPitchValue))}
+                    onChange={(e) => {
+                      stopTts(true);
+                      setTtsSettings((prev) => ({
+                        ...prev,
+                        pitch: formatSignedValue(
+                          TTS_PITCH_STEPS[Number(e.target.value)] ?? 0,
+                          'Hz'
+                        ),
+                      }));
+                    }}
+                    className='w-full'
+                  />
+                </label>
+                <label className='block text-xs text-gray-500'>
+                  音量 {ttsSettings.volume}
+                  <input
+                    type='range'
+                    min={0}
+                    max={TTS_VOLUME_STEPS.length - 1}
+                    step={1}
+                    value={Math.max(
+                      0,
+                      TTS_VOLUME_STEPS.indexOf(ttsVolumeValue)
+                    )}
+                    onChange={(e) => {
+                      stopTts(true);
+                      setTtsSettings((prev) => ({
+                        ...prev,
+                        volume: formatSignedValue(
+                          TTS_VOLUME_STEPS[Number(e.target.value)] ?? 0,
+                          '%'
+                        ),
+                      }));
+                    }}
+                    className='w-full'
+                  />
+                </label>
+                {ttsError ? (
+                  <div className='mt-3 text-xs text-red-500'>{ttsError}</div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
@@ -945,9 +1818,18 @@ function normalizeHrefForMatch(href?: string) {
   if (!href) return '';
   try {
     const normalized = decodeURIComponent(href).replace(/\\/g, '/').trim();
-    return normalized.split('#')[0].split('?')[0].replace(/^\.\//, '').replace(/^\//, '');
+    return normalized
+      .split('#')[0]
+      .split('?')[0]
+      .replace(/^\.\//, '')
+      .replace(/^\//, '');
   } catch {
-    return href.split('#')[0].split('?')[0].replace(/^\.\//, '').replace(/^\//, '').trim();
+    return href
+      .split('#')[0]
+      .split('?')[0]
+      .replace(/^\.\//, '')
+      .replace(/^\//, '')
+      .trim();
   }
 }
 
@@ -955,7 +1837,9 @@ function isSameTocTarget(currentHref?: string, tocHref?: string) {
   const current = normalizeHrefForMatch(currentHref);
   const target = normalizeHrefForMatch(tocHref);
   if (!current || !target) return false;
-  return current === target || current.endsWith(target) || target.endsWith(current);
+  return (
+    current === target || current.endsWith(target) || target.endsWith(current)
+  );
 }
 
 function formatBytes(size: number): string {
@@ -968,7 +1852,10 @@ function formatDurationTime(value: number) {
   const totalSeconds = Math.max(0, Math.floor(value || 0));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(
+    2,
+    '0'
+  )}`;
 }
 
 function sanitizeTtsText(text: string): string {
@@ -985,7 +1872,10 @@ function chunkTtsText(text: string, maxChars: number): TtsChunk[] {
   const normalized = sanitizeTtsText(text);
   if (!normalized) return [];
 
-  const paragraphs = normalized.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean);
+  const paragraphs = normalized
+    .split(/\n{2,}/)
+    .map((item) => item.trim())
+    .filter(Boolean);
   const chunks: TtsChunk[] = [];
   let buffer = '';
   let start = 0;
@@ -1024,7 +1914,10 @@ function chunkTtsText(text: string, maxChars: number): TtsChunk[] {
       return;
     }
 
-    const sentences = trimmed.split(/(?<=[。！？!?；;])/).map((item) => item.trim()).filter(Boolean);
+    const sentences = trimmed
+      .split(/(?<=[。！？!?；;])/)
+      .map((item) => item.trim())
+      .filter(Boolean);
     let local = '';
     let localStart = cursor;
     for (const sentence of sentences) {
@@ -1035,7 +1928,12 @@ function chunkTtsText(text: string, maxChars: number): TtsChunk[] {
         cursor += sentence.length;
       } else {
         if (local) {
-          chunks.push({ index: chunks.length, text: local, start: localStart, end: localStart + local.length });
+          chunks.push({
+            index: chunks.length,
+            text: local,
+            start: localStart,
+            end: localStart + local.length,
+          });
           local = '';
         }
         if (sentence.length <= maxChars) {
@@ -1045,14 +1943,24 @@ function chunkTtsText(text: string, maxChars: number): TtsChunk[] {
         } else {
           for (let i = 0; i < sentence.length; i += maxChars) {
             const part = sentence.slice(i, i + maxChars);
-            chunks.push({ index: chunks.length, text: part, start: cursor, end: cursor + part.length });
+            chunks.push({
+              index: chunks.length,
+              text: part,
+              start: cursor,
+              end: cursor + part.length,
+            });
             cursor += part.length;
           }
         }
       }
     }
     if (local) {
-      chunks.push({ index: chunks.length, text: local, start: localStart, end: localStart + local.length });
+      chunks.push({
+        index: chunks.length,
+        text: local,
+        start: localStart,
+        end: localStart + local.length,
+      });
     }
   };
 
@@ -1062,7 +1970,6 @@ function chunkTtsText(text: string, maxChars: number): TtsChunk[] {
   flush();
   return chunks;
 }
-
 
 function getRenditionOptions(mode: ReaderMode) {
   return mode === 'scrolled'
@@ -1095,18 +2002,24 @@ export default function BookReadPage() {
   const searchParams = useSearchParams();
   const sourceId = searchParams.get('sourceId') || '';
   const bookId = searchParams.get('bookId') || '';
-  const cached = useMemo(() => (sourceId && bookId ? getBookRouteCache(sourceId, bookId) : null), [sourceId, bookId]);
+  const cached = useMemo(
+    () => (sourceId && bookId ? getBookRouteCache(sourceId, bookId) : null),
+    [sourceId, bookId]
+  );
   const [manifest, setManifest] = useState<BookReadManifest | null>(null);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
-  const [fileLoadState, setFileLoadState] = useState<FileLoadState>('preparing');
+  const [fileLoadState, setFileLoadState] =
+    useState<FileLoadState>('preparing');
   const [downloadedBytes, setDownloadedBytes] = useState(0);
   const [totalBytes, setTotalBytes] = useState<number | null>(null);
   const [cacheHit, setCacheHit] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
   const [settings, setSettings] = useState<ReaderSettings>(DEFAULT_SETTINGS);
-  const [ttsSettings, setTtsSettings] = useState<TtsSettings>(DEFAULT_TTS_SETTINGS);
+  const [ttsSettings, setTtsSettings] = useState<TtsSettings>(() =>
+    loadTtsSettings()
+  );
   const [tocItems, setTocItems] = useState<TocItem[]>([]);
   const [currentHref, setCurrentHref] = useState('');
   const [currentChapter, setCurrentChapter] = useState('');
@@ -1119,7 +2032,9 @@ export default function BookReadPage() {
   const [ttsError, setTtsError] = useState('');
   const [ttsChunks, setTtsChunks] = useState<TtsChunk[]>([]);
   const [ttsCurrentChunkIndex, setTtsCurrentChunkIndex] = useState(0);
-  const [ttsLoadingChunkIndex, setTtsLoadingChunkIndex] = useState<number | null>(null);
+  const [ttsLoadingChunkIndex, setTtsLoadingChunkIndex] = useState<
+    number | null
+  >(null);
   const [ttsCurrentChapterHref, setTtsCurrentChapterHref] = useState('');
   const [ttsCurrentChapterTitle, setTtsCurrentChapterTitle] = useState('');
   const [ttsBarVisible, setTtsBarVisible] = useState(false);
@@ -1130,7 +2045,9 @@ export default function BookReadPage() {
   const [ttsSeeking, setTtsSeeking] = useState(false);
   const [scrolledBottomReached, setScrolledBottomReached] = useState(false);
   const viewerRef = useRef<HTMLDivElement | null>(null);
-  const pendingScrolledRestoreRef = useRef<ScrolledReadingPosition | null>(null);
+  const pendingScrolledRestoreRef = useRef<ScrolledReadingPosition | null>(
+    null
+  );
   const restoreTargetRef = useRef<string | undefined>(undefined);
   const scrollListenerCleanupRef = useRef<(() => void) | null>(null);
   const scrolledAutoAdvanceLockRef = useRef(false);
@@ -1155,7 +2072,9 @@ export default function BookReadPage() {
   const currentHrefRef = useRef('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsChunkAudioUrlRef = useRef<Record<number, string>>({});
-  const ttsChunkBlobCacheRef = useRef<Record<number, { url: string; text: string }>>({});
+  const ttsChunkBlobCacheRef = useRef<
+    Record<number, { url: string; text: string }>
+  >({});
   const ttsChunksRef = useRef<TtsChunk[]>([]);
   const ttsSettingsRef = useRef<TtsSettings>(DEFAULT_TTS_SETTINGS);
   const ttsCurrentChunkIndexRef = useRef(0);
@@ -1169,7 +2088,6 @@ export default function BookReadPage() {
 
   useEffect(() => {
     setSettings(loadReaderSettings());
-    setTtsSettings(loadTtsSettings());
   }, []);
 
   useEffect(() => {
@@ -1181,7 +2099,10 @@ export default function BookReadPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(TTS_SETTINGS_STORAGE_KEY, JSON.stringify(ttsSettings));
+      localStorage.setItem(
+        TTS_SETTINGS_STORAGE_KEY,
+        JSON.stringify(ttsSettings)
+      );
     }
     ttsSettingsRef.current = ttsSettings;
   }, [ttsSettings]);
@@ -1205,7 +2126,6 @@ export default function BookReadPage() {
     scrolledBottomReachedRef.current = scrolledBottomReached;
   }, [scrolledBottomReached]);
 
-
   useEffect(() => {
     const handleToggleSettings = () => {
       if (manifest?.format === 'chapters') return;
@@ -1215,7 +2135,10 @@ export default function BookReadPage() {
 
     window.addEventListener('books-read-toggle-settings', handleToggleSettings);
     return () => {
-      window.removeEventListener('books-read-toggle-settings', handleToggleSettings);
+      window.removeEventListener(
+        'books-read-toggle-settings',
+        handleToggleSettings
+      );
     };
   }, [manifest?.format]);
 
@@ -1228,7 +2151,10 @@ export default function BookReadPage() {
 
     window.addEventListener('books-read-toggle-chapters', handleToggleChapters);
     return () => {
-      window.removeEventListener('books-read-toggle-chapters', handleToggleChapters);
+      window.removeEventListener(
+        'books-read-toggle-chapters',
+        handleToggleChapters
+      );
     };
   }, [manifest?.format]);
 
@@ -1251,7 +2177,6 @@ export default function BookReadPage() {
       window.removeEventListener('books-read-toggle-tts', handleToggleTts);
     };
   }, [manifest?.format]);
-
 
   useEffect(() => {
     if (!sourceId || !bookId) return;
@@ -1281,6 +2206,13 @@ export default function BookReadPage() {
 
   useEffect(() => {
     if (!manifest || manifest.format !== 'epub') return;
+    const cachedVoices = loadCachedTtsVoices();
+    if (cachedVoices) {
+      setTtsAvailable(true);
+      setTtsVoices(cachedVoices.voices);
+      setTtsSettings((prev) => applyTtsDefaults(prev, cachedVoices.defaults));
+      return;
+    }
     let cancelled = false;
     fetch('/api/books/tts/voices')
       .then(async (res) => {
@@ -1289,13 +2221,11 @@ export default function BookReadPage() {
         if (cancelled) return;
         setTtsAvailable(true);
         setTtsVoices(json.voices || []);
-        setTtsSettings((prev) => ({
-          ...prev,
-          voice: prev.voice || json.defaults?.voice || '',
-          rate: prev.rate || json.defaults?.rate || '+0%',
-          pitch: prev.pitch || json.defaults?.pitch || '+0Hz',
-          volume: prev.volume || json.defaults?.volume || '+0%',
-        }));
+        setTtsSettings((prev) => applyTtsDefaults(prev, json.defaults));
+        saveCachedTtsVoices({
+          voices: json.voices || [],
+          defaults: json.defaults || {},
+        });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -1308,43 +2238,54 @@ export default function BookReadPage() {
     };
   }, [manifest]);
 
-  const buildReadRecord = useCallback((location: EpubLocation, nextProgress = 0, chapterTitle?: string): BookReadRecord | null => {
-    if (!manifest) return null;
-    const locatorValue = location?.start?.cfi || location?.end?.cfi || '';
-    if (!locatorValue) return null;
-    return {
-      sourceId: manifest.book.sourceId,
-      sourceName: manifest.book.sourceName,
-      bookId: manifest.book.id,
-      title: manifest.book.title,
-      author: manifest.book.author,
-      cover: manifest.book.cover,
-      detailHref: manifest.book.detailHref,
-      acquisitionHref: manifest.acquisitionHref,
-      format: manifest.format,
-      locator: {
-        type: 'epub-cfi',
-        value: locatorValue,
-        href: location?.start?.href,
+  const buildReadRecord = useCallback(
+    (
+      location: EpubLocation,
+      nextProgress = 0,
+      chapterTitle?: string
+    ): BookReadRecord | null => {
+      if (!manifest) return null;
+      const locatorValue = location?.start?.cfi || location?.end?.cfi || '';
+      if (!locatorValue) return null;
+      return {
+        sourceId: manifest.book.sourceId,
+        sourceName: manifest.book.sourceName,
+        bookId: manifest.book.id,
+        title: manifest.book.title,
+        author: manifest.book.author,
+        cover: manifest.book.cover,
+        detailHref: manifest.book.detailHref,
+        acquisitionHref: manifest.acquisitionHref,
+        format: manifest.format,
+        locator: {
+          type: 'epub-cfi',
+          value: locatorValue,
+          href: location?.start?.href,
+          chapterTitle,
+        },
         chapterTitle,
-      },
-      chapterTitle,
-      chapterHref: location?.start?.href,
-      progressPercent: nextProgress,
-      saveTime: Date.now(),
-    };
-  }, [manifest]);
+        chapterHref: location?.start?.href,
+        progressPercent: nextProgress,
+        saveTime: Date.now(),
+      };
+    },
+    [manifest]
+  );
 
-  const queueReadRecord = useCallback((location: EpubLocation, nextProgress = 0, chapterTitle?: string) => {
-    const record = buildReadRecord(location, nextProgress, chapterTitle);
-    if (!record) return;
-    pendingRecordRef.current = record;
-    pendingRecordDirtyRef.current = true;
-  }, [buildReadRecord]);
+  const queueReadRecord = useCallback(
+    (location: EpubLocation, nextProgress = 0, chapterTitle?: string) => {
+      const record = buildReadRecord(location, nextProgress, chapterTitle);
+      if (!record) return;
+      pendingRecordRef.current = record;
+      pendingRecordDirtyRef.current = true;
+    },
+    [buildReadRecord]
+  );
 
   const flushPendingReadRecord = useCallback(async () => {
     const record = pendingRecordRef.current;
-    if (!record || !pendingRecordDirtyRef.current || saveInFlightRef.current) return;
+    if (!record || !pendingRecordDirtyRef.current || saveInFlightRef.current)
+      return;
 
     saveInFlightRef.current = true;
     try {
@@ -1361,21 +2302,55 @@ export default function BookReadPage() {
     }
   }, []);
 
-
-  const persistScrolledPosition = useCallback((fallbackHref?: string) => {
-    if (!manifest || settingsRef.current.mode !== 'scrolled') return;
-    const metrics = getIframeScrollMetrics(viewerRef.current);
-    const href = fallbackHref || currentHrefRef.current || lastLocationRef.current?.start?.href || '';
-    if (!metrics || !href) return;
-    saveScrolledPosition(manifest.book.sourceId, manifest.book.id, {
-      href,
-      scrollTop: metrics.scrollTop,
-      scrollHeight: metrics.scrollHeight,
-      clientHeight: metrics.clientHeight,
-      updatedAt: Date.now(),
-    });
-  }, [manifest]);
-
+  const persistScrolledPosition = useCallback(
+    (fallbackHref?: string) => {
+      if (!manifest || settingsRef.current.mode !== 'scrolled') return;
+      const metrics = getIframeScrollMetrics(viewerRef.current);
+      const href =
+        fallbackHref ||
+        currentHrefRef.current ||
+        lastLocationRef.current?.start?.href ||
+        '';
+      if (!metrics || !href) return;
+      saveScrolledPosition(manifest.book.sourceId, manifest.book.id, {
+        href,
+        scrollTop: metrics.scrollTop,
+        scrollHeight: metrics.scrollHeight,
+        clientHeight: metrics.clientHeight,
+        updatedAt: Date.now(),
+      });
+      const chapterTitle = lastChapterRef.current || currentChapter || manifest.book.title;
+      pendingRecordRef.current = {
+        sourceId: manifest.book.sourceId,
+        sourceName: manifest.book.sourceName,
+        bookId: manifest.book.id,
+        title: manifest.book.title,
+        author: manifest.book.author,
+        cover: manifest.book.cover,
+        detailHref: manifest.book.detailHref,
+        acquisitionHref: manifest.acquisitionHref,
+        format: manifest.format,
+        locator: {
+          type: 'href',
+          value: encodeChapterScrollLocator(
+            href,
+            metrics.scrollTop,
+            metrics.scrollHeight,
+            metrics.clientHeight
+          ),
+          href,
+          chapterTitle,
+        },
+        chapterTitle,
+        chapterHref: href,
+        progressPercent:
+          lastProgressRef.current ?? manifest.lastRecord?.progressPercent ?? 0,
+        saveTime: Date.now(),
+      };
+      pendingRecordDirtyRef.current = true;
+    },
+    [currentChapter, manifest]
+  );
 
   const applyPendingScrolledRestore = useCallback(() => {
     if (settingsRef.current.mode !== 'scrolled') return;
@@ -1383,17 +2358,18 @@ export default function BookReadPage() {
     if (!pending) return;
     const metrics = getIframeScrollMetrics(viewerRef.current);
     if (!metrics) return;
-    const currentHrefValue = lastLocationRef.current?.start?.href || currentHrefRef.current;
-    if (!currentHrefValue || !isSameTocTarget(currentHrefValue, pending.href)) return;
-    const targetScrollTop = computeScrolledTargetScrollTop(pending, metrics.scrollHeight, metrics.clientHeight);
+    const currentHrefValue =
+      lastLocationRef.current?.start?.href || currentHrefRef.current;
+    if (!currentHrefValue || !isSameTocTarget(currentHrefValue, pending.href))
+      return;
+    const targetScrollTop = computeScrolledTargetScrollTop(
+      pending,
+      metrics.scrollHeight,
+      metrics.clientHeight
+    );
     metrics.setScrollTop(targetScrollTop);
     pendingScrolledRestoreRef.current = null;
   }, []);
-
-
-
-
-
 
   useEffect(() => {
     applyPendingScrolledRestoreRef.current = applyPendingScrolledRestore;
@@ -1401,7 +2377,11 @@ export default function BookReadPage() {
 
   const persistCurrentProgress = useCallback(() => {
     if (lastLocationRef.current) {
-      queueReadRecord(lastLocationRef.current, lastProgressRef.current, lastChapterRef.current);
+      queueReadRecord(
+        lastLocationRef.current,
+        lastProgressRef.current,
+        lastChapterRef.current
+      );
     }
     persistScrolledPosition();
     void flushPendingReadRecord();
@@ -1436,233 +2416,306 @@ export default function BookReadPage() {
     await renditionRef.current.display(target);
   }, []);
 
-  const handleReaderTap = useCallback((zone: 'left' | 'center' | 'right') => {
-    if (!ready) return;
-    if (settings.mode === 'paginated' && zone === 'left') {
-      renditionRef.current?.prev?.();
-      return;
+  const captureCurrentEpubLocation = useCallback(() => {
+    const location = renditionRef.current?.currentLocation?.();
+    if (location?.start?.cfi || location?.end?.cfi) {
+      lastLocationRef.current = location;
+      currentHrefRef.current =
+        location.start?.href || currentHrefRef.current || '';
+      return location;
     }
-    if (settings.mode === 'paginated' && zone === 'right') {
-      renditionRef.current?.next?.();
-      return;
-    }
-    setTocOpen(false);
-    setSettingsOpen(false);
-  }, [ready, settings.mode]);
+    return lastLocationRef.current;
+  }, []);
+
+  const switchReaderMode = useCallback(
+    (mode: ReaderMode) => {
+      if (mode === settingsRef.current.mode) return;
+      captureCurrentEpubLocation();
+      persistCurrentProgress();
+      setSettings((prev) => ({ ...prev, mode }));
+    },
+    [captureCurrentEpubLocation, persistCurrentProgress]
+  );
+
+  const handleReaderTap = useCallback(
+    (zone: 'left' | 'center' | 'right') => {
+      if (!ready) return;
+      if (settings.mode === 'paginated' && zone === 'left') {
+        renditionRef.current?.prev?.();
+        return;
+      }
+      if (settings.mode === 'paginated' && zone === 'right') {
+        renditionRef.current?.next?.();
+        return;
+      }
+      setTocOpen(false);
+      setSettingsOpen(false);
+    },
+    [ready, settings.mode]
+  );
 
   const cleanupTtsAudioUrls = useCallback(() => {
-    Object.values(ttsChunkBlobCacheRef.current).forEach((item) => URL.revokeObjectURL(item.url));
+    Object.values(ttsChunkBlobCacheRef.current).forEach((item) =>
+      URL.revokeObjectURL(item.url)
+    );
     ttsChunkBlobCacheRef.current = {};
     ttsChunkAudioUrlRef.current = {};
   }, []);
 
-  const stopTts = useCallback((clearQueue = false) => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
-    }
-    setTtsCurrentTime(0);
-    setTtsDuration(0);
-    setTtsSeekValue(0);
-    setTtsSeeking(false);
-    ttsPrefetchedFromChunkRef.current = null;
-    setTtsLoadingChunkIndex(null);
-    setTtsStatus('idle');
-    if (clearQueue) {
-      setTtsChunks([]);
-      ttsChunksRef.current = [];
-      setTtsCurrentChunkIndex(0);
-      ttsCurrentChunkIndexRef.current = 0;
-      setTtsCurrentChapterHref('');
-      ttsCurrentChapterHrefRef.current = '';
-      setTtsCurrentChapterTitle('');
-      ttsCurrentChapterTitleRef.current = '';
-      cleanupTtsAudioUrls();
-    }
-  }, [cleanupTtsAudioUrls]);
+  const stopTts = useCallback(
+    (clearQueue = false) => {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+      }
+      setTtsCurrentTime(0);
+      setTtsDuration(0);
+      setTtsSeekValue(0);
+      setTtsSeeking(false);
+      ttsPrefetchedFromChunkRef.current = null;
+      setTtsLoadingChunkIndex(null);
+      setTtsStatus('idle');
+      if (clearQueue) {
+        setTtsChunks([]);
+        ttsChunksRef.current = [];
+        setTtsCurrentChunkIndex(0);
+        ttsCurrentChunkIndexRef.current = 0;
+        setTtsCurrentChapterHref('');
+        ttsCurrentChapterHrefRef.current = '';
+        setTtsCurrentChapterTitle('');
+        ttsCurrentChapterTitleRef.current = '';
+        cleanupTtsAudioUrls();
+      }
+    },
+    [cleanupTtsAudioUrls]
+  );
 
-  const persistTtsProgress = useCallback((chunkIndex?: number) => {
-    if (!manifest) return;
-    const chunks = ttsChunksRef.current;
-    const currentIndex = chunkIndex ?? ttsCurrentChunkIndexRef.current;
-    const chunk = chunks[currentIndex];
-    if (!chunk || !ttsCurrentChapterHrefRef.current || !ttsSettingsRef.current.voice) return;
-    const progress: BookTtsProgress = {
-      sourceId: manifest.book.sourceId,
-      bookId: manifest.book.id,
-      chapterHref: ttsCurrentChapterHrefRef.current,
-      chapterTitle: ttsCurrentChapterTitleRef.current || currentChapter,
-      chunkIndex: currentIndex,
-      charOffset: chunk.start,
-      currentTimeSec: audioRef.current?.currentTime || 0,
-      voice: ttsSettingsRef.current.voice,
-      rate: ttsSettingsRef.current.rate,
-      pitch: ttsSettingsRef.current.pitch,
-      volume: ttsSettingsRef.current.volume,
-      saveTime: Date.now(),
-    };
-    saveBookTtsProgress(progress);
-  }, [manifest, currentChapter]);
+  const persistTtsProgress = useCallback(
+    (chunkIndex?: number) => {
+      if (!manifest) return;
+      const chunks = ttsChunksRef.current;
+      const currentIndex = chunkIndex ?? ttsCurrentChunkIndexRef.current;
+      const chunk = chunks[currentIndex];
+      if (
+        !chunk ||
+        !ttsCurrentChapterHrefRef.current ||
+        !ttsSettingsRef.current.voice
+      )
+        return;
+      const progress: BookTtsProgress = {
+        sourceId: manifest.book.sourceId,
+        bookId: manifest.book.id,
+        chapterHref: ttsCurrentChapterHrefRef.current,
+        chapterTitle: ttsCurrentChapterTitleRef.current || currentChapter,
+        chunkIndex: currentIndex,
+        charOffset: chunk.start,
+        currentTimeSec: audioRef.current?.currentTime || 0,
+        voice: ttsSettingsRef.current.voice,
+        rate: ttsSettingsRef.current.rate,
+        pitch: ttsSettingsRef.current.pitch,
+        volume: ttsSettingsRef.current.volume,
+        saveTime: Date.now(),
+      };
+      saveBookTtsProgress(progress);
+    },
+    [manifest, currentChapter]
+  );
 
   const getCurrentSpineDocumentText = useCallback(() => {
     const iframe = viewerRef.current?.querySelector('iframe');
     const doc = iframe?.contentDocument;
-    const text = doc?.body?.innerText || doc?.documentElement?.textContent || '';
+    const text =
+      doc?.body?.innerText || doc?.documentElement?.textContent || '';
     return sanitizeTtsText(text);
   }, []);
 
-  const fetchTtsChunkAudioUrl = useCallback(async (chunk: TtsChunk, chapterHref: string) => {
-    const cached = ttsChunkBlobCacheRef.current[chunk.index];
-    if (cached?.text === chunk.text) return cached.url;
-    if (!manifest) throw new Error('书籍信息未准备好');
-    const { cacheKey, textHash } = await buildBookTtsCacheKey({
-      sourceId: manifest.book.sourceId,
-      bookId: manifest.book.id,
-      chapterHref,
-      chunkIndex: chunk.index,
-      text: chunk.text,
-      voice: ttsSettingsRef.current.voice,
-      rate: ttsSettingsRef.current.rate,
-      pitch: ttsSettingsRef.current.pitch,
-      volume: ttsSettingsRef.current.volume,
-    });
-
-    const persisted = await getCachedBookTtsChunk(cacheKey).catch(() => null);
-    if (persisted?.audioBlob) {
-      const url = URL.createObjectURL(persisted.audioBlob);
-      ttsChunkBlobCacheRef.current[chunk.index] = { url, text: chunk.text };
-      ttsChunkAudioUrlRef.current[chunk.index] = url;
-      void touchCachedBookTtsChunk(cacheKey).catch(() => undefined);
-      return url;
-    }
-
-    const response = await fetch('/api/books/tts/synthesize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+  const fetchTtsChunkAudioUrl = useCallback(
+    async (chunk: TtsChunk, chapterHref: string) => {
+      const cached = ttsChunkBlobCacheRef.current[chunk.index];
+      if (cached?.text === chunk.text) return cached.url;
+      if (!manifest) throw new Error('书籍信息未准备好');
+      const { cacheKey, textHash } = await buildBookTtsCacheKey({
         sourceId: manifest.book.sourceId,
         bookId: manifest.book.id,
         chapterHref,
+        chunkIndex: chunk.index,
         text: chunk.text,
         voice: ttsSettingsRef.current.voice,
         rate: ttsSettingsRef.current.rate,
         pitch: ttsSettingsRef.current.pitch,
         volume: ttsSettingsRef.current.volume,
-      }),
-    });
-    const json = await response.json();
-    if (!response.ok) throw new Error(json.error || '朗读音频生成失败');
-    const blob = decodeBase64Audio(json.audioBase64 || '', json.mimeType || 'audio/mpeg');
-    const url = URL.createObjectURL(blob);
-    if (cached?.url) URL.revokeObjectURL(cached.url);
-    ttsChunkBlobCacheRef.current[chunk.index] = { url, text: chunk.text };
-    ttsChunkAudioUrlRef.current[chunk.index] = url;
-    void putCachedBookTtsChunk({
-      cacheKey,
-      sourceId: manifest.book.sourceId,
-      bookId: manifest.book.id,
-      chapterHref,
-      chunkIndex: chunk.index,
-      textHash,
-      voice: ttsSettingsRef.current.voice,
-      rate: ttsSettingsRef.current.rate,
-      pitch: ttsSettingsRef.current.pitch,
-      volume: ttsSettingsRef.current.volume,
-      textPreview: chunk.text.slice(0, 80),
-      mimeType: json.mimeType || 'audio/mpeg',
-      audioBlob: blob,
-      size: blob.size,
-      createdAt: Date.now(),
-      lastAccessAt: Date.now(),
-    })
-      .then(() => enforceBookTtsCacheLimit())
-      .catch(() => undefined);
-    return url;
-  }, [manifest]);
+      });
 
-  const prefetchTtsChunks = useCallback((fromIndex: number) => {
-    const chunks = ttsChunksRef.current;
-    const chapterHref = ttsCurrentChapterHrefRef.current;
-    if (!ttsSettingsRef.current.autoPlayNext || !chapterHref) return;
-    if (ttsPrefetchedFromChunkRef.current === fromIndex) return;
-    const nextIndex = fromIndex + 1;
-    if (nextIndex >= chunks.length) return;
-    ttsPrefetchedFromChunkRef.current = fromIndex;
-    void fetchTtsChunkAudioUrl(chunks[nextIndex], chapterHref).catch(() => undefined);
-  }, [fetchTtsChunkAudioUrl]);
+      const persisted = await getCachedBookTtsChunk(cacheKey).catch(() => null);
+      if (persisted?.audioBlob) {
+        const url = URL.createObjectURL(persisted.audioBlob);
+        ttsChunkBlobCacheRef.current[chunk.index] = { url, text: chunk.text };
+        ttsChunkAudioUrlRef.current[chunk.index] = url;
+        void touchCachedBookTtsChunk(cacheKey).catch(() => undefined);
+        return url;
+      }
+
+      const response = await fetch('/api/books/tts/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceId: manifest.book.sourceId,
+          bookId: manifest.book.id,
+          chapterHref,
+          text: chunk.text,
+          voice: ttsSettingsRef.current.voice,
+          rate: ttsSettingsRef.current.rate,
+          pitch: ttsSettingsRef.current.pitch,
+          volume: ttsSettingsRef.current.volume,
+        }),
+      });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error || '朗读音频生成失败');
+      const blob = decodeBase64Audio(
+        json.audioBase64 || '',
+        json.mimeType || 'audio/mpeg'
+      );
+      const url = URL.createObjectURL(blob);
+      if (cached?.url) URL.revokeObjectURL(cached.url);
+      ttsChunkBlobCacheRef.current[chunk.index] = { url, text: chunk.text };
+      ttsChunkAudioUrlRef.current[chunk.index] = url;
+      void putCachedBookTtsChunk({
+        cacheKey,
+        sourceId: manifest.book.sourceId,
+        bookId: manifest.book.id,
+        chapterHref,
+        chunkIndex: chunk.index,
+        textHash,
+        voice: ttsSettingsRef.current.voice,
+        rate: ttsSettingsRef.current.rate,
+        pitch: ttsSettingsRef.current.pitch,
+        volume: ttsSettingsRef.current.volume,
+        textPreview: chunk.text.slice(0, 80),
+        mimeType: json.mimeType || 'audio/mpeg',
+        audioBlob: blob,
+        size: blob.size,
+        createdAt: Date.now(),
+        lastAccessAt: Date.now(),
+      })
+        .then(() => enforceBookTtsCacheLimit())
+        .catch(() => undefined);
+      return url;
+    },
+    [manifest]
+  );
+
+  const prefetchTtsChunks = useCallback(
+    (fromIndex: number) => {
+      const chunks = ttsChunksRef.current;
+      const chapterHref = ttsCurrentChapterHrefRef.current;
+      if (!ttsSettingsRef.current.autoPlayNext || !chapterHref) return;
+      if (ttsPrefetchedFromChunkRef.current === fromIndex) return;
+      const nextIndex = fromIndex + 1;
+      if (nextIndex >= chunks.length) return;
+      ttsPrefetchedFromChunkRef.current = fromIndex;
+      void fetchTtsChunkAudioUrl(chunks[nextIndex], chapterHref).catch(
+        () => undefined
+      );
+    },
+    [fetchTtsChunkAudioUrl]
+  );
 
   useEffect(() => {
     ttsPrefetchFnRef.current = prefetchTtsChunks;
   }, [prefetchTtsChunks]);
 
-  const playTtsChunk = useCallback(async (index: number) => {
-    const chunks = ttsChunksRef.current;
-    const chunk = chunks[index];
-    const chapterHref = ttsCurrentChapterHrefRef.current;
-    if (!chunk || !chapterHref || !manifest) return;
-    try {
-      setTtsError('');
-      setTtsLoadingChunkIndex(index);
-      setTtsStatus('loading');
-      const url = await fetchTtsChunkAudioUrl(chunk, chapterHref);
-      if (!audioRef.current) {
-        audioRef.current = new Audio();
+  const playTtsChunk = useCallback(
+    async (index: number) => {
+      const chunks = ttsChunksRef.current;
+      const chunk = chunks[index];
+      const chapterHref = ttsCurrentChapterHrefRef.current;
+      if (!chunk || !chapterHref || !manifest) return;
+      try {
+        setTtsError('');
+        setTtsLoadingChunkIndex(index);
+        setTtsStatus('loading');
+        const url = await fetchTtsChunkAudioUrl(chunk, chapterHref);
+        if (!audioRef.current) {
+          audioRef.current = new Audio();
+        }
+        audioRef.current.src = url;
+        ttsResumeTimeRef.current = 0;
+        const saved = getBookTtsProgress(
+          manifest.book.sourceId,
+          manifest.book.id
+        );
+        if (saved?.chapterHref === chapterHref && saved.chunkIndex === index) {
+          ttsResumeTimeRef.current = saved.currentTimeSec || 0;
+        }
+        await audioRef.current.play();
+        ttsCurrentChunkIndexRef.current = index;
+        setTtsCurrentChunkIndex(index);
+        setTtsStatus('playing');
+        setTtsLoadingChunkIndex(null);
+        persistTtsProgress(index);
+      } catch (error) {
+        setTtsStatus('error');
+        setTtsLoadingChunkIndex(null);
+        setTtsError((error as Error).message || '朗读失败');
       }
-      audioRef.current.src = url;
-      ttsResumeTimeRef.current = 0;
-      const saved = getBookTtsProgress(manifest.book.sourceId, manifest.book.id);
-      if (saved?.chapterHref === chapterHref && saved.chunkIndex === index) {
-        ttsResumeTimeRef.current = saved.currentTimeSec || 0;
-      }
-      await audioRef.current.play();
-      ttsCurrentChunkIndexRef.current = index;
-      setTtsCurrentChunkIndex(index);
-      setTtsStatus('playing');
-      setTtsLoadingChunkIndex(null);
-      persistTtsProgress(index);
-    } catch (error) {
-      setTtsStatus('error');
-      setTtsLoadingChunkIndex(null);
-      setTtsError((error as Error).message || '朗读失败');
-    }
-  }, [fetchTtsChunkAudioUrl, manifest, persistTtsProgress]);
+    },
+    [fetchTtsChunkAudioUrl, manifest, persistTtsProgress]
+  );
 
-  const bootstrapTtsForCurrentChapter = useCallback(async (resume = true) => {
-    if (!manifest || manifest.format !== 'epub') return;
-    const chapterHref = currentHref || manifest.lastRecord?.chapterHref || '';
-    const chapterTitle = findTocLabelByHref(tocItemsRef.current, chapterHref) || currentChapter || manifest.book.title;
-    if (!chapterHref) {
-      setTtsError('当前章节尚未定位，稍后再试');
-      setTtsStatus('error');
-      return;
-    }
-    const text = getCurrentSpineDocumentText();
-    if (!text) {
-      setTtsError('当前章节暂未提取到可朗读文本');
-      setTtsStatus('error');
-      return;
-    }
-    cleanupTtsAudioUrls();
-    const chunks = chunkTtsText(text, 1200);
-    if (chunks.length === 0) {
-      setTtsError('当前章节没有可朗读内容');
-      setTtsStatus('error');
-      return;
-    }
-    const saved = resume ? getBookTtsProgress(manifest.book.sourceId, manifest.book.id) : null;
-    const startIndex = saved?.chapterHref === chapterHref ? Math.min(saved.chunkIndex, chunks.length - 1) : 0;
-    setTtsChunks(chunks);
-    ttsChunksRef.current = chunks;
-    setTtsCurrentChunkIndex(startIndex);
-    ttsCurrentChunkIndexRef.current = startIndex;
-    setTtsCurrentChapterHref(chapterHref);
-    ttsCurrentChapterHrefRef.current = chapterHref;
-    setTtsCurrentChapterTitle(chapterTitle);
-    ttsCurrentChapterTitleRef.current = chapterTitle;
-    await playTtsChunk(startIndex);
-  }, [cleanupTtsAudioUrls, currentChapter, currentHref, getCurrentSpineDocumentText, manifest, playTtsChunk]);
+  const bootstrapTtsForCurrentChapter = useCallback(
+    async (resume = true) => {
+      if (!manifest || manifest.format !== 'epub') return;
+      const chapterHref = currentHref || manifest.lastRecord?.chapterHref || '';
+      const chapterTitle =
+        findTocLabelByHref(tocItemsRef.current, chapterHref) ||
+        currentChapter ||
+        manifest.book.title;
+      if (!chapterHref) {
+        setTtsError('当前章节尚未定位，稍后再试');
+        setTtsStatus('error');
+        return;
+      }
+      const text = getCurrentSpineDocumentText();
+      if (!text) {
+        setTtsError('当前章节暂未提取到可朗读文本');
+        setTtsStatus('error');
+        return;
+      }
+      cleanupTtsAudioUrls();
+      const chunks = chunkTtsText(text, 1200);
+      if (chunks.length === 0) {
+        setTtsError('当前章节没有可朗读内容');
+        setTtsStatus('error');
+        return;
+      }
+      const saved = resume
+        ? getBookTtsProgress(manifest.book.sourceId, manifest.book.id)
+        : null;
+      const startIndex =
+        saved?.chapterHref === chapterHref
+          ? Math.min(saved.chunkIndex, chunks.length - 1)
+          : 0;
+      setTtsChunks(chunks);
+      ttsChunksRef.current = chunks;
+      setTtsCurrentChunkIndex(startIndex);
+      ttsCurrentChunkIndexRef.current = startIndex;
+      setTtsCurrentChapterHref(chapterHref);
+      ttsCurrentChapterHrefRef.current = chapterHref;
+      setTtsCurrentChapterTitle(chapterTitle);
+      ttsCurrentChapterTitleRef.current = chapterTitle;
+      await playTtsChunk(startIndex);
+    },
+    [
+      cleanupTtsAudioUrls,
+      currentChapter,
+      currentHref,
+      getCurrentSpineDocumentText,
+      manifest,
+      playTtsChunk,
+    ]
+  );
 
   const toggleTtsPlayback = useCallback(async () => {
     if (!ttsAvailable) return;
@@ -1683,46 +2736,78 @@ export default function BookReadPage() {
       return;
     }
     await bootstrapTtsForCurrentChapter(true);
-  }, [bootstrapTtsForCurrentChapter, persistTtsProgress, ttsAvailable, ttsStatus]);
-
-
-
-
-
+  }, [
+    bootstrapTtsForCurrentChapter,
+    persistTtsProgress,
+    ttsAvailable,
+    ttsStatus,
+  ]);
 
   useEffect(() => {
     if (!manifest || manifest.format !== 'epub' || !viewerRef.current) return;
     let destroyed = false;
     const currentSessionCfi = lastLocationRef.current?.start?.cfi || undefined;
-    const currentSessionHref = currentHrefRef.current || lastLocationRef.current?.start?.href || undefined;
+    const currentSessionHref =
+      currentHrefRef.current ||
+      lastLocationRef.current?.start?.href ||
+      undefined;
 
     setReady(false);
     setRestoredMessage('');
     locationsReadyRef.current = false;
     lastLocationRef.current = null;
     setProgressPercent(manifest.lastRecord?.progressPercent || 0);
-    setCurrentChapter(manifest.lastRecord?.chapterTitle || manifest.lastRecord?.locator?.chapterTitle || '');
+    setCurrentChapter(
+      manifest.lastRecord?.chapterTitle ||
+        manifest.lastRecord?.locator?.chapterTitle ||
+        ''
+    );
     setFileLoadState('checking-cache');
     setDownloadedBytes(0);
     setTotalBytes(null);
     setCacheHit(false);
 
-    const initialScrolledHref = currentSessionHref || manifest.lastRecord?.chapterHref || manifest.lastRecord?.locator?.href || undefined;
-    const cachedScrolledPosition = initialScrolledHref ? getScrolledPosition(manifest.book.sourceId, manifest.book.id, initialScrolledHref) : null;
-    pendingScrolledRestoreRef.current = settings.mode === 'scrolled' && !currentSessionHref ? cachedScrolledPosition : null;
-    restoreTargetRef.current = settings.mode === 'scrolled'
-      ? (initialScrolledHref || cachedScrolledPosition?.href || undefined)
-      : (currentSessionCfi || manifest.lastRecord?.locator?.value || undefined);
+    const initialScrolledHref =
+      currentSessionHref ||
+      manifest.lastRecord?.chapterHref ||
+      manifest.lastRecord?.locator?.href ||
+      getHrefFromScrollLocator(manifest.lastRecord?.locator?.value) ||
+      undefined;
+    const historyScrolledPosition = getScrolledPositionFromRecord(
+      manifest.lastRecord
+    );
+    const cachedScrolledPosition = initialScrolledHref
+      ? getScrolledPosition(
+          manifest.book.sourceId,
+          manifest.book.id,
+          initialScrolledHref
+        )
+      : null;
+    pendingScrolledRestoreRef.current =
+      settings.mode === 'scrolled' && !currentSessionCfi
+        ? historyScrolledPosition || cachedScrolledPosition
+        : null;
+    restoreTargetRef.current =
+      settings.mode === 'scrolled'
+        ? currentSessionCfi ||
+          initialScrolledHref ||
+          historyScrolledPosition?.href ||
+          cachedScrolledPosition?.href ||
+          undefined
+        : currentSessionCfi || manifest.lastRecord?.locator?.value || undefined;
 
     loadEpubScript()
       .then(async () => {
         if (!window.ePub || destroyed || !viewerRef.current) return;
 
-        const cacheKey = manifest.cacheKey || buildBookCacheKey(
-          manifest.book.sourceId,
-          manifest.book.id,
-          manifest.acquisitionHref || `${manifest.book.sourceId}:${manifest.book.id}:${manifest.format}`
-        );
+        const cacheKey =
+          manifest.cacheKey ||
+          buildBookCacheKey(
+            manifest.book.sourceId,
+            manifest.book.id,
+            manifest.acquisitionHref ||
+              `${manifest.book.sourceId}:${manifest.book.id}:${manifest.format}`
+          );
 
         let fileBuffer: ArrayBuffer;
         const cached = await getCachedBookFile(cacheKey).catch(() => null);
@@ -1735,12 +2820,15 @@ export default function BookReadPage() {
           fileBuffer = await cached.blob.arrayBuffer();
         } else {
           setFileLoadState('downloading');
-          const blob = await downloadBookWithProgress(manifest, (received, total) => {
-            if (!destroyed) {
-              setDownloadedBytes(received);
-              setTotalBytes(total);
+          const blob = await downloadBookWithProgress(
+            manifest,
+            (received, total) => {
+              if (!destroyed) {
+                setDownloadedBytes(received);
+                setTotalBytes(total);
+              }
             }
-          });
+          );
           fileBuffer = await blob.arrayBuffer();
           await putCachedBookFile({
             key: cacheKey,
@@ -1748,7 +2836,9 @@ export default function BookReadPage() {
             bookId: manifest.book.id,
             title: manifest.book.title,
             format: 'epub',
-            acquisitionHref: manifest.acquisitionHref || `${manifest.book.sourceId}:${manifest.book.id}:${manifest.format}`,
+            acquisitionHref:
+              manifest.acquisitionHref ||
+              `${manifest.book.sourceId}:${manifest.book.id}:${manifest.format}`,
             blob,
             size: blob.size,
             mimeType: blob.type || 'application/epub+zip',
@@ -1769,7 +2859,10 @@ export default function BookReadPage() {
           }
         }, 4000);
 
-        const rendition = book.renderTo(viewerRef.current, getRenditionOptions(settings.mode));
+        const rendition = book.renderTo(
+          viewerRef.current,
+          getRenditionOptions(settings.mode)
+        );
         bookRef.current = book;
         renditionRef.current = rendition;
         applyReaderTheme(settingsRef.current);
@@ -1785,7 +2878,11 @@ export default function BookReadPage() {
           }
           if (restoreTarget && !restoreMessageShown) {
             restoreMessageShown = true;
-            setRestoredMessage(`已恢复到上次阅读位置（约 ${Math.round(manifest.lastRecord?.progressPercent || 0)}%）`);
+            setRestoredMessage(
+              `已恢复到上次阅读位置（约 ${Math.round(
+                manifest.lastRecord?.progressPercent || 0
+              )}%）`
+            );
             window.setTimeout(() => setRestoredMessage(''), 3000);
           }
           lastLocationRef.current = location;
@@ -1795,13 +2892,30 @@ export default function BookReadPage() {
             bindScrolledIframeListenerRef.current();
             applyPendingScrolledRestoreRef.current();
           });
-          const hrefLabel = location?.start?.href ? findTocLabelByHref(tocItemsRef.current, location.start.href) : '';
-          const chapterTitle = hrefLabel || location?.start?.displayed?.chapter || location?.start?.href || manifest.book.title;
+          const hrefLabel = location?.start?.href
+            ? findTocLabelByHref(tocItemsRef.current, location.start.href)
+            : '';
+          const chapterTitle =
+            hrefLabel ||
+            location?.start?.displayed?.chapter ||
+            location?.start?.href ||
+            manifest.book.title;
           const cfi = location?.start?.cfi || '';
-          const computedProgress = locationsReadyRef.current && cfi
-            ? Math.max(0, Math.min(100, (book.locations?.percentageFromCfi?.(cfi) || 0) * 100))
-            : null;
-          const normalizedProgress = computedProgress ?? lastProgressRef.current ?? manifest.lastRecord?.progressPercent ?? 0;
+          const computedProgress =
+            locationsReadyRef.current && cfi
+              ? Math.max(
+                  0,
+                  Math.min(
+                    100,
+                    (book.locations?.percentageFromCfi?.(cfi) || 0) * 100
+                  )
+                )
+              : null;
+          const normalizedProgress =
+            computedProgress ??
+            lastProgressRef.current ??
+            manifest.lastRecord?.progressPercent ??
+            0;
           setProgressPercent(normalizedProgress);
           setCurrentChapter(chapterTitle);
           setCurrentHref(location?.start?.href || '');
@@ -1819,7 +2933,8 @@ export default function BookReadPage() {
 
         void (async () => {
           try {
-            const navigation = (await book.loaded?.navigation) || book.navigation;
+            const navigation =
+              (await book.loaded?.navigation) || book.navigation;
             if (!destroyed) setTocItems(navigation?.toc || []);
           } catch {
             if (!destroyed) setTocItems(book.navigation?.toc || []);
@@ -1832,7 +2947,10 @@ export default function BookReadPage() {
             await book.locations?.generate?.(480);
             locationsReadyRef.current = true;
             if (lastLocationRef.current?.start?.cfi) {
-              const recomputed = book.locations?.percentageFromCfi?.(lastLocationRef.current.start.cfi) || 0;
+              const recomputed =
+                book.locations?.percentageFromCfi?.(
+                  lastLocationRef.current.start.cfi
+                ) || 0;
               const nextProgress = Math.max(0, Math.min(100, recomputed * 100));
               setProgressPercent(nextProgress);
               lastProgressRef.current = nextProgress;
@@ -1855,7 +2973,14 @@ export default function BookReadPage() {
       renditionRef.current?.destroy?.();
       bookRef.current?.destroy?.();
     };
-  }, [manifest, settings.mode, applyReaderTheme, persistCurrentProgress, queueReadRecord, navigateToTarget]);
+  }, [
+    manifest,
+    settings.mode,
+    applyReaderTheme,
+    persistCurrentProgress,
+    queueReadRecord,
+    navigateToTarget,
+  ]);
 
   useEffect(() => {
     const flushPendingReadRecordOnLeave = () => {
@@ -1918,7 +3043,10 @@ export default function BookReadPage() {
     const handleLoadedMetadata = () => {
       const nextDuration = audio.duration || 0;
       if (ttsResumeTimeRef.current > 0 && nextDuration > 0) {
-        audio.currentTime = Math.min(ttsResumeTimeRef.current, Math.max(0, nextDuration - 0.25));
+        audio.currentTime = Math.min(
+          ttsResumeTimeRef.current,
+          Math.max(0, nextDuration - 0.25)
+        );
         ttsResumeTimeRef.current = 0;
       }
       setTtsDuration(nextDuration);
@@ -1963,8 +3091,6 @@ export default function BookReadPage() {
     }
   }, [currentHref, stopTts, ttsCurrentChapterHref]);
 
-
-
   useEffect(() => {
     if (!manifest || manifest.format !== 'pdf') return;
     let revokedUrl = '';
@@ -1997,28 +3123,40 @@ export default function BookReadPage() {
     };
   }, [manifest]);
 
-
   useEffect(() => {
     tocItemsRef.current = tocItems;
   }, [tocItems]);
 
   const flatToc = useMemo(() => flattenToc(tocItems), [tocItems]);
   const activeTocHref = useMemo(
-    () => flatToc.find((item) => isSameTocTarget(currentHref, item.href))?.href || '',
+    () =>
+      flatToc.find((item) => isSameTocTarget(currentHref, item.href))?.href ||
+      '',
     [flatToc, currentHref]
   );
 
-  const currentTocLabel = useMemo(() => findTocLabelByHref(tocItems, currentHref), [tocItems, currentHref]);
+  const currentTocLabel = useMemo(
+    () => findTocLabelByHref(tocItems, currentHref),
+    [tocItems, currentHref]
+  );
 
   useEffect(() => {
     if (!manifest) return;
-    window.dispatchEvent(new CustomEvent('books-read-update-header', {
-      detail: {
-        title: manifest.book.title,
-        subtitle: currentTocLabel || currentChapter || manifest.book.author || (settings.mode === 'scrolled' ? '滚动阅读' : '分页阅读'),
-        backHref: `/books/detail?sourceId=${encodeURIComponent(manifest.book.sourceId)}&bookId=${encodeURIComponent(manifest.book.id)}`,
-      },
-    }));
+    window.dispatchEvent(
+      new CustomEvent('books-read-update-header', {
+        detail: {
+          title: manifest.book.title,
+          subtitle:
+            currentTocLabel ||
+            currentChapter ||
+            manifest.book.author ||
+            (settings.mode === 'scrolled' ? '滚动阅读' : '分页阅读'),
+          backHref: `/books/detail?sourceId=${encodeURIComponent(
+            manifest.book.sourceId
+          )}&bookId=${encodeURIComponent(manifest.book.id)}`,
+        },
+      })
+    );
   }, [manifest, currentChapter, currentTocLabel, settings.mode]);
 
   useEffect(() => {
@@ -2028,7 +3166,9 @@ export default function BookReadPage() {
     activeNode.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [tocOpen, activeTocHref]);
   const nextChapterHref = useMemo(() => {
-    const index = flatToc.findIndex((item) => isSameTocTarget(currentHref, item.href));
+    const index = flatToc.findIndex((item) =>
+      isSameTocTarget(currentHref, item.href)
+    );
     if (index < 0) return flatToc[0]?.href || '';
     return flatToc[index + 1]?.href || '';
   }, [flatToc, currentHref]);
@@ -2070,7 +3210,10 @@ export default function BookReadPage() {
       const isAtBottom = () => {
         const latestMetrics = getIframeScrollMetrics(viewerRef.current);
         if (!latestMetrics) return false;
-        const distanceToBottom = latestMetrics.scrollHeight - latestMetrics.clientHeight - latestMetrics.scrollTop;
+        const distanceToBottom =
+          latestMetrics.scrollHeight -
+          latestMetrics.clientHeight -
+          latestMetrics.scrollTop;
         return distanceToBottom <= 36;
       };
 
@@ -2097,7 +3240,10 @@ export default function BookReadPage() {
           const latestMetrics = getIframeScrollMetrics(viewerRef.current);
           if (!latestMetrics) return;
           persistScrolledPosition();
-          const distanceToBottom = latestMetrics.scrollHeight - latestMetrics.clientHeight - latestMetrics.scrollTop;
+          const distanceToBottom =
+            latestMetrics.scrollHeight -
+            latestMetrics.clientHeight -
+            latestMetrics.scrollTop;
           if (distanceToBottom <= 36) {
             setBottomReached(true);
             scrolledAutoAdvanceLockRef.current = false;
@@ -2132,23 +3278,52 @@ export default function BookReadPage() {
       };
 
       metrics.addScrollListener(handleScroll);
-      metrics.interactionTarget?.addEventListener('wheel', handleWheel, { passive: true });
-      metrics.interactionTarget?.addEventListener('touchstart', handleTouchStart, { passive: true });
-      metrics.interactionTarget?.addEventListener('touchmove', handleTouchMove, { passive: true });
-      metrics.interactionTarget?.addEventListener('touchend', handleTouchEnd, { passive: true });
-      viewerRef.current?.addEventListener('wheel', handleWheel, { passive: true });
-      viewerRef.current?.addEventListener('touchstart', handleTouchStart, { passive: true });
-      viewerRef.current?.addEventListener('touchmove', handleTouchMove, { passive: true });
-      viewerRef.current?.addEventListener('touchend', handleTouchEnd, { passive: true });
+      metrics.interactionTarget?.addEventListener('wheel', handleWheel, {
+        passive: true,
+      });
+      metrics.interactionTarget?.addEventListener(
+        'touchstart',
+        handleTouchStart,
+        { passive: true }
+      );
+      metrics.interactionTarget?.addEventListener(
+        'touchmove',
+        handleTouchMove,
+        { passive: true }
+      );
+      metrics.interactionTarget?.addEventListener('touchend', handleTouchEnd, {
+        passive: true,
+      });
+      viewerRef.current?.addEventListener('wheel', handleWheel, {
+        passive: true,
+      });
+      viewerRef.current?.addEventListener('touchstart', handleTouchStart, {
+        passive: true,
+      });
+      viewerRef.current?.addEventListener('touchmove', handleTouchMove, {
+        passive: true,
+      });
+      viewerRef.current?.addEventListener('touchend', handleTouchEnd, {
+        passive: true,
+      });
       handleScroll();
       scrollListenerCleanupRef.current = () => {
         if (retryTimer) window.clearTimeout(retryTimer);
         if (rafId) window.cancelAnimationFrame(rafId);
         metrics.removeScrollListener(handleScroll);
         metrics.interactionTarget?.removeEventListener('wheel', handleWheel);
-        metrics.interactionTarget?.removeEventListener('touchstart', handleTouchStart);
-        metrics.interactionTarget?.removeEventListener('touchmove', handleTouchMove);
-        metrics.interactionTarget?.removeEventListener('touchend', handleTouchEnd);
+        metrics.interactionTarget?.removeEventListener(
+          'touchstart',
+          handleTouchStart
+        );
+        metrics.interactionTarget?.removeEventListener(
+          'touchmove',
+          handleTouchMove
+        );
+        metrics.interactionTarget?.removeEventListener(
+          'touchend',
+          handleTouchEnd
+        );
         viewerRef.current?.removeEventListener('wheel', handleWheel);
         viewerRef.current?.removeEventListener('touchstart', handleTouchStart);
         viewerRef.current?.removeEventListener('touchmove', handleTouchMove);
@@ -2159,55 +3334,78 @@ export default function BookReadPage() {
     attach();
   }, [goToNextChapter, persistScrolledPosition]);
 
-
   useEffect(() => {
     bindScrolledIframeListenerRef.current = bindScrolledIframeListener;
   }, [bindScrolledIframeListener]);
 
-  const renderTocItems = useCallback((items: TocItem[], depth = 0) => items.map((item) => {
-    const active = tocItemIsActive(item, currentHref);
-    const clickable = !!item.href;
-    return (
-      <div key={`${item.href || item.label}-${depth}`} className='space-y-2'>
-        <button
-          ref={(node) => {
-            if (item.href) tocItemRefs.current[item.href] = node;
-          }}
-          onClick={() => {
-            if (!clickable) return;
-            persistScrolledPosition();
-            pendingScrolledRestoreRef.current = {
-              href: item.href,
-              scrollTop: 0,
-              scrollHeight: 1,
-              clientHeight: 1,
-              updatedAt: Date.now(),
-            };
-            restoreTargetRef.current = item.href;
-            void navigateToTarget(item.href);
-            setTocOpen(false);
-          }}
-          disabled={!clickable}
-          className={`group relative block w-full rounded-2xl px-4 py-3 text-left text-sm transition ${active ? 'bg-sky-600 text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-900'} ${!clickable ? 'cursor-default opacity-80' : ''}`}
-          style={{ paddingLeft: `${16 + depth * 14}px` }}
-        >
-          <span className='block truncate'>{item.label}</span>
-          <div className='pointer-events-none absolute bottom-full left-1/2 z-[100] mb-2 -translate-x-1/2 rounded-lg bg-gray-800 px-3 py-2 text-sm text-white opacity-0 invisible shadow-xl transition-all duration-200 ease-out group-hover:visible group-hover:opacity-100 dark:bg-gray-900 whitespace-nowrap'>
-            <div className='text-sm'>{item.label}</div>
+  const renderTocItems = useCallback(
+    (items: TocItem[], depth = 0) =>
+      items.map((item) => {
+        const active = tocItemIsActive(item, currentHref);
+        const clickable = !!item.href;
+        return (
+          <div
+            key={`${item.href || item.label}-${depth}`}
+            className='space-y-2'
+          >
+            <button
+              ref={(node) => {
+                if (item.href) tocItemRefs.current[item.href] = node;
+              }}
+              onClick={() => {
+                if (!clickable) return;
+                persistScrolledPosition();
+                pendingScrolledRestoreRef.current = {
+                  href: item.href,
+                  scrollTop: 0,
+                  scrollHeight: 1,
+                  clientHeight: 1,
+                  updatedAt: Date.now(),
+                };
+                restoreTargetRef.current = item.href;
+                void navigateToTarget(item.href);
+                setTocOpen(false);
+              }}
+              disabled={!clickable}
+              className={`group relative block w-full rounded-2xl px-4 py-3 text-left text-sm transition ${
+                active
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-900'
+              } ${!clickable ? 'cursor-default opacity-80' : ''}`}
+              style={{ paddingLeft: `${16 + depth * 14}px` }}
+            >
+              <span className='block truncate'>{item.label}</span>
+              <div className='pointer-events-none absolute bottom-full left-1/2 z-[100] mb-2 -translate-x-1/2 rounded-lg bg-gray-800 px-3 py-2 text-sm text-white opacity-0 invisible shadow-xl transition-all duration-200 ease-out group-hover:visible group-hover:opacity-100 dark:bg-gray-900 whitespace-nowrap'>
+                <div className='text-sm'>{item.label}</div>
+              </div>
+            </button>
+            {item.subitems?.length
+              ? renderTocItems(item.subitems, depth + 1)
+              : null}
           </div>
-        </button>
-        {item.subitems?.length ? renderTocItems(item.subitems, depth + 1) : null}
-      </div>
-    );
-  }), [currentHref, navigateToTarget, persistScrolledPosition]);
+        );
+      }),
+    [currentHref, navigateToTarget, persistScrolledPosition]
+  );
 
+  const showScrolledNextChapter =
+    ready &&
+    settings.mode === 'scrolled' &&
+    !tocOpen &&
+    !settingsOpen &&
+    scrolledBottomReached &&
+    !!nextChapterHref;
 
-
-  const showScrolledNextChapter = ready && settings.mode === 'scrolled' && !tocOpen && !settingsOpen && scrolledBottomReached && !!nextChapterHref;
-
-  const progressLabel = totalBytes ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}` : formatBytes(downloadedBytes);
-  const ttsChunkPercent = ttsChunks.length > 0 ? ((ttsCurrentChunkIndex + 1) / ttsChunks.length) * 100 : 0;
-  const selectedVoice = ttsVoices.find((item) => item.shortName === ttsSettings.voice);
+  const progressLabel = totalBytes
+    ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}`
+    : formatBytes(downloadedBytes);
+  const ttsChunkPercent =
+    ttsChunks.length > 0
+      ? ((ttsCurrentChunkIndex + 1) / ttsChunks.length) * 100
+      : 0;
+  const selectedVoice = ttsVoices.find(
+    (item) => item.shortName === ttsSettings.voice
+  );
   const currentChunk = ttsChunks[ttsCurrentChunkIndex];
   const ttsRateValue = parseSignedNumber(ttsSettings.rate, '%');
   const ttsPitchValue = parseSignedNumber(ttsSettings.pitch, 'Hz');
@@ -2222,7 +3420,9 @@ export default function BookReadPage() {
           <div className='reader-book-loader'>
             <BookOpen className='h-10 w-10' strokeWidth={1.75} />
           </div>
-          <div className='text-sm text-gray-500 dark:text-gray-400'>准备阅读器中...</div>
+          <div className='text-sm text-gray-500 dark:text-gray-400'>
+            准备阅读器中...
+          </div>
         </div>
       </div>
     );
@@ -2233,14 +3433,25 @@ export default function BookReadPage() {
   }
 
   if (manifest.format === 'pdf') {
-    if (!pdfBlobUrl) return <div className='p-4 text-sm text-gray-500'>PDF 加载中... {progressLabel}</div>;
-    return <iframe src={pdfBlobUrl} className='h-[calc(100vh-4rem)] w-full bg-white' title={manifest.book.title} />;
+    if (!pdfBlobUrl)
+      return (
+        <div className='p-4 text-sm text-gray-500'>
+          PDF 加载中... {progressLabel}
+        </div>
+      );
+    return (
+      <iframe
+        src={pdfBlobUrl}
+        className='h-[calc(100vh-4rem)] w-full bg-white'
+        title={manifest.book.title}
+      />
+    );
   }
 
   return (
     <div className='flex h-[calc(100vh-3.5rem)] flex-col bg-white dark:bg-gray-950'>
       {restoredMessage ? (
-        <div className='absolute left-1/2 top-[4.5rem] z-30 -translate-x-1/2 rounded-full bg-sky-600 px-4 py-2 text-xs text-white shadow-lg'>
+        <div className='absolute left-1/2 top-[4.5rem] z-30 -translate-x-1/2 rounded-full bg-emerald-600 px-4 py-2 text-xs text-white shadow-lg'>
           {restoredMessage}
         </div>
       ) : null}
@@ -2253,19 +3464,32 @@ export default function BookReadPage() {
                 {fileLoadState === 'checking-cache'
                   ? '检查本地缓存'
                   : fileLoadState === 'downloading'
-                    ? '下载电子书'
-                    : fileLoadState === 'opening'
-                      ? '正在打开电子书'
-                      : '准备阅读器'}
+                  ? '下载电子书'
+                  : fileLoadState === 'opening'
+                  ? '正在打开电子书'
+                  : '准备阅读器'}
               </div>
               <div className='h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800'>
                 <div
-                  className='h-full rounded-full bg-sky-600 transition-all'
-                  style={{ width: totalBytes ? `${Math.min(100, (downloadedBytes / totalBytes) * 100)}%` : fileLoadState === 'opening' ? '92%' : fileLoadState === 'checking-cache' ? '20%' : '45%' }}
+                  className='h-full rounded-full bg-emerald-600 transition-all'
+                  style={{
+                    width: totalBytes
+                      ? `${Math.min(
+                          100,
+                          (downloadedBytes / totalBytes) * 100
+                        )}%`
+                      : fileLoadState === 'opening'
+                      ? '92%'
+                      : fileLoadState === 'checking-cache'
+                      ? '20%'
+                      : '45%',
+                  }}
                 />
               </div>
               <div className='flex items-center justify-between text-xs text-gray-500 dark:text-gray-400'>
-                <span>{cacheHit ? '已命中本地缓存' : '首次打开将缓存到当前浏览器'}</span>
+                <span>
+                  {cacheHit ? '已命中本地缓存' : '首次打开将缓存到当前浏览器'}
+                </span>
                 <span>{progressLabel}</span>
               </div>
             </div>
@@ -2275,7 +3499,9 @@ export default function BookReadPage() {
                   <div className='reader-book-loader'>
                     <BookOpen className='h-10 w-10' strokeWidth={1.75} />
                   </div>
-                  <div className='text-sm text-gray-500 dark:text-gray-400'>正在打开电子书...</div>
+                  <div className='text-sm text-gray-500 dark:text-gray-400'>
+                    正在打开电子书...
+                  </div>
                 </div>
               ) : (
                 <div className='space-y-3 animate-pulse'>
@@ -2291,101 +3517,182 @@ export default function BookReadPage() {
         </div>
       ) : null}
 
-      {tocOpen && typeof document !== 'undefined' ? createPortal(
-        <div className='fixed inset-0 z-40 bg-black/30' onClick={() => setTocOpen(false)}>
-          <div
-            className='absolute right-0 top-0 h-screen w-[22rem] max-w-[88vw] overflow-y-auto border-l border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-950'
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className='p-4'>
-              <div className='space-y-2' ref={tocScrollRef}>
-                {tocItems.length === 0 ? (
-                  <div className='p-3 text-sm text-gray-500'>当前 EPUB 未提供目录</div>
-                ) : (
-                  renderTocItems(tocItems)
-                )}
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      ) : null}
-
-      {settingsOpen && typeof document !== 'undefined' ? createPortal(
-        <div className='fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4' onClick={() => setSettingsOpen(false)}>
-          <div
-            className='w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-5 shadow-xl dark:border-gray-700 dark:bg-gray-950'
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className='mb-4'>
-              <div className='text-base font-semibold text-gray-900 dark:text-gray-100'>阅读设置</div>
-              <div className='mt-1 text-xs text-gray-500'>可切换翻页或滚动阅读，默认翻页模式</div>
-            </div>
-            <div className='space-y-6 p-1 text-sm'>
-              <div>
-                <div className='mb-2 font-medium'>阅读模式</div>
-                <div className='grid grid-cols-2 gap-2'>
-                  {([
-                    { key: 'paginated', label: '翻页模式', desc: '左右点击翻页' },
-                    { key: 'scrolled', label: '滚动模式', desc: '上下连续滚动' },
-                  ] as { key: ReaderMode; label: string; desc: string }[]).map((mode) => (
-                    <button
-                      key={mode.key}
-                      onClick={() => setSettings((prev) => ({ ...prev, mode: mode.key }))}
-                      className={`rounded-2xl border px-3 py-3 text-left ${settings.mode === mode.key ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300' : 'border-gray-200 dark:border-gray-700'}`}
-                    >
-                      <div className='font-medium'>{mode.label}</div>
-                      <div className='mt-1 text-xs opacity-70'>{mode.desc}</div>
-                    </button>
-                  ))}
+      {tocOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className='fixed inset-0 z-40 bg-black/30'
+              onClick={() => setTocOpen(false)}
+            >
+              <div
+                className='absolute right-0 top-0 h-screen w-[22rem] max-w-[88vw] overflow-y-auto border-l border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-950'
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className='p-4'>
+                  <div className='space-y-2' ref={tocScrollRef}>
+                    {tocItems.length === 0 ? (
+                      <div className='p-3 text-sm text-gray-500'>
+                        当前 EPUB 未提供目录
+                      </div>
+                    ) : (
+                      renderTocItems(tocItems)
+                    )}
+                  </div>
                 </div>
               </div>
+            </div>,
+            document.body
+          )
+        : null}
 
-              <div>
-                <div className='mb-2 font-medium'>主题</div>
-                <div className='grid grid-cols-3 gap-2'>
-                  {(['light', 'sepia', 'dark'] as ReaderTheme[]).map((theme) => (
+      {settingsOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className='fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4'
+              onClick={() => setSettingsOpen(false)}
+            >
+              <div
+                className='w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-5 shadow-xl dark:border-gray-700 dark:bg-gray-950'
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className='mb-4'>
+                  <div className='text-base font-semibold text-gray-900 dark:text-gray-100'>
+                    阅读设置
+                  </div>
+                  <div className='mt-1 text-xs text-gray-500'>
+                    可切换翻页或滚动阅读，默认翻页模式
+                  </div>
+                </div>
+                <div className='space-y-6 p-1 text-sm'>
+                  <div>
+                    <div className='mb-2 font-medium'>阅读模式</div>
+                    <div className='grid grid-cols-2 gap-2'>
+                      {(
+                        [
+                          {
+                            key: 'paginated',
+                            label: '翻页模式',
+                            desc: '左右点击翻页',
+                          },
+                          {
+                            key: 'scrolled',
+                            label: '滚动模式',
+                            desc: '上下连续滚动',
+                          },
+                        ] as { key: ReaderMode; label: string; desc: string }[]
+                      ).map((mode) => (
+                        <button
+                          key={mode.key}
+                          onClick={() => switchReaderMode(mode.key)}
+                          className={`rounded-2xl border px-3 py-3 text-left ${
+                            settings.mode === mode.key
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                              : 'border-gray-200 dark:border-gray-700'
+                          }`}
+                        >
+                          <div className='font-medium'>{mode.label}</div>
+                          <div className='mt-1 text-xs opacity-70'>
+                            {mode.desc}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className='mb-2 font-medium'>主题</div>
+                    <div className='grid grid-cols-3 gap-2'>
+                      {(['light', 'sepia', 'dark'] as ReaderTheme[]).map(
+                        (theme) => (
+                          <button
+                            key={theme}
+                            onClick={() =>
+                              setSettings((prev) => ({ ...prev, theme }))
+                            }
+                            className={`rounded-2xl border px-3 py-2 ${
+                              settings.theme === theme
+                                ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                : 'border-gray-200 dark:border-gray-700'
+                            }`}
+                          >
+                            <div className='mb-1 flex justify-center'>
+                              {theme === 'dark' ? (
+                                <Moon className='h-4 w-4' />
+                              ) : (
+                                <Sun className='h-4 w-4' />
+                              )}
+                            </div>
+                            {theme === 'light'
+                              ? '浅色'
+                              : theme === 'sepia'
+                              ? '护眼'
+                              : '深色'}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className='mb-2 flex items-center justify-between font-medium'>
+                      字号 <span>{settings.fontSize}%</span>
+                    </div>
+                    <input
+                      type='range'
+                      min='85'
+                      max='140'
+                      step='5'
+                      value={settings.fontSize}
+                      onChange={(e) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          fontSize: Number(e.target.value),
+                        }))
+                      }
+                      className='w-full'
+                    />
+                  </div>
+
+                  <div>
+                    <div className='mb-2 flex items-center justify-between font-medium'>
+                      行距 <span>{settings.lineHeight.toFixed(1)}</span>
+                    </div>
+                    <input
+                      type='range'
+                      min='1.4'
+                      max='2.2'
+                      step='0.1'
+                      value={settings.lineHeight}
+                      onChange={(e) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          lineHeight: Number(e.target.value),
+                        }))
+                      }
+                      className='w-full'
+                    />
+                  </div>
+
+                  <div className='rounded-2xl bg-gray-50 p-4 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-400'>
+                    首次会缓存到当前浏览器，之后再次打开同一本书通常不需要重新整包下载。
+                    当前缓存状态：
+                    {cacheHit ? '已命中本地缓存' : '本次为网络加载'}。
+                  </div>
+
+                  <div className='flex justify-end'>
                     <button
-                      key={theme}
-                      onClick={() => setSettings((prev) => ({ ...prev, theme }))}
-                      className={`rounded-2xl border px-3 py-2 ${settings.theme === theme ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300' : 'border-gray-200 dark:border-gray-700'}`}
+                      type='button'
+                      className='rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white'
+                      onClick={() => setSettingsOpen(false)}
                     >
-                      <div className='mb-1 flex justify-center'>{theme === 'dark' ? <Moon className='h-4 w-4' /> : <Sun className='h-4 w-4' />}</div>
-                      {theme === 'light' ? '浅色' : theme === 'sepia' ? '护眼' : '深色'}
+                      完成
                     </button>
-                  ))}
+                  </div>
                 </div>
               </div>
-
-              <div>
-                <div className='mb-2 flex items-center justify-between font-medium'>字号 <span>{settings.fontSize}%</span></div>
-                <input type='range' min='85' max='140' step='5' value={settings.fontSize} onChange={(e) => setSettings((prev) => ({ ...prev, fontSize: Number(e.target.value) }))} className='w-full' />
-              </div>
-
-              <div>
-                <div className='mb-2 flex items-center justify-between font-medium'>行距 <span>{settings.lineHeight.toFixed(1)}</span></div>
-                <input type='range' min='1.4' max='2.2' step='0.1' value={settings.lineHeight} onChange={(e) => setSettings((prev) => ({ ...prev, lineHeight: Number(e.target.value) }))} className='w-full' />
-              </div>
-
-              <div className='rounded-2xl bg-gray-50 p-4 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-400'>
-                首次会缓存到当前浏览器，之后再次打开同一本书通常不需要重新整包下载。
-当前缓存状态：{cacheHit ? '已命中本地缓存' : '本次为网络加载'}。
-              </div>
-
-              <div className='flex justify-end'>
-                <button
-                  type='button'
-                  className='rounded-2xl bg-sky-600 px-4 py-2 text-sm font-medium text-white'
-                  onClick={() => setSettingsOpen(false)}
-                >
-                  完成
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      ) : null}
+            </div>,
+            document.body
+          )
+        : null}
 
       {manifest.format === 'epub' && ttsBarVisible ? (
         <>
@@ -2404,7 +3711,9 @@ export default function BookReadPage() {
                   onTouchStart={() => setTtsSeeking(true)}
                   onChange={(e) => setTtsSeekValue(Number(e.target.value))}
                   onPointerUp={(e) => {
-                    const nextTime = Number((e.target as HTMLInputElement).value);
+                    const nextTime = Number(
+                      (e.target as HTMLInputElement).value
+                    );
                     if (audioRef.current && Number.isFinite(nextTime)) {
                       audioRef.current.currentTime = nextTime;
                     }
@@ -2413,7 +3722,9 @@ export default function BookReadPage() {
                     setTtsSeeking(false);
                   }}
                   onMouseUp={(e) => {
-                    const nextTime = Number((e.target as HTMLInputElement).value);
+                    const nextTime = Number(
+                      (e.target as HTMLInputElement).value
+                    );
                     if (audioRef.current && Number.isFinite(nextTime)) {
                       audioRef.current.currentTime = nextTime;
                     }
@@ -2422,7 +3733,9 @@ export default function BookReadPage() {
                     setTtsSeeking(false);
                   }}
                   onTouchEnd={(e) => {
-                    const nextTime = Number((e.target as HTMLInputElement).value);
+                    const nextTime = Number(
+                      (e.target as HTMLInputElement).value
+                    );
                     if (audioRef.current && Number.isFinite(nextTime)) {
                       audioRef.current.currentTime = nextTime;
                     }
@@ -2430,7 +3743,7 @@ export default function BookReadPage() {
                     setTtsSeekValue(nextTime);
                     setTtsSeeking(false);
                   }}
-                  className='w-full accent-sky-500'
+                  className='w-full accent-emerald-500'
                 />
               </div>
               <div className='px-3 py-2.5'>
@@ -2439,27 +3752,40 @@ export default function BookReadPage() {
                     type='button'
                     onClick={() => void toggleTtsPlayback()}
                     disabled={!ttsAvailable || ttsLoadingChunkIndex !== null}
-                    className='flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-600 text-white disabled:opacity-50'
+                    className='flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white disabled:opacity-50'
                   >
-                    {ttsLoadingChunkIndex !== null ? <Loader2 className='h-4 w-4 animate-spin' /> : ttsStatus === 'playing' ? <Pause className='h-4 w-4' /> : <Play className='h-4 w-4' />}
+                    {ttsLoadingChunkIndex !== null ? (
+                      <Loader2 className='h-4 w-4 animate-spin' />
+                    ) : ttsStatus === 'playing' ? (
+                      <Pause className='h-4 w-4' />
+                    ) : (
+                      <Play className='h-4 w-4' />
+                    )}
                   </button>
                   <div className='min-w-0 flex-1'>
                     <div className='truncate text-sm font-medium text-gray-900 dark:text-gray-100'>
-                      {ttsCurrentChapterTitle || currentTocLabel || currentChapter || '语音朗读'}
+                      {ttsCurrentChapterTitle ||
+                        currentTocLabel ||
+                        currentChapter ||
+                        '语音朗读'}
                     </div>
                     <div className='mt-0.5 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400'>
                       <span className='truncate'>
                         {!ttsAvailable
                           ? '服务异常'
                           : ttsLoadingChunkIndex !== null
-                            ? '生成语音中...'
-                            : ttsStatus === 'playing'
-                              ? '正在播放'
-                              : ttsStatus === 'paused'
-                                ? '已暂停'
-                                : '待播放'}
+                          ? '生成语音中...'
+                          : ttsStatus === 'playing'
+                          ? '正在播放'
+                          : ttsStatus === 'paused'
+                          ? '已暂停'
+                          : '待播放'}
                       </span>
-                      {ttsChunks.length > 0 ? <span>{ttsCurrentChunkIndex + 1}/{ttsChunks.length}</span> : null}
+                      {ttsChunks.length > 0 ? (
+                        <span>
+                          {ttsCurrentChunkIndex + 1}/{ttsChunks.length}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <button
@@ -2467,12 +3793,19 @@ export default function BookReadPage() {
                     onClick={() => setTtsPanelOpen((prev) => !prev)}
                     className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-200'
                   >
-                    <ChevronUp className={`h-4 w-4 transition-transform ${ttsPanelOpen ? 'rotate-180' : ''}`} />
+                    <ChevronUp
+                      className={`h-4 w-4 transition-transform ${
+                        ttsPanelOpen ? 'rotate-180' : ''
+                      }`}
+                    />
                   </button>
                 </div>
                 <div className='mt-2 flex items-center justify-between text-[11px] text-gray-400'>
                   <span>{selectedVoice?.displayName || '默认音色'}</span>
-                  <span>{formatDurationTime(displayedTtsTime)} / {formatDurationTime(ttsDuration || 0)}</span>
+                  <span>
+                    {formatDurationTime(displayedTtsTime)} /{' '}
+                    {formatDurationTime(ttsDuration || 0)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -2483,7 +3816,7 @@ export default function BookReadPage() {
               <div className='rounded-[2rem] border border-gray-200 bg-white/98 p-4 shadow-2xl backdrop-blur dark:border-gray-800 dark:bg-gray-950/98'>
                 <div className='mb-3 flex items-center justify-between'>
                   <div className='flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100'>
-                    <Headphones className='h-4 w-4 text-sky-500' />
+                    <Headphones className='h-4 w-4 text-emerald-500' />
                     听书控制
                   </div>
                   <button
@@ -2496,8 +3829,12 @@ export default function BookReadPage() {
                 </div>
 
                 <div className='mb-4 flex items-center justify-between rounded-2xl bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-gray-900 dark:text-gray-300'>
-                  <span className='truncate'>{currentChunk?.text.slice(0, 28) || '当前章节可开始朗读'}</span>
-                  <span className='ml-2 shrink-0'>{Math.round(ttsChunkPercent)}%</span>
+                  <span className='truncate'>
+                    {currentChunk?.text.slice(0, 28) || '当前章节可开始朗读'}
+                  </span>
+                  <span className='ml-2 shrink-0'>
+                    {Math.round(ttsChunkPercent)}%
+                  </span>
                 </div>
 
                 <div className='mb-4 flex items-center justify-center gap-3'>
@@ -2507,7 +3844,9 @@ export default function BookReadPage() {
                       const next = Math.max(0, ttsCurrentChunkIndex - 1);
                       if (ttsChunks[next]) void playTtsChunk(next);
                     }}
-                    disabled={ttsCurrentChunkIndex <= 0 || ttsChunks.length === 0}
+                    disabled={
+                      ttsCurrentChunkIndex <= 0 || ttsChunks.length === 0
+                    }
                     className='flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-200 disabled:opacity-40'
                   >
                     <SkipBack className='h-5 w-5' />
@@ -2516,9 +3855,15 @@ export default function BookReadPage() {
                     type='button'
                     onClick={() => void toggleTtsPlayback()}
                     disabled={!ttsAvailable || ttsLoadingChunkIndex !== null}
-                    className='flex h-14 w-14 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg disabled:opacity-50'
+                    className='flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg disabled:opacity-50'
                   >
-                    {ttsLoadingChunkIndex !== null ? <Loader2 className='h-5 w-5 animate-spin' /> : ttsStatus === 'playing' ? <Pause className='h-5 w-5' /> : <Play className='h-5 w-5' />}
+                    {ttsLoadingChunkIndex !== null ? (
+                      <Loader2 className='h-5 w-5 animate-spin' />
+                    ) : ttsStatus === 'playing' ? (
+                      <Pause className='h-5 w-5' />
+                    ) : (
+                      <Play className='h-5 w-5' />
+                    )}
                   </button>
                   <button
                     type='button'
@@ -2526,7 +3871,10 @@ export default function BookReadPage() {
                       const next = ttsCurrentChunkIndex + 1;
                       if (ttsChunks[next]) void playTtsChunk(next);
                     }}
-                    disabled={ttsCurrentChunkIndex >= ttsChunks.length - 1 || ttsChunks.length === 0}
+                    disabled={
+                      ttsCurrentChunkIndex >= ttsChunks.length - 1 ||
+                      ttsChunks.length === 0
+                    }
                     className='flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-200 disabled:opacity-40'
                   >
                     <SkipForward className='h-5 w-5' />
@@ -2551,7 +3899,10 @@ export default function BookReadPage() {
                       value={ttsSettings.voice}
                       onChange={(e) => {
                         stopTts(true);
-                        setTtsSettings((prev) => ({ ...prev, voice: e.target.value }));
+                        setTtsSettings((prev) => ({
+                          ...prev,
+                          voice: e.target.value,
+                        }));
                       }}
                       className='w-full rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100'
                     >
@@ -2565,7 +3916,10 @@ export default function BookReadPage() {
 
                   <label className='block'>
                     <div className='mb-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400'>
-                      <span className='flex items-center gap-2'><Gauge className='h-3.5 w-3.5' />语速</span>
+                      <span className='flex items-center gap-2'>
+                        <Gauge className='h-3.5 w-3.5' />
+                        语速
+                      </span>
                       <span>{ttsSettings.rate}</span>
                     </div>
                     <input
@@ -2576,8 +3930,12 @@ export default function BookReadPage() {
                       value={Math.max(0, TTS_RATE_STEPS.indexOf(ttsRateValue))}
                       onChange={(e) => {
                         stopTts(true);
-                        const nextValue = TTS_RATE_STEPS[Number(e.target.value)] ?? 0;
-                        setTtsSettings((prev) => ({ ...prev, rate: formatSignedValue(nextValue, '%') }));
+                        const nextValue =
+                          TTS_RATE_STEPS[Number(e.target.value)] ?? 0;
+                        setTtsSettings((prev) => ({
+                          ...prev,
+                          rate: formatSignedValue(nextValue, '%'),
+                        }));
                       }}
                       className='w-full'
                     />
@@ -2585,7 +3943,10 @@ export default function BookReadPage() {
 
                   <label className='block'>
                     <div className='mb-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400'>
-                      <span className='flex items-center gap-2'><Waves className='h-3.5 w-3.5' />音调</span>
+                      <span className='flex items-center gap-2'>
+                        <Waves className='h-3.5 w-3.5' />
+                        音调
+                      </span>
                       <span>{ttsSettings.pitch}</span>
                     </div>
                     <input
@@ -2593,11 +3954,18 @@ export default function BookReadPage() {
                       min={0}
                       max={TTS_PITCH_STEPS.length - 1}
                       step={1}
-                      value={Math.max(0, TTS_PITCH_STEPS.indexOf(ttsPitchValue))}
+                      value={Math.max(
+                        0,
+                        TTS_PITCH_STEPS.indexOf(ttsPitchValue)
+                      )}
                       onChange={(e) => {
                         stopTts(true);
-                        const nextValue = TTS_PITCH_STEPS[Number(e.target.value)] ?? 0;
-                        setTtsSettings((prev) => ({ ...prev, pitch: formatSignedValue(nextValue, 'Hz') }));
+                        const nextValue =
+                          TTS_PITCH_STEPS[Number(e.target.value)] ?? 0;
+                        setTtsSettings((prev) => ({
+                          ...prev,
+                          pitch: formatSignedValue(nextValue, 'Hz'),
+                        }));
                       }}
                       className='w-full'
                     />
@@ -2605,7 +3973,10 @@ export default function BookReadPage() {
 
                   <label className='block'>
                     <div className='mb-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400'>
-                      <span className='flex items-center gap-2'><Volume2 className='h-3.5 w-3.5' />音量</span>
+                      <span className='flex items-center gap-2'>
+                        <Volume2 className='h-3.5 w-3.5' />
+                        音量
+                      </span>
                       <span>{ttsSettings.volume}</span>
                     </div>
                     <input
@@ -2613,24 +3984,32 @@ export default function BookReadPage() {
                       min={0}
                       max={TTS_VOLUME_STEPS.length - 1}
                       step={1}
-                      value={Math.max(0, TTS_VOLUME_STEPS.indexOf(ttsVolumeValue))}
+                      value={Math.max(
+                        0,
+                        TTS_VOLUME_STEPS.indexOf(ttsVolumeValue)
+                      )}
                       onChange={(e) => {
                         stopTts(true);
-                        const nextValue = TTS_VOLUME_STEPS[Number(e.target.value)] ?? 0;
-                        setTtsSettings((prev) => ({ ...prev, volume: formatSignedValue(nextValue, '%') }));
+                        const nextValue =
+                          TTS_VOLUME_STEPS[Number(e.target.value)] ?? 0;
+                        setTtsSettings((prev) => ({
+                          ...prev,
+                          volume: formatSignedValue(nextValue, '%'),
+                        }));
                       }}
                       className='w-full'
                     />
                   </label>
                 </div>
 
-                {ttsError ? <div className='mt-3 text-xs text-red-500'>{ttsError}</div> : null}
+                {ttsError ? (
+                  <div className='mt-3 text-xs text-red-500'>{ttsError}</div>
+                ) : null}
               </div>
             </div>
           ) : null}
         </>
       ) : null}
-
 
       {ready && !tocOpen && !settingsOpen && settings.mode === 'paginated' ? (
         <>
@@ -2660,7 +4039,7 @@ export default function BookReadPage() {
             type='button'
             onClick={goToNextChapter}
             aria-label='下一章'
-            className='pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-sky-600/20 text-white shadow-lg'
+            className='pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-emerald-600/20 text-white shadow-lg'
           >
             <ChevronRight className='h-5 w-5' />
           </button>

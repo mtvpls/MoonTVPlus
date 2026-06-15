@@ -37,27 +37,86 @@ if (migrationFiles.length === 0) {
 
 console.log(`📄 Found ${migrationFiles.length} migration file(s):`, migrationFiles.join(', '));
 
+const MIGRATION_BASELINE_CUTOFF = '008_web_push_notifications.sql';
+
+function splitSqlStatements(schemaSql) {
+  const withoutLineComments = schemaSql
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n');
+
+  return withoutLineComments
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+}
+
+async function tableExists(tableName) {
+  const result = await sql.query(
+    "SELECT to_regclass($1) AS table_name",
+    [`public.${tableName}`]
+  );
+  return Boolean(result.rows?.[0]?.table_name);
+}
+
+async function ensureMigrationTable() {
+  await sql.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      filename TEXT PRIMARY KEY,
+      applied_at BIGINT NOT NULL
+    )
+  `);
+}
+
+async function getAppliedMigrations() {
+  const result = await sql.query('SELECT filename FROM schema_migrations');
+  return new Set((result.rows || []).map((row) => row.filename));
+}
+
+async function markMigrationApplied(filename) {
+  await sql.query(
+    'INSERT INTO schema_migrations (filename, applied_at) VALUES ($1, $2) ON CONFLICT (filename) DO NOTHING',
+    [filename, Date.now()]
+  );
+}
+
+async function seedExistingMigrationBaseline(hadExistingSchema) {
+  const applied = await getAppliedMigrations();
+  if (!hadExistingSchema || applied.size > 0) return;
+
+  for (const file of migrationFiles) {
+    if (file.localeCompare(MIGRATION_BASELINE_CUTOFF) < 0) {
+      await markMigrationApplied(file);
+    }
+  }
+}
+
 async function init() {
   try {
     // 执行所有迁移脚本
     console.log('🔧 Running database migrations...');
+    const hadExistingSchema = await tableExists('users');
+    await ensureMigrationTable();
+    await seedExistingMigrationBaseline(hadExistingSchema);
 
     for (const migrationFile of migrationFiles) {
+      const applied = await getAppliedMigrations();
+      if (applied.has(migrationFile)) {
+        console.log(`  ⏭️ ${migrationFile} already applied`);
+        continue;
+      }
+
       const sqlPath = path.join(migrationsDir, migrationFile);
       console.log(`  ⏳ Executing ${migrationFile}...`);
 
       const schemaSql = fs.readFileSync(sqlPath, 'utf8');
-
-      // 将 SQL 脚本按语句分割并逐个执行
-      const statements = schemaSql
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
+      const statements = splitSqlStatements(schemaSql);
 
       for (const statement of statements) {
         await sql.query(statement);
       }
 
+      await markMigrationApplied(migrationFile);
       console.log(`  ✅ ${migrationFile} executed successfully`);
     }
 

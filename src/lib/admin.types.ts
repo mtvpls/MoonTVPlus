@@ -25,6 +25,11 @@ export interface AdminConfig {
     TMDBApiKey?: string;
     TMDBProxy?: string;
     TMDBReverseProxy?: string;
+    // 动漫/Bangumi配置
+    BangumiDataSource?: 'direct' | 'server-proxy' | 'custom-baseurl';
+    BangumiApiBaseUrl?: string;
+    BangumiImageBaseUrl?: string;
+    BangumiProxy?: string;
     BannerDataSource?: string; // 轮播图数据源：TMDB、TX 或 Douban
     RecommendationDataSource?: string; // 更多推荐数据源：Douban、TMDB、Mixed、MixedSmart
     // Pansou配置
@@ -80,6 +85,7 @@ export interface AdminConfig {
       permissions?: string[];
     }[];
   };
+  SpecialSourceApis?: string[]; // 特殊源 key 列表，默认对普通入口隐藏
   SourceConfig: {
     key: string;
     name: string;
@@ -101,7 +107,7 @@ export interface AdminConfig {
   LiveConfig?: {
     key: string;
     name: string;
-    url: string;  // m3u 地址
+    url: string; // m3u 地址
     ua?: string;
     epg?: string; // 节目单
     from: 'config' | 'custom';

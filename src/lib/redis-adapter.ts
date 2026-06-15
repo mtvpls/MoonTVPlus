@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { Redis } from '@upstash/redis';
-import { RedisClientType } from 'redis';
+import type { RedisClientType } from 'redis';
 
 /**
  * 统一的 Redis 适配器接口

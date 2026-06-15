@@ -328,6 +328,92 @@ export async function getTMDBVideos(
   }
 }
 
+export interface TMDBVideoItem {
+  id: string;
+  key: string;
+  name: string;
+  site: string;
+  type: string;
+  official?: boolean;
+  published_at?: string;
+  iso_639_1?: string;
+}
+
+/**
+ * 获取视频列表（预告片/花絮等）
+ * @param apiKey - TMDB API Key
+ * @param mediaType - 媒体类型 (movie 或 tv)
+ * @param mediaId - 媒体ID
+ * @param proxy - 代理服务器地址
+ * @param reverseProxyBaseUrl - 反代 Base URL
+ * @returns YouTube视频列表
+ */
+export async function getTMDBVideoList(
+  apiKey: string,
+  mediaType: 'movie' | 'tv',
+  mediaId: number,
+  proxy?: string,
+  reverseProxyBaseUrl?: string
+): Promise<{ code: number; videos: TMDBVideoItem[] }> {
+  try {
+    const actualKey = getNextApiKey(apiKey);
+    if (!actualKey) {
+      return { code: 400, videos: [] };
+    }
+
+    const baseUrl = reverseProxyBaseUrl || DEFAULT_TMDB_BASE_URL;
+    // 一次性请求中文、英文和未标语言视频，避免按语言多次请求。
+    // TMDB videos 接口支持 include_video_language 传逗号分隔的多个 ISO-639-1 值。
+    const url = `${baseUrl}/3/${mediaType}/${mediaId}/videos?api_key=${actualKey}&include_video_language=zh,en,null`;
+    const response = await universalFetch(url, proxy);
+
+    if (!response.ok) {
+      return { code: response.status, videos: [] };
+    }
+
+    const data: any = await response.json();
+    const videoMap = new Map<string, TMDBVideoItem>();
+    (data.results || [])
+      .filter((video: any) => video?.site === 'YouTube' && video?.key)
+      .forEach((video: any) => {
+        if (videoMap.has(video.key)) return;
+        videoMap.set(video.key, {
+          id: String(video.id ?? video.key),
+          key: video.key,
+          name: video.name || '未命名视频',
+          site: video.site || 'YouTube',
+          type: video.type || '',
+          official: video.official,
+          published_at: video.published_at,
+          iso_639_1: video.iso_639_1,
+        });
+      });
+
+    const typePriority: Record<string, number> = {
+      Trailer: 0,
+      Teaser: 1,
+      Clip: 2,
+      Featurette: 3,
+    };
+
+    const videos = Array.from(videoMap.values()).sort((a, b) => {
+      const officialDiff = (b.official ? 1 : 0) - (a.official ? 1 : 0);
+      if (officialDiff !== 0) return officialDiff;
+      const typeDiff = (typePriority[a.type] ?? 99) - (typePriority[b.type] ?? 99);
+      if (typeDiff !== 0) return typeDiff;
+      return (b.published_at || '').localeCompare(a.published_at || '');
+    });
+
+    return {
+      code: 200,
+      videos,
+    };
+  } catch (error) {
+    console.error('获取 TMDB 视频列表失败:', error);
+    return { code: 500, videos: [] };
+  }
+}
+
 /**
  * 获取热门内容（电影+电视剧）
  * @param apiKey - TMDB API Key

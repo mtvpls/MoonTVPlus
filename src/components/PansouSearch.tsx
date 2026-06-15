@@ -20,6 +20,7 @@ interface PansouSearchProps {
   keyword: string;
   triggerSearch?: boolean; // 触发搜索的标志
   onError?: (error: string) => void;
+  cloudTypes?: string[];
 }
 
 type DownloadTool = 'aria2' | 'Transmission' | 'qBittorrent';
@@ -31,7 +32,7 @@ const downloadToolOptions: Array<{ value: DownloadTool; label: string }> = [
 ];
 
 // 网盘类型映射
-const CLOUD_TYPE_NAMES: Record<string, string> = {
+export const CLOUD_TYPE_NAMES: Record<string, string> = {
   baidu: '百度网盘',
   aliyun: '阿里云盘',
   quark: '夸克网盘',
@@ -150,6 +151,7 @@ export default function PansouSearch({
   keyword,
   triggerSearch,
   onError,
+  cloudTypes = [],
 }: PansouSearchProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -264,6 +266,7 @@ export default function PansouSearch({
     setLoading(true);
     setError(null);
     setResults(null);
+    setSelectedType('all');
 
     try {
       const response = await fetch('/api/pansou/search', {
@@ -273,6 +276,7 @@ export default function PansouSearch({
         },
         body: JSON.stringify({
           keyword: currentKeyword,
+          cloud_types: cloudTypes,
         }),
       });
 
@@ -290,7 +294,7 @@ export default function PansouSearch({
     } finally {
       setLoading(false);
     }
-  }, [keyword, onError]);
+  }, [keyword, onError, cloudTypes]);
 
   useEffect(() => {
     // triggerSearch 变化时触发搜索（无论是 true 还是 false）
@@ -881,7 +885,9 @@ export default function PansouSearch({
                             {downloadingUrl === link.url ? (
                               <>
                                 <Loader2 className='h-3.5 w-3.5 animate-spin' />
-                                <span className='hidden sm:inline'>下载中...</span>
+                                <span className='hidden sm:inline'>
+                                  下载中...
+                                </span>
                               </>
                             ) : (
                               <>

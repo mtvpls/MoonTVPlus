@@ -5,10 +5,27 @@ import { Redis } from '@upstash/redis';
 import { UpstashRedisAdapter } from './redis-adapter';
 import { BaseRedisStorage } from './redis-base.db';
 
+const DEFAULT_UPSTASH_TIMEOUT_MS =
+  process.env.NODE_ENV === 'development' ? 2500 : 8000;
+const UPSTASH_TIMEOUT_MS = Math.max(
+  1000,
+  Number(process.env.UPSTASH_TIMEOUT_MS || DEFAULT_UPSTASH_TIMEOUT_MS)
+);
+const DEFAULT_UPSTASH_RETRIES =
+  process.env.NODE_ENV === 'development' ? 1 : 3;
+const UPSTASH_MAX_RETRIES = Math.max(
+  1,
+  Number(process.env.UPSTASH_MAX_RETRIES || DEFAULT_UPSTASH_RETRIES)
+);
+
+function createUpstashAbortSignal() {
+  return AbortSignal.timeout(UPSTASH_TIMEOUT_MS);
+}
+
 // 添加Upstash Redis操作重试包装器
 async function withRetry<T>(
   operation: () => Promise<T>,
-  maxRetries = 3
+  maxRetries = UPSTASH_MAX_RETRIES
 ): Promise<T> {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -19,6 +36,10 @@ async function withRetry<T>(
         err.message?.includes('Connection') ||
         err.message?.includes('ECONNREFUSED') ||
         err.message?.includes('ENOTFOUND') ||
+        err.name === 'AbortError' ||
+        err.name === 'TimeoutError' ||
+        err.message?.includes('Aborted') ||
+        err.message?.includes('Timeout') ||
         err.code === 'ECONNRESET' ||
         err.code === 'EPIPE' ||
         err.name === 'UpstashError';
@@ -68,11 +89,12 @@ function getUpstashRedisClient(): Redis {
     client = new Redis({
       url: upstashUrl,
       token: upstashToken,
+      signal: createUpstashAbortSignal,
       // 可选配置
       retry: {
-        retries: 3,
+        retries: UPSTASH_MAX_RETRIES,
         backoff: (retryCount: number) =>
-          Math.min(1000 * Math.pow(2, retryCount), 30000),
+          Math.min(500 * Math.pow(2, retryCount), 5000),
       },
     });
 

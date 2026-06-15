@@ -15,7 +15,14 @@ export async function POST(request: NextRequest) {
 
     const data = await fetchLxLyric(song);
 
-    return NextResponse.json({ success: true, data: { lyric: data.lyric || '', tlyric: data.tlyric || '' } });
+    return NextResponse.json(
+      { success: true, data: { lyric: data.lyric || '', tlyric: data.tlyric || '' } },
+      {
+        headers: {
+          'Cache-Control': 'public, max-age=86400',
+        },
+      }
+    );
   } catch (error) {
     console.error('[music-v2] lyric route error:', error);
     return internalError('获取歌词失败', (error as Error).message);

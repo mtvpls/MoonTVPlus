@@ -7,7 +7,9 @@ import { AdminConfig } from './admin.types';
 const BUILTIN_DANMAKU_API_BASE = 'https://mtvpls-danmu.netlify.app/87654321';
 const DEFAULT_LIVE_REFRESH_INTERVAL_HOURS = 12;
 
-function normalizeLiveRefreshIntervalHours(refreshIntervalHours?: number): number {
+function normalizeLiveRefreshIntervalHours(
+  refreshIntervalHours?: number
+): number {
   const normalizedInterval = Number(refreshIntervalHours);
 
   if (!Number.isFinite(normalizedInterval) || normalizedInterval <= 0) {
@@ -44,7 +46,9 @@ interface ConfigFileStruct {
   }[];
   lives?: {
     [key: string]: LiveCfg;
-  }
+  };
+  special_source_apis?: string[];
+  specialSourceApis?: string[];
 }
 
 export const API_CONFIG = {
@@ -70,7 +74,6 @@ export const API_CONFIG = {
 // 在模块加载时根据环境决定配置来源
 let cachedConfig: AdminConfig;
 let configInitPromise: Promise<AdminConfig> | null = null;
-
 
 // 从配置文件补充管理员配置
 export function refineConfig(adminConfig: AdminConfig): AdminConfig {
@@ -118,6 +121,18 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
 
   // 将 Map 转换回数组
   adminConfig.SourceConfig = Array.from(currentApiSites.values());
+
+  const specialApisFromFile = Array.isArray(fileConfig.special_source_apis)
+    ? fileConfig.special_source_apis
+    : Array.isArray(fileConfig.specialSourceApis)
+    ? fileConfig.specialSourceApis
+    : undefined;
+  if (specialApisFromFile) {
+    const sourceKeys = new Set(adminConfig.SourceConfig.map((source) => source.key));
+    adminConfig.SpecialSourceApis = Array.from(new Set(specialApisFromFile)).filter((key) =>
+      sourceKeys.has(key)
+    );
+  }
 
   // 覆盖 CustomCategories
   const customCategoriesFromFile = fileConfig.custom_category || [];
@@ -197,19 +212,22 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   return adminConfig;
 }
 
-async function getInitConfig(configFile: string, subConfig: {
-  URL: string;
-  AutoUpdate: boolean;
-  LastCheck: string;
-} = {
-    URL: "",
+async function getInitConfig(
+  configFile: string,
+  subConfig: {
+    URL: string;
+    AutoUpdate: boolean;
+    LastCheck: string;
+  } = {
+    URL: '',
     AutoUpdate: false,
-    LastCheck: "",
-  }): Promise<AdminConfig> {
+    LastCheck: '',
+  }
+): Promise<AdminConfig> {
   let cfgFile: ConfigFileStruct;
 
   // 优先从环境变量读取订阅 URL
-  const envSubUrl = process.env.CONFIG_SUBSCRIPTION_URL || "";
+  const envSubUrl = process.env.CONFIG_SUBSCRIPTION_URL || '';
 
   if (envSubUrl) {
     try {
@@ -228,7 +246,7 @@ async function getInitConfig(configFile: string, subConfig: {
   }
 
   // 优先从环境变量读取配置
-  const envConfig = process.env.INIT_CONFIG || "";
+  const envConfig = process.env.INIT_CONFIG || '';
   const configSource = envConfig || configFile;
 
   try {
@@ -254,23 +272,37 @@ async function getInitConfig(configFile: string, subConfig: {
         process.env.NEXT_PUBLIC_DOUBAN_PROXY_TYPE || 'cmliussss-cdn-tencent',
       DoubanProxy: process.env.NEXT_PUBLIC_DOUBAN_PROXY || '',
       DoubanImageProxyType:
-        process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE || 'cmliussss-cdn-tencent',
+        process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE ||
+        'cmliussss-cdn-tencent',
       DoubanImageProxy: process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY || '',
       DisableYellowFilter:
         process.env.NEXT_PUBLIC_DISABLE_YELLOW_FILTER === 'true',
-      FluidSearch:
-        process.env.NEXT_PUBLIC_FLUID_SEARCH !== 'false',
+      FluidSearch: process.env.NEXT_PUBLIC_FLUID_SEARCH !== 'false',
       // 弹幕配置
       DanmakuSourceType: hasCustomDanmakuEnv ? 'custom' : 'builtin',
       DanmakuApiBase:
         process.env.DANMAKU_API_BASE ||
-        (hasCustomDanmakuEnv ? 'http://localhost:9321' : BUILTIN_DANMAKU_API_BASE),
+        (hasCustomDanmakuEnv
+          ? 'http://localhost:9321'
+          : BUILTIN_DANMAKU_API_BASE),
       DanmakuApiToken: process.env.DANMAKU_API_TOKEN || '87654321',
       DanmakuAutoLoadDefault: true,
       // TMDB配置
       TMDBApiKey: process.env.TMDB_API_KEY || '',
       TMDBProxy: process.env.TMDB_PROXY || '',
       TMDBReverseProxy: process.env.TMDB_REVERSE_PROXY || '',
+      // 动漫/Bangumi配置
+      BangumiDataSource:
+        (process.env.NEXT_PUBLIC_BANGUMI_DATA_SOURCE as any) || 'direct',
+      BangumiApiBaseUrl:
+        process.env.BANGUMI_API_BASE_URL ||
+        process.env.NEXT_PUBLIC_BANGUMI_API_BASE_URL ||
+        'https://api.bgm.tv',
+      BangumiImageBaseUrl:
+        process.env.BANGUMI_IMAGE_BASE_URL ||
+        process.env.NEXT_PUBLIC_BANGUMI_IMAGE_BASE_URL ||
+        '',
+      BangumiProxy: process.env.BANGUMI_PROXY || '',
       // Pansou配置
       PansouApiUrl: '',
       PansouUsername: '',
@@ -298,6 +330,11 @@ async function getInitConfig(configFile: string, subConfig: {
     SourceConfig: [],
     CustomCategories: [],
     LiveConfig: [],
+    SpecialSourceApis: Array.isArray(cfgFile.special_source_apis)
+      ? cfgFile.special_source_apis
+      : Array.isArray(cfgFile.specialSourceApis)
+      ? cfgFile.specialSourceApis
+      : [],
   };
 
   // 用户信息已迁移到新版数据库，不再填充 UserConfig.Users
@@ -365,7 +402,7 @@ export async function getConfig(): Promise<AdminConfig> {
     // localStorage 模式下直接从环境变量初始化
     if (storageType === 'localstorage') {
       console.log('localStorage 模式：从环境变量初始化配置');
-      const adminConfig = await getInitConfig("");
+      const adminConfig = await getInitConfig('');
       cachedConfig = configSelfCheck(adminConfig);
       configInitPromise = null;
       return cachedConfig;
@@ -386,19 +423,20 @@ export async function getConfig(): Promise<AdminConfig> {
       if (dbReadFailed) {
         // 数据库读取失败，使用默认配置但不保存，避免覆盖数据库
         console.warn('数据库读取失败，使用临时默认配置（不会保存到数据库）');
-        adminConfig = await getInitConfig("");
+        adminConfig = await getInitConfig('');
       } else {
         // 数据库中确实没有配置，首次初始化并保存
         console.log('首次初始化配置');
-        adminConfig = await getInitConfig("");
+        adminConfig = await getInitConfig('');
         await db.saveAdminConfig(adminConfig);
       }
     }
 
     // 检查是否有旧格式Emby配置需要迁移
-    const needsEmbyMigration = adminConfig.EmbyConfig &&
-                                adminConfig.EmbyConfig.ServerURL &&
-                                !adminConfig.EmbyConfig.Sources;
+    const needsEmbyMigration =
+      adminConfig.EmbyConfig &&
+      adminConfig.EmbyConfig.ServerURL &&
+      !adminConfig.EmbyConfig.Sources;
 
     adminConfig = configSelfCheck(adminConfig);
     cachedConfig = adminConfig;
@@ -544,19 +582,33 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (!adminConfig.UserConfig) {
     adminConfig.UserConfig = { Users: [] };
   }
-  if (!adminConfig.UserConfig.Users || !Array.isArray(adminConfig.UserConfig.Users)) {
+  if (
+    !adminConfig.UserConfig.Users ||
+    !Array.isArray(adminConfig.UserConfig.Users)
+  ) {
     adminConfig.UserConfig.Users = [];
   }
   if (!adminConfig.SourceConfig || !Array.isArray(adminConfig.SourceConfig)) {
     adminConfig.SourceConfig = [];
   }
-  if (!adminConfig.CustomCategories || !Array.isArray(adminConfig.CustomCategories)) {
+  if (
+    !adminConfig.CustomCategories ||
+    !Array.isArray(adminConfig.CustomCategories)
+  ) {
     adminConfig.CustomCategories = [];
   }
   if (!adminConfig.LiveConfig || !Array.isArray(adminConfig.LiveConfig)) {
     adminConfig.LiveConfig = [];
   }
-  adminConfig.LiveRefreshIntervalHours = normalizeLiveRefreshIntervalHours(adminConfig.LiveRefreshIntervalHours);
+  if (
+    !adminConfig.SpecialSourceApis ||
+    !Array.isArray(adminConfig.SpecialSourceApis)
+  ) {
+    adminConfig.SpecialSourceApis = [];
+  }
+  adminConfig.LiveRefreshIntervalHours = normalizeLiveRefreshIntervalHours(
+    adminConfig.LiveRefreshIntervalHours
+  );
 
   if (adminConfig.OpenListConfig) {
     if (!adminConfig.OpenListConfig.RootPaths) {
@@ -567,7 +619,9 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     if (!adminConfig.OpenListConfig.OfflineDownloadPath) {
       adminConfig.OpenListConfig.OfflineDownloadPath = '/';
     }
-    if (adminConfig.OpenListConfig.OfflineDownloadUseCustomSource === undefined) {
+    if (
+      adminConfig.OpenListConfig.OfflineDownloadUseCustomSource === undefined
+    ) {
       adminConfig.OpenListConfig.OfflineDownloadUseCustomSource = false;
     }
     if (adminConfig.OpenListConfig.OfflineDownloadURL === undefined) {
@@ -584,11 +638,13 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   // 用户信息已迁移到新版数据库
   // 这里只保留站长用户用于兼容性，其他用户从数据库读取
   const ownerUser = process.env.USERNAME;
-  adminConfig.UserConfig.Users = [{
-    username: ownerUser!,
-    role: 'owner',
-    banned: false,
-  }];
+  adminConfig.UserConfig.Users = [
+    {
+      username: ownerUser!,
+      role: 'owner',
+      banned: false,
+    },
+  ];
 
   // 采集源去重
   const seenSourceKeys = new Set<string>();
@@ -600,15 +656,22 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     return true;
   });
 
+  const validSourceKeys = new Set(adminConfig.SourceConfig.map((source) => source.key));
+  adminConfig.SpecialSourceApis = Array.from(
+    new Set((adminConfig.SpecialSourceApis || []).filter((key) => validSourceKeys.has(key)))
+  );
+
   // 自定义分类去重
   const seenCustomCategoryKeys = new Set<string>();
-  adminConfig.CustomCategories = adminConfig.CustomCategories.filter((category) => {
-    if (seenCustomCategoryKeys.has(category.query + category.type)) {
-      return false;
+  adminConfig.CustomCategories = adminConfig.CustomCategories.filter(
+    (category) => {
+      if (seenCustomCategoryKeys.has(category.query + category.type)) {
+        return false;
+      }
+      seenCustomCategoryKeys.add(category.query + category.type);
+      return true;
     }
-    seenCustomCategoryKeys.add(category.query + category.type);
-    return true;
-  });
+  );
 
   // 直播源去重
   const seenLiveKeys = new Set<string>();
@@ -627,42 +690,52 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       console.log('[Config] 检测到旧格式Emby配置，自动迁移到新格式');
       const oldConfig = adminConfig.EmbyConfig;
       adminConfig.EmbyConfig = {
-        Sources: [{
-          key: 'default',
-          name: 'Emby',
-          enabled: oldConfig.Enabled ?? false,
-          ServerURL: oldConfig.ServerURL || '',
-          ApiKey: oldConfig.ApiKey,
-          Username: oldConfig.Username,
-          Password: oldConfig.Password,
-          UserId: oldConfig.UserId,
-          AuthToken: oldConfig.AuthToken,
-          Libraries: oldConfig.Libraries,
-          LastSyncTime: oldConfig.LastSyncTime,
-          ItemCount: oldConfig.ItemCount,
-          isDefault: true,
-        }],
+        Sources: [
+          {
+            key: 'default',
+            name: 'Emby',
+            enabled: oldConfig.Enabled ?? false,
+            ServerURL: oldConfig.ServerURL || '',
+            ApiKey: oldConfig.ApiKey,
+            Username: oldConfig.Username,
+            Password: oldConfig.Password,
+            UserId: oldConfig.UserId,
+            AuthToken: oldConfig.AuthToken,
+            Libraries: oldConfig.Libraries,
+            LastSyncTime: oldConfig.LastSyncTime,
+            ItemCount: oldConfig.ItemCount,
+            isDefault: true,
+          },
+        ],
       };
     }
 
     // Emby源去重
     if (adminConfig.EmbyConfig?.Sources) {
       const seenEmbyKeys = new Set<string>();
-      adminConfig.EmbyConfig.Sources = adminConfig.EmbyConfig.Sources.filter((source) => {
-        if (seenEmbyKeys.has(source.key)) {
-          return false;
+      adminConfig.EmbyConfig.Sources = adminConfig.EmbyConfig.Sources.filter(
+        (source) => {
+          if (seenEmbyKeys.has(source.key)) {
+            return false;
+          }
+          seenEmbyKeys.add(source.key);
+          return true;
         }
-        seenEmbyKeys.add(source.key);
-        return true;
-      });
+      );
     }
   }
 
   if (!adminConfig.SuwayomiConfig) {
     adminConfig.SuwayomiConfig = {
       Enabled: process.env.SUWAYOMI_ENABLED === 'true',
-      ServerURL: process.env.SUWAYOMI_URL || process.env.NEXT_PUBLIC_SUWAYOMI_URL || '',
-      AuthMode: (process.env.SUWAYOMI_AUTH_MODE as 'none' | 'basic_auth' | 'simple_login' | undefined) || 'none',
+      ServerURL:
+        process.env.SUWAYOMI_URL || process.env.NEXT_PUBLIC_SUWAYOMI_URL || '',
+      AuthMode:
+        (process.env.SUWAYOMI_AUTH_MODE as
+          | 'none'
+          | 'basic_auth'
+          | 'simple_login'
+          | undefined) || 'none',
       Username: process.env.SUWAYOMI_USERNAME || '',
       Password: process.env.SUWAYOMI_PASSWORD || '',
       DefaultLang: process.env.SUWAYOMI_DEFAULT_LANG || 'zh',
@@ -694,7 +767,10 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (!Array.isArray(adminConfig.SuwayomiConfig.SourceIds)) {
     adminConfig.SuwayomiConfig.SourceIds = [];
   }
-  if (adminConfig.SuwayomiConfig.MaxSources === undefined || Number.isNaN(adminConfig.SuwayomiConfig.MaxSources)) {
+  if (
+    adminConfig.SuwayomiConfig.MaxSources === undefined ||
+    Number.isNaN(adminConfig.SuwayomiConfig.MaxSources)
+  ) {
     adminConfig.SuwayomiConfig.MaxSources = 10;
   }
 
@@ -715,19 +791,26 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
         const envUrl = process.env.OPDS_URL || process.env.NEXT_PUBLIC_OPDS_URL;
         if (!envUrl) return [];
 
-        return [{
-          id: 'default',
-          name: process.env.OPDS_NAME || '默认书源',
-          type: 'opds',
-          url: envUrl,
-          enabled: true,
-          authMode: (process.env.OPDS_AUTH_MODE as 'none' | 'basic' | 'header' | undefined) || 'none',
-          username: process.env.OPDS_USERNAME || '',
-          password: process.env.OPDS_PASSWORD || '',
-          headerName: process.env.OPDS_HEADER_NAME || '',
-          headerValue: process.env.OPDS_HEADER_VALUE || '',
-          searchTemplate: process.env.OPDS_SEARCH_TEMPLATE || '',
-        }];
+        return [
+          {
+            id: 'default',
+            name: process.env.OPDS_NAME || '默认书源',
+            type: 'opds',
+            url: envUrl,
+            enabled: true,
+            authMode:
+              (process.env.OPDS_AUTH_MODE as
+                | 'none'
+                | 'basic'
+                | 'header'
+                | undefined) || 'none',
+            username: process.env.OPDS_USERNAME || '',
+            password: process.env.OPDS_PASSWORD || '',
+            headerName: process.env.OPDS_HEADER_NAME || '',
+            headerValue: process.env.OPDS_HEADER_VALUE || '',
+            searchTemplate: process.env.OPDS_SEARCH_TEMPLATE || '',
+          },
+        ];
       })(),
       CacheTTL: Number(process.env.OPDS_CACHE_TTL_MS || 10 * 60 * 1000),
     };
@@ -738,15 +821,22 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (!Array.isArray(adminConfig.OPDSConfig.Sources)) {
     adminConfig.OPDSConfig.Sources = [];
   }
-  adminConfig.OPDSConfig.Sources = adminConfig.OPDSConfig.Sources.filter((source: any) => (source?.type || 'opds') === 'opds').map((source: any) => {
+  adminConfig.OPDSConfig.Sources = adminConfig.OPDSConfig.Sources.filter(
+    (source: any) => (source?.type || 'opds') === 'opds'
+  ).map((source: any) => {
     const { legado: _legado, ...rest } = source || {};
     return { ...rest, type: 'opds' };
   });
   if (!Array.isArray(adminConfig.OPDSConfig.LegadoSubscriptions)) {
     adminConfig.OPDSConfig.LegadoSubscriptions = [];
   }
-  if (adminConfig.OPDSConfig.CacheTTL === undefined || Number.isNaN(adminConfig.OPDSConfig.CacheTTL)) {
-    adminConfig.OPDSConfig.CacheTTL = Number(process.env.OPDS_CACHE_TTL_MS || 10 * 60 * 1000);
+  if (
+    adminConfig.OPDSConfig.CacheTTL === undefined ||
+    Number.isNaN(adminConfig.OPDSConfig.CacheTTL)
+  ) {
+    adminConfig.OPDSConfig.CacheTTL = Number(
+      process.env.OPDS_CACHE_TTL_MS || 10 * 60 * 1000
+    );
   }
 
   if (!adminConfig.NetDiskConfig) {
@@ -888,7 +978,10 @@ export async function resetConfig() {
   if (!originConfig) {
     originConfig = {} as AdminConfig;
   }
-  const adminConfig = await getInitConfig(originConfig.ConfigFile, originConfig.ConfigSubscribtion);
+  const adminConfig = await getInitConfig(
+    originConfig.ConfigFile,
+    originConfig.ConfigSubscribtion
+  );
   cachedConfig = adminConfig;
   await db.saveAdminConfig(adminConfig);
 
@@ -900,9 +993,19 @@ export async function getCacheTime(): Promise<number> {
   return config.SiteConfig.SiteInterfaceCacheTime || 7200;
 }
 
-export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
+export async function getAvailableApiSites(
+  user?: string,
+  includeSpecialSources = false
+): Promise<ApiSite[]> {
   const config = await getConfig();
-  const allApiSites = config.SourceConfig.filter((s) => !s.disabled);
+  const specialSourceSet = new Set(config.SpecialSourceApis || []);
+  const filterSpecialSources = <T extends { key: string }>(sites: T[]): T[] =>
+    includeSpecialSources
+      ? sites
+      : sites.filter((site) => !specialSourceSet.has(site.key));
+  const allApiSites = filterSpecialSources(
+    config.SourceConfig.filter((s) => !s.disabled)
+  );
 
   if (!user) {
     return allApiSites;
@@ -923,13 +1026,15 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
   // 优先根据用户自己的 enabledApis 配置查找
   if (userInfoV2.enabledApis && userInfoV2.enabledApis.length > 0) {
     const userApiSitesSet = new Set(userInfoV2.enabledApis);
-    return allApiSites.filter((s) => userApiSitesSet.has(s.key)).map((s) => ({
-      key: s.key,
-      name: s.name,
-      api: s.api,
-      detail: s.detail,
-      proxyMode: s.proxyMode,
-    }));
+    return allApiSites
+      .filter((s) => userApiSitesSet.has(s.key))
+      .map((s) => ({
+        key: s.key,
+        name: s.name,
+        api: s.api,
+        detail: s.detail,
+        proxyMode: s.proxyMode,
+      }));
   }
 
   // 如果没有 enabledApis 配置，则根据 tags 查找
@@ -937,21 +1042,25 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
     const enabledApisFromTags = new Set<string>();
 
     // 遍历用户的所有 tags，收集对应的 enabledApis
-    userInfoV2.tags.forEach(tagName => {
-      const tagConfig = config.UserConfig.Tags?.find(t => t.name === tagName);
+    userInfoV2.tags.forEach((tagName) => {
+      const tagConfig = config.UserConfig.Tags?.find((t) => t.name === tagName);
       if (tagConfig && tagConfig.enabledApis) {
-        tagConfig.enabledApis.forEach(apiKey => enabledApisFromTags.add(apiKey));
+        tagConfig.enabledApis.forEach((apiKey) =>
+          enabledApisFromTags.add(apiKey)
+        );
       }
     });
 
     if (enabledApisFromTags.size > 0) {
-      return allApiSites.filter((s) => enabledApisFromTags.has(s.key)).map((s) => ({
-        key: s.key,
-        name: s.name,
-        api: s.api,
-        detail: s.detail,
-        proxyMode: s.proxyMode,
-      }));
+      return allApiSites
+        .filter((s) => enabledApisFromTags.has(s.key))
+        .map((s) => ({
+          key: s.key,
+          name: s.name,
+          api: s.api,
+          detail: s.detail,
+          proxyMode: s.proxyMode,
+        }));
     }
   }
 

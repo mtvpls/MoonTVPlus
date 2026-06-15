@@ -1,12 +1,13 @@
 'use client';
 
-import { AlertTriangle, History, X } from 'lucide-react';
+import { AlertTriangle, Check, History, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { PlayRecord } from '@/lib/db.client';
 import {
   clearAllPlayRecords,
+  deletePlayRecords,
   getAllPlayRecords,
   subscribeToDataUpdates,
 } from '@/lib/db.client';
@@ -39,6 +40,11 @@ export default function PlayRecordsPanel({
   const [playRecords, setPlayRecords] = useState<PlayRecordItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [showDeleteSelectedDialog, setShowDeleteSelectedDialog] =
+    useState(false);
+  const [deletingSelected, setDeletingSelected] = useState(false);
 
   const loadPlayRecords = async () => {
     setLoading(true);
@@ -51,6 +57,13 @@ export default function PlayRecordsPanel({
         }))
         .sort((a, b) => b.save_time - a.save_time);
       setPlayRecords(sorted);
+      setSelectedKeys((prev) => {
+        if (prev.size === 0) return prev;
+        const availableKeys = new Set(sorted.map((record) => record.key));
+        return new Set(
+          Array.from(prev).filter((key) => availableKeys.has(key))
+        );
+      });
     } catch (error) {
       console.error('加载播放记录失败:', error);
       setPlayRecords([]);
@@ -63,9 +76,56 @@ export default function PlayRecordsPanel({
     try {
       await clearAllPlayRecords();
       setPlayRecords([]);
+      setSelectedKeys(new Set());
+      setEditMode(false);
       setShowConfirmDialog(false);
     } catch (error) {
       console.error('清空播放记录失败:', error);
+    }
+  };
+
+  const toggleEditMode = () => {
+    setEditMode((prev) => {
+      if (prev) {
+        setSelectedKeys(new Set());
+      }
+      return !prev;
+    });
+  };
+
+  const toggleSelected = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedKeys(new Set(playRecords.map((record) => record.key)));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedKeys.size === 0) return;
+
+    setDeletingSelected(true);
+    try {
+      const keysToDelete = Array.from(selectedKeys);
+      await deletePlayRecords(keysToDelete);
+      setPlayRecords((prev) =>
+        prev.filter((record) => !selectedKeys.has(record.key))
+      );
+      setSelectedKeys(new Set());
+      setEditMode(false);
+      setShowDeleteSelectedDialog(false);
+    } catch (error) {
+      console.error('删除选中播放记录失败:', error);
+    } finally {
+      setDeletingSelected(false);
     }
   };
 
@@ -86,6 +146,13 @@ export default function PlayRecordsPanel({
           }))
           .sort((a, b) => b.save_time - a.save_time);
         setPlayRecords(sorted);
+        setSelectedKeys((prev) => {
+          if (prev.size === 0) return prev;
+          const availableKeys = new Set(sorted.map((record) => record.key));
+          return new Set(
+            Array.from(prev).filter((key) => availableKeys.has(key))
+          );
+        });
       }
     );
 
@@ -93,6 +160,10 @@ export default function PlayRecordsPanel({
       unsubscribe();
     };
   }, [isOpen]);
+
+  const selectedCount = selectedKeys.size;
+  const allSelected =
+    playRecords.length > 0 && selectedCount === playRecords.length;
 
   return (
     <>
@@ -115,14 +186,48 @@ export default function PlayRecordsPanel({
             )}
           </div>
           <div className='flex items-center gap-2'>
-            {playRecords.length > 0 && (
-              <button
-                onClick={() => setShowConfirmDialog(true)}
-                className='text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors'
-              >
-                清空全部
-              </button>
-            )}
+            {playRecords.length > 0 &&
+              (editMode ? (
+                <>
+                  <button
+                    onClick={
+                      allSelected ? () => setSelectedKeys(new Set()) : selectAll
+                    }
+                    className='text-xs text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors'
+                  >
+                    {allSelected ? '取消全选' : '全选'}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteSelectedDialog(true)}
+                    disabled={selectedCount === 0 || deletingSelected}
+                    className='inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400 dark:hover:text-red-300 transition-colors'
+                  >
+                    <Trash2 className='w-3.5 h-3.5' />
+                    删除{selectedCount > 0 ? `(${selectedCount})` : ''}
+                  </button>
+                  <button
+                    onClick={toggleEditMode}
+                    className='text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors'
+                  >
+                    取消
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={toggleEditMode}
+                    className='text-xs text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition-colors'
+                  >
+                    编辑
+                  </button>
+                  <button
+                    onClick={() => setShowConfirmDialog(true)}
+                    className='text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors'
+                  >
+                    清空全部
+                  </button>
+                </>
+              ))}
             <button
               onClick={onClose}
               className='w-8 h-8 p-1 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors'
@@ -147,9 +252,10 @@ export default function PlayRecordsPanel({
             <div className='grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'>
               {playRecords.map((record) => {
                 const { source, id } = parseKey(record.key);
+                const checked = selectedKeys.has(record.key);
 
                 return (
-                  <div key={record.key} className='w-full'>
+                  <div key={record.key} className='relative w-full'>
                     <VideoCard
                       id={id}
                       title={record.title}
@@ -172,6 +278,34 @@ export default function PlayRecordsPanel({
                       playTime={record.play_time}
                       totalTime={record.total_time}
                     />
+                    {editMode && (
+                      <button
+                        type='button'
+                        aria-label={
+                          checked ? '取消选择播放记录' : '选择播放记录'
+                        }
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          toggleSelected(record.key);
+                        }}
+                        className={`absolute inset-0 z-20 rounded-lg transition-colors ${
+                          checked
+                            ? 'bg-sky-500/15 ring-2 ring-sky-500'
+                            : 'bg-black/5 hover:bg-sky-500/10 dark:bg-black/20'
+                        }`}
+                      >
+                        <span
+                          className={`absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 shadow-md transition-colors ${
+                            checked
+                              ? 'border-sky-500 bg-sky-500 text-white'
+                              : 'border-white bg-black/40 text-transparent'
+                          }`}
+                        >
+                          <Check className='h-4 w-4' />
+                        </span>
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -217,6 +351,56 @@ export default function PlayRecordsPanel({
                     className='flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors'
                   >
                     确定清空
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {showDeleteSelectedDialog &&
+        createPortal(
+          <div
+            className='fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4 transition-opacity duration-300'
+            onClick={() =>
+              !deletingSelected && setShowDeleteSelectedDialog(false)
+            }
+          >
+            <div
+              className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-red-200 dark:border-red-800 transition-all duration-300'
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className='p-6'>
+                <div className='flex items-start gap-4 mb-4'>
+                  <div className='flex-shrink-0'>
+                    <AlertTriangle className='w-8 h-8 text-red-500' />
+                  </div>
+                  <div className='flex-1'>
+                    <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2'>
+                      删除播放记录
+                    </h3>
+                    <p className='text-sm text-gray-600 dark:text-gray-400'>
+                      确定要删除选中的 {selectedCount}{' '}
+                      条播放记录吗？此操作不可恢复。
+                    </p>
+                  </div>
+                </div>
+
+                <div className='flex gap-3 mt-6'>
+                  <button
+                    onClick={() => setShowDeleteSelectedDialog(false)}
+                    disabled={deletingSelected}
+                    className='flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-60 rounded-lg transition-colors'
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleDeleteSelected}
+                    disabled={deletingSelected}
+                    className='flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 rounded-lg transition-colors'
+                  >
+                    {deletingSelected ? '删除中...' : '确定删除'}
                   </button>
                 </div>
               </div>

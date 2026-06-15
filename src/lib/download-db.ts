@@ -29,6 +29,16 @@ export interface SavedTask {
   m3u8Content?: string;
   createdAt: number;
   completedAt?: number;
+  segmentLogs?: Array<{
+    id: string;
+    index: number;
+    status: 'queued' | 'downloading' | 'success' | 'retry' | 'error' | 'timeout' | 'aborted';
+    message: string;
+    timestamp: number;
+    retryCount?: number;
+    durationMs?: number;
+    httpStatus?: number;
+  }>;
 }
 
 export interface CompletedTask {

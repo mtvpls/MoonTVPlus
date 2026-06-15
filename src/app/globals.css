@@ -270,3 +270,59 @@ div[data-media-provider] video {
 .dark .reader-book-loader {
   color: #38bdf8;
 }
+
+
+/* TV 端遥控器焦点：深色选中 + 放大，而不是细边框 */
+.tv-focusable {
+  position: relative;
+  scroll-margin-top: 150px;
+  scroll-margin-bottom: 96px;
+  scroll-margin-left: 48px;
+  scroll-margin-right: 48px;
+  transform-origin: center;
+  scale: 1;
+  transition:
+    scale 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+}
+
+.tv-focusable:focus,
+.tv-focusable:focus-visible,
+.tv-focused {
+  outline: none !important;
+  scale: 1.055;
+  background-color: rgba(15, 23, 42, 0.96) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.68),
+    0 0 26px rgba(225, 29, 72, 0.38) !important;
+  z-index: 30;
+}
+
+.tv-focusable:focus::after,
+.tv-focusable:focus-visible::after,
+.tv-focused::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(225,29,72,0.28));
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.tv-focusable:active {
+  scale: 1.03;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tv-focusable,
+  .tv-focusable:focus,
+  .tv-focusable:focus-visible,
+  .tv-focused {
+    transition: none;
+  }
+}

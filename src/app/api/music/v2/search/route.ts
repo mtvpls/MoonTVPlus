@@ -10,23 +10,36 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q')?.trim() || '';
     const source = searchParams.get('source') || 'kw';
+    const type = searchParams.get('type') || 'song';
     const page = Number(searchParams.get('page') || '1');
     const limit = Number(searchParams.get('limit') || '20');
 
     if (!q) return badRequest('缺少搜索关键词');
     if (!isMusicSource(source)) return badRequest('不支持的音源');
+    if (!['song', 'singer', 'album'].includes(type)) return badRequest('不支持的搜索类型');
+    if ((type === 'singer' || type === 'album') && source !== 'wy' && source !== 'tx') {
+      return badRequest('当前音源不支持歌手/专辑搜索');
+    }
 
-    const list = await lxGetJson<LxServerSong[]>(`/api/music/search?name=${encodeURIComponent(q)}&source=${source}&page=${page}&limit=${limit}`, 'none');
+    const list = await lxGetJson<any[]>(`/api/music/search?name=${encodeURIComponent(q)}&source=${source}&type=${type}&page=${page}&limit=${limit}`, 'none');
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        list: list.map(normalizeLxSong),
-        page,
-        limit,
-        hasMore: Array.isArray(list) && list.length >= limit,
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          list: type === 'song' ? (list as LxServerSong[]).map(normalizeLxSong) : list,
+          type,
+          page,
+          limit,
+          hasMore: Array.isArray(list) && list.length >= limit,
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=3600',
+        },
+      }
+    );
   } catch (error) {
     return internalError('搜索歌曲失败', (error as Error).message);
   }

@@ -5,9 +5,9 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json ./
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # ---- 第 2 阶段：构建项目 ----
 FROM node:24-alpine AS builder
@@ -21,6 +21,7 @@ ENV DOCKER_ENV=true
 ENV MOONTV_LITE=true
 ENV WATCH_ROOM_ENABLED=false
 ENV WATCH_ROOM_SERVER_TYPE=external
+ENV OFFLINE_DOWNLOAD_DIR=/data
 
 RUN pnpm run build
 
@@ -37,13 +38,19 @@ ENV DOCKER_ENV=true
 ENV MOONTV_LITE=true
 ENV WATCH_ROOM_ENABLED=false
 ENV WATCH_ROOM_SERVER_TYPE=external
+ENV OFFLINE_DOWNLOAD_DIR=/data
 
 # standalone 输出自带运行所需的最小服务端依赖
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/start.js ./start.js
+# 保持与完整镜像一致：如果运行时 server.js 引用了电视遥控 hub，确保该模块存在。
+COPY --from=builder --chown=nextjs:nodejs /app/src/lib/tv-remote-hub.js ./src/lib/tv-remote-hub.js
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# 准备默认离线下载目录
+RUN mkdir -p "$OFFLINE_DOWNLOAD_DIR" && chown -R nextjs:nodejs "$OFFLINE_DOWNLOAD_DIR"
 
 USER nextjs
 

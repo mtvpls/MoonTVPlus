@@ -11,6 +11,8 @@ import { screenShareQualityOptions, type ScreenShareQualityPreset, useScreenShar
 
 const NEW_TAB_KEY_PREFIX = 'watch_room_screen_home_opened_';
 const WATCH_ROOM_NO_CONNECT_KEY = 'watch_room_no_connect';
+const WATCH_ROOM_NO_CONNECT_TIMESTAMP_KEY = 'watch_room_no_connect_timestamp';
+const WATCH_ROOM_NO_CONNECT_TTL_MS = 10 * 60 * 1000;
 const SCREEN_SHARE_QUALITY_KEY = 'watch_room_screen_quality';
 
 function getScreenShareHostSupportError() {
@@ -115,6 +117,10 @@ export default function WatchRoomScreenPage() {
     if (!screenRoom || !isOwner) return;
 
     localStorage.setItem(WATCH_ROOM_NO_CONNECT_KEY, '1');
+    localStorage.setItem(WATCH_ROOM_NO_CONNECT_TIMESTAMP_KEY, String(Date.now()));
+    const heartbeat = window.setInterval(() => {
+      localStorage.setItem(WATCH_ROOM_NO_CONNECT_TIMESTAMP_KEY, String(Date.now()));
+    }, 30_000);
     const key = `${NEW_TAB_KEY_PREFIX}${screenRoom.id}`;
     if (!sessionStorage.getItem(key)) {
       sessionStorage.setItem(key, '1');
@@ -123,6 +129,8 @@ export default function WatchRoomScreenPage() {
 
     return () => {
       localStorage.removeItem(WATCH_ROOM_NO_CONNECT_KEY);
+      localStorage.removeItem(WATCH_ROOM_NO_CONNECT_TIMESTAMP_KEY);
+      window.clearInterval(heartbeat);
     };
   }, [isOwner, openDetachedPage, screenRoom?.id]);
 

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
+import { getStorage } from '@/lib/db';
 import { db } from '@/lib/db';
 import { getUserDevices, revokeRefreshToken } from '@/lib/refresh-token';
 
@@ -53,11 +54,13 @@ export async function POST(request: NextRequest) {
     try {
       const currentTokenId = authInfo.tokenId;
       const devices = await getUserDevices(username);
+      const storage = getStorage();
 
       // 撤销所有非当前设备的 token
       for (const device of devices) {
         if (device.tokenId !== currentTokenId) {
           await revokeRefreshToken(username, device.tokenId);
+          await storage.deletePushSubscriptionsByTokenId?.(username, device.tokenId);
           console.log(`Revoked token ${device.tokenId} for ${username} after password change`);
         }
       }

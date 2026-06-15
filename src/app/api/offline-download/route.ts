@@ -12,6 +12,7 @@ import { OfflineDownloader, OfflineDownloadTask } from '@/lib/offline-downloader
 // 检查是否启用离线下载功能
 const OFFLINE_DOWNLOAD_ENABLED = process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true';
 const OFFLINE_DOWNLOAD_DIR = process.env.OFFLINE_DOWNLOAD_DIR || '/data';
+const OFFLINE_DOWNLOAD_PROXY = process.env.OFFLINE_DOWNLOAD_PROXY || '';
 
 // 全局下载器实例
 let downloader: OfflineDownloader | null = null;
@@ -88,10 +89,11 @@ function loadTasks(): void {
 
 function getDownloader(): OfflineDownloader {
   if (!downloader) {
-    downloader = new OfflineDownloader(OFFLINE_DOWNLOAD_DIR);
+    downloader = new OfflineDownloader(OFFLINE_DOWNLOAD_DIR, OFFLINE_DOWNLOAD_PROXY);
     // 首次初始化时加载已保存的任务
     loadTasks();
   }
+
   return downloader;
 }
 

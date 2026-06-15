@@ -1,7 +1,8 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
 import { StandardRedisAdapter } from './redis-adapter';
-import { BaseRedisStorage, createRedisClient, createRetryWrapper } from './redis-base.db';
+import { BaseRedisStorage } from './redis-base.db';
+import { createRedisClient, createRetryWrapper } from './redis-node-client';
 
 export class RedisStorage extends BaseRedisStorage {
   constructor() {

@@ -21,6 +21,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import {
@@ -31,13 +32,14 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { SearchResult } from '@/lib/types';
+import { appendSpecialSourceParam, isSpecialSourcesEnabledOnDevice } from '@/lib/special-source.client';
 import { processImageUrl } from '@/lib/utils';
 
 import AcgSearch from '@/components/AcgSearch';
 import CapsuleSwitch from '@/components/CapsuleSwitch';
 import ImageViewer from '@/components/ImageViewer';
 import PageLayout from '@/components/PageLayout';
-import PansouSearch from '@/components/PansouSearch';
+import PansouSearch, { CLOUD_TYPE_NAMES } from '@/components/PansouSearch';
 import ProxyImage from '@/components/ProxyImage';
 import SearchResultFilter, {
   SearchFilterCategory,
@@ -45,6 +47,10 @@ import SearchResultFilter, {
 import SearchSuggestions from '@/components/SearchSuggestions';
 import VideoCard, { VideoCardHandle } from '@/components/VideoCard';
 import VirtualScrollableGrid from '@/components/VirtualScrollableGrid';
+
+const PANSOU_CLOUD_TYPE_OPTIONS = Object.entries(CLOUD_TYPE_NAMES).map(
+  ([value, label]) => ({ value, label })
+);
 
 type SearchCachePayload = {
   status: 'complete' | 'partial';
@@ -66,6 +72,17 @@ function SearchPageClient() {
   const [triggerPansouSearch, setTriggerPansouSearch] = useState(false);
   // ACG 搜索触发标志
   const [triggerAcgSearch, setTriggerAcgSearch] = useState(false);
+  const [selectedPansouCloudTypes, setSelectedPansouCloudTypes] = useState<
+    string[]
+  >([]);
+  const [pansouCloudFilterOpen, setPansouCloudFilterOpen] = useState(false);
+  const [pansouCloudFilterPosition, setPansouCloudFilterPosition] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+  });
+  const pansouCloudFilterButtonRef = useRef<HTMLButtonElement | null>(null);
+  const pansouCloudFilterDropdownRef = useRef<HTMLDivElement | null>(null);
   // 用户权限
   const [userRole, setUserRole] = useState<'owner' | 'admin' | 'user' | null>(
     null
@@ -111,7 +128,8 @@ function SearchPageClient() {
 
   // 生成缓存键
   const getCacheKey = (query: string) => {
-    return `search_cache_${query.trim()}`;
+    const suffix = isSpecialSourcesEnabledOnDevice() ? '_special' : '';
+    return `search_cache_${query.trim()}${suffix}`;
   };
 
   // 从 sessionStorage 获取完整缓存的搜索结果（partial 只给播放页快速启动使用）
@@ -1233,7 +1251,7 @@ function SearchPageClient() {
       if (currentFluidSearch) {
         // 流式搜索：打开新的流式连接
         const es = new EventSource(
-          `/api/search/ws?q=${encodeURIComponent(trimmed)}`
+          appendSpecialSourceParam(`/api/search/ws?q=${encodeURIComponent(trimmed)}`)
         );
         eventSourceRef.current = es;
 
@@ -1339,7 +1357,7 @@ function SearchPageClient() {
         };
       } else {
         // 传统搜索：使用普通接口
-        fetch(`/api/search?q=${encodeURIComponent(trimmed)}`)
+        fetch(appendSpecialSourceParam(`/api/search?q=${encodeURIComponent(trimmed)}`))
           .then((response) => response.json())
           .then((data) => {
             if (currentQueryRef.current !== trimmed) return;
@@ -1520,6 +1538,115 @@ function SearchPageClient() {
     }
   };
 
+  const togglePansouCloudType = (cloudType: string) => {
+    setSelectedPansouCloudTypes((prev) =>
+      prev.includes(cloudType)
+        ? prev.filter((type) => type !== cloudType)
+        : [...prev, cloudType]
+    );
+  };
+
+  const calculatePansouCloudFilterPosition = () => {
+    const element = pansouCloudFilterButtonRef.current;
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const padding = 16;
+    const width = Math.min(320, viewportWidth - padding * 2);
+    let x = rect.left;
+
+    if (x + width > viewportWidth - padding) {
+      x = viewportWidth - width - padding;
+    }
+    if (x < padding) {
+      x = padding;
+    }
+
+    setPansouCloudFilterPosition({ x, y: rect.bottom + 8, width });
+  };
+
+  const selectedPansouCloudTypeLabels = selectedPansouCloudTypes
+    .map((type) => CLOUD_TYPE_NAMES[type] || type)
+    .filter(Boolean);
+
+  const renderPansouCloudTypeFilter = () => {
+    const hasFilter = selectedPansouCloudTypes.length > 0;
+    const displayText = hasFilter
+      ? selectedPansouCloudTypes.length === 1
+        ? selectedPansouCloudTypeLabels[0]
+        : `网盘类型 · ${selectedPansouCloudTypes.length}`
+      : '网盘类型';
+
+    return (
+      <div className='mx-auto mt-4 flex max-w-2xl justify-end overflow-visible'>
+        <button
+          ref={pansouCloudFilterButtonRef}
+          type='button'
+          onClick={() => {
+            if (!pansouCloudFilterOpen) {
+              calculatePansouCloudFilterPosition();
+            }
+            setPansouCloudFilterOpen((prev) => !prev);
+          }}
+          className={`relative z-10 rounded-full px-3 py-1 text-xs font-medium transition-all duration-200 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${
+            hasFilter
+              ? 'cursor-pointer text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300'
+              : 'cursor-pointer text-gray-700 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+          }`}
+          aria-expanded={pansouCloudFilterOpen}
+          aria-haspopup='listbox'
+        >
+          <span>{displayText}</span>
+          <svg
+            className={`ml-1 inline-block h-3 w-3 transition-transform duration-200 ${
+              pansouCloudFilterOpen ? 'rotate-180' : ''
+            }`}
+            fill='none'
+            stroke='currentColor'
+            viewBox='0 0 24 24'
+            aria-hidden='true'
+          >
+            <path
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              strokeWidth={2}
+              d='M19 9l-7 7-7-7'
+            />
+          </svg>
+        </button>
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    if (!pansouCloudFilterOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        pansouCloudFilterButtonRef.current?.contains(target) ||
+        pansouCloudFilterDropdownRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setPansouCloudFilterOpen(false);
+    };
+
+    const handleScroll = () => setPansouCloudFilterOpen(false);
+    const handleResize = () => calculatePansouCloudFilterPosition();
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.body.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.body.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [pansouCloudFilterOpen]);
+
   // 返回顶部功能
   const scrollToTop = () => {
     try {
@@ -1551,7 +1678,7 @@ function SearchPageClient() {
     <PageLayout activePath='/search'>
       <div className='px-4 sm:px-10 py-4 sm:py-8 overflow-visible mb-10'>
         {/* 搜索框 */}
-        <div className='mb-8'>
+        <div className='mb-0'>
           <form onSubmit={handleSearch} className='max-w-2xl mx-auto'>
             <div className='relative'>
               <Search className='absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 dark:text-gray-500' />
@@ -1600,6 +1727,11 @@ function SearchPageClient() {
                   router.push(
                     `/search?q=${encodeURIComponent(trimmed)}&type=${activeTab}`
                   );
+                  if (activeTab === 'pansou') {
+                    setTriggerPansouSearch((prev) => !prev);
+                  } else if (activeTab === 'acg') {
+                    setTriggerAcgSearch((prev) => !prev);
+                  }
                 }}
               />
             </div>
@@ -1639,10 +1771,65 @@ function SearchPageClient() {
               }
             />
           </div>
+
+          {activeTab === 'pansou' &&
+            netdiskSearchEnabled &&
+            renderPansouCloudTypeFilter()}
         </div>
 
+        {pansouCloudFilterOpen &&
+          createPortal(
+            <div
+              ref={pansouCloudFilterDropdownRef}
+              className='fixed z-[9999] max-h-[50vh] overflow-y-auto rounded-xl border border-gray-200/50 bg-white/95 p-2 backdrop-blur-sm dark:border-gray-700/50 dark:bg-gray-800/95'
+              style={{
+                left: `${pansouCloudFilterPosition.x}px`,
+                top: `${pansouCloudFilterPosition.y}px`,
+                width: `${pansouCloudFilterPosition.width}px`,
+              }}
+            >
+              <div className='grid grid-cols-3 gap-1.5 sm:grid-cols-4'>
+                <button
+                  type='button'
+                  onClick={() => setSelectedPansouCloudTypes([])}
+                  className={`rounded-lg px-2 py-1.5 text-left text-xs transition-all duration-200 ${
+                    selectedPansouCloudTypes.length === 0
+                      ? 'border border-green-200 bg-green-100 text-green-700 dark:border-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'text-gray-700 hover:bg-gray-100/80 dark:text-gray-300 dark:hover:bg-gray-700/80'
+                  }`}
+                  aria-pressed={selectedPansouCloudTypes.length === 0}
+                >
+                  全部类型
+                </button>
+                {PANSOU_CLOUD_TYPE_OPTIONS.map(({ value, label }) => {
+                  const selected = selectedPansouCloudTypes.includes(value);
+                  return (
+                    <button
+                      key={value}
+                      type='button'
+                      onClick={() => togglePansouCloudType(value)}
+                      className={`rounded-lg px-2 py-1.5 text-left text-xs transition-all duration-200 ${
+                        selected
+                          ? 'border border-green-200 bg-green-100 text-green-700 dark:border-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          : 'text-gray-700 hover:bg-gray-100/80 dark:text-gray-300 dark:hover:bg-gray-700/80'
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body
+          )}
+
         {/* 搜索结果或搜索历史 */}
-        <div className='max-w-[95%] mx-auto mt-12 overflow-visible'>
+        <div
+          className={`max-w-[95%] mx-auto overflow-visible ${
+            activeTab === 'pansou' ? 'mt-4' : 'mt-12'
+          }`}
+        >
           {showResults ? (
             <section className='mb-12'>
               {activeTab === 'video' ? (
@@ -1680,8 +1867,7 @@ function SearchPageClient() {
                         </span>
                         {resultCountMeta.isFiltered && (
                           <span className='inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 font-medium text-gray-500 ring-1 ring-gray-200 dark:bg-gray-900/70 dark:text-gray-400 dark:ring-gray-700'>
-                            筛选前{' '}
-                            {resultCountMeta.totalCount.toLocaleString()}{' '}
+                            筛选前 {resultCountMeta.totalCount.toLocaleString()}{' '}
                             {resultCountMeta.unit}
                           </span>
                         )}
@@ -1851,7 +2037,9 @@ function SearchPageClient() {
                                   <VideoCard
                                     ref={getGroupRef(mapKey)}
                                     from='search'
-                                    onBeforeNavigate={savePartialCacheForPlayback}
+                                    onBeforeNavigate={
+                                      savePartialCacheForPlayback
+                                    }
                                     isAggregate={true}
                                     title={title}
                                     poster={poster}
@@ -1901,7 +2089,9 @@ function SearchPageClient() {
                                 >
                                   <VideoCard
                                     id={item.id}
-                                    onBeforeNavigate={savePartialCacheForPlayback}
+                                    onBeforeNavigate={
+                                      savePartialCacheForPlayback
+                                    }
                                     title={item.title}
                                     poster={item.poster}
                                     episodes={item.episodes.length}
@@ -1958,6 +2148,7 @@ function SearchPageClient() {
                   <PansouSearch
                     keyword={searchQuery}
                     triggerSearch={triggerPansouSearch}
+                    cloudTypes={selectedPansouCloudTypes}
                   />
                 </>
               ) : (

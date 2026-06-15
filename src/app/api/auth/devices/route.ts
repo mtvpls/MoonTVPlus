@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
+import { getStorage } from '@/lib/db';
 import {
   getUserDevices,
   revokeAllRefreshTokens,
@@ -51,6 +52,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     await revokeRefreshToken(authInfo.username, tokenId);
+    const storage = getStorage();
+    await storage.deletePushSubscriptionsByTokenId?.(authInfo.username, tokenId);
 
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -69,6 +72,8 @@ export async function POST(request: NextRequest) {
 
   try {
     await revokeAllRefreshTokens(authInfo.username);
+    const storage = getStorage();
+    await storage.deleteAllPushSubscriptions?.(authInfo.username);
 
     const response = NextResponse.json({ ok: true });
 

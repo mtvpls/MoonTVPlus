@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const MIGRATIONS_DIR = path.join(__dirname, '../migrations');
+const MIGRATION_BASELINE_CUTOFF = '008_web_push_notifications.sql';
 
 function hashPassword(password) {
   return crypto.createHash('sha256').update(password).digest('hex');
@@ -46,24 +47,88 @@ function isIgnorableMigrationError(error) {
   );
 }
 
-function runMigrations(db) {
-  const migrationFiles = getMigrationFiles();
+function splitSqlStatements(sql) {
+  const withoutLineComments = sql
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n');
+
+  return withoutLineComments
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+}
+
+function tableExists(db, tableName) {
+  const row = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName);
+  return Boolean(row);
+}
+
+function ensureMigrationTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      filename TEXT PRIMARY KEY,
+      applied_at INTEGER NOT NULL
+    )
+  `);
+}
+
+function getAppliedMigrations(db) {
+  return new Set(
+    db.prepare('SELECT filename FROM schema_migrations').all().map((row) => row.filename)
+  );
+}
+
+function markMigrationApplied(db, filename) {
+  db.prepare(
+    'INSERT OR IGNORE INTO schema_migrations (filename, applied_at) VALUES (?, ?)'
+  ).run(filename, Date.now());
+}
+
+function seedExistingMigrationBaseline(db, migrationFiles, hadExistingSchema) {
+  const applied = getAppliedMigrations(db);
+  if (!hadExistingSchema || applied.size > 0) return;
 
   for (const file of migrationFiles) {
+    if (file.localeCompare(MIGRATION_BASELINE_CUTOFF) < 0) {
+      markMigrationApplied(db, file);
+    }
+  }
+}
+
+function runMigrations(db) {
+  const migrationFiles = getMigrationFiles();
+  const hadExistingSchema = tableExists(db, 'users');
+  ensureMigrationTable(db);
+  seedExistingMigrationBaseline(db, migrationFiles, hadExistingSchema);
+
+  for (const file of migrationFiles) {
+    const applied = getAppliedMigrations(db);
+    if (applied.has(file)) {
+      console.log(`⏭️ Migration already applied: ${file}`);
+      continue;
+    }
+
     const migrationPath = path.join(MIGRATIONS_DIR, file);
     const sql = fs.readFileSync(migrationPath, 'utf8');
+    const statements = splitSqlStatements(sql);
 
     console.log(`▶️ Applying migration: ${file}`);
-    try {
-      db.exec(sql);
-      console.log(`✅ Migration applied: ${file}`);
-    } catch (error) {
-      if (isIgnorableMigrationError(error)) {
-        console.log(`⏭️ Migration skipped: ${file}`);
-        continue;
+    for (const statement of statements) {
+      try {
+        db.exec(statement);
+      } catch (error) {
+        if (isIgnorableMigrationError(error)) {
+          console.log(`⏭️ Statement skipped in ${file}: ${error.message}`);
+          continue;
+        }
+        throw error;
       }
-      throw error;
     }
+    markMigrationApplied(db, file);
+    console.log(`✅ Migration applied: ${file}`);
   }
 }
 

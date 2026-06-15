@@ -9,7 +9,13 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   type TMDBItem,
@@ -66,14 +72,19 @@ export default function BannerCarousel({
   const [isMuted, setIsMuted] = useState(true); // 视频是否静音（默认静音）
   const [bannerHeightScale, setBannerHeightScale] =
     useState<HomeBannerHeightScale>('1'); // 轮播图高度倍率
+  const [isMobileView, setIsMobileView] = useState(false);
+  const [mobileTitleFontSize, setMobileTitleFontSize] = useState(30);
   const videoRef = useRef<HTMLVideoElement>(null); // 视频元素引用
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map()); // 所有视频元素的引用
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const titleTextRef = useRef<HTMLSpanElement>(null);
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
   const isManualChange = useRef(false); // 标记是否为手动切换
 
   // LocalStorage 缓存配置
   const LOCALSTORAGE_DURATION = 24 * 60 * 60 * 1000; // 1天
+  const currentTitle = items[currentIndex]?.title || '';
 
   // 根据数据源获取缓存key
   const getLocalStorageKey = (source: string) => {
@@ -140,6 +151,49 @@ export default function BannerCarousel({
       );
     };
   }, []);
+
+  // 检测移动端视口，用于 1x 高度下的标题自适应
+  useEffect(() => {
+    const updateIsMobileView = () => {
+      setIsMobileView(window.innerWidth < 768);
+    };
+
+    updateIsMobileView();
+    window.addEventListener('resize', updateIsMobileView);
+    return () => window.removeEventListener('resize', updateIsMobileView);
+  }, []);
+
+  // 手机界面且轮播图高度为 1x 时，仅在标题超过一行时自动缩小字号，不改变布局位置
+  useLayoutEffect(() => {
+    const titleElement = titleRef.current;
+    const titleTextElement = titleTextRef.current;
+    if (!titleElement || !titleTextElement) return;
+
+    if (bannerHeightScale !== '1' || !isMobileView) {
+      titleElement.style.fontSize = '';
+      setMobileTitleFontSize(30);
+      return;
+    }
+
+    const maxFontSize = 30;
+    const minFontSize = 12;
+    let nextFontSize = maxFontSize;
+
+    titleElement.style.fontSize = `${nextFontSize}px`;
+
+    while (
+      nextFontSize > minFontSize &&
+      titleTextElement.getClientRects().length > 1
+    ) {
+      nextFontSize -= 1;
+      titleElement.style.fontSize = `${nextFontSize}px`;
+    }
+
+    titleElement.style.fontSize = `${nextFontSize}px`;
+    setMobileTitleFontSize(nextFontSize);
+
+    return undefined;
+  }, [bannerHeightScale, currentTitle, isMobileView]);
 
   // 延迟加载：等待页面加载完毕后再开始加载轮播图数据
   useEffect(() => {
@@ -529,8 +583,16 @@ export default function BannerCarousel({
       {/* 内容信息 */}
       <div className='absolute inset-0 flex items-end p-8 md:p-12 pointer-events-none'>
         <div className='max-w-2xl space-y-4'>
-          <h2 className='text-3xl md:text-5xl font-bold text-white drop-shadow-lg'>
-            {currentItem.title}
+          <h2
+            ref={titleRef}
+            className='text-3xl md:text-5xl font-bold text-white drop-shadow-lg'
+            style={
+              isMobileView && bannerHeightScale === '1'
+                ? { fontSize: `${mobileTitleFontSize}px` }
+                : undefined
+            }
+          >
+            <span ref={titleTextRef}>{currentItem.title}</span>
           </h2>
 
           <div className='flex items-center gap-2 md:gap-3 text-sm md:text-base text-white/90 flex-wrap'>

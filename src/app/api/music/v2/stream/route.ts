@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
     try {
       upstream = await fetch(upstreamUrl, {
         headers: upstreamHeaders,
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(90000),
         cache: 'no-store',
       });
     } catch (error) {
@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
       upstreamHeaders = buildUpstreamHeaders(request, upstreamUrl);
       upstream = await fetch(upstreamUrl, {
         headers: upstreamHeaders,
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(90000),
         cache: 'no-store',
       });
       console.warn('[music-v2/stream] upstream fetch failed once, retried with refreshed URL', {

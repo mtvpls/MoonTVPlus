@@ -59,7 +59,8 @@ export default async function RootLayout({
     process.env.ANNOUNCEMENT ||
     '本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。';
 
-  let doubanProxyType = process.env.NEXT_PUBLIC_DOUBAN_PROXY_TYPE || 'cmliussss-cdn-tencent';
+  let doubanProxyType =
+    process.env.NEXT_PUBLIC_DOUBAN_PROXY_TYPE || 'cmliussss-cdn-tencent';
   let doubanProxy = process.env.NEXT_PUBLIC_DOUBAN_PROXY || '';
   let doubanImageProxyType =
     process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE || 'cmliussss-cdn-tencent';
@@ -71,6 +72,16 @@ export default async function RootLayout({
   let danmakuAutoLoadDefault = true;
   let recommendationDataSource = 'Mixed';
   let tmdbApiKey = '';
+  let bangumiDataSource =
+    (process.env.NEXT_PUBLIC_BANGUMI_DATA_SOURCE as any) || 'direct';
+  let bangumiApiBaseUrl =
+    process.env.NEXT_PUBLIC_BANGUMI_API_BASE_URL ||
+    process.env.BANGUMI_API_BASE_URL ||
+    'https://api.bgm.tv';
+  let bangumiImageBaseUrl =
+    process.env.NEXT_PUBLIC_BANGUMI_IMAGE_BASE_URL ||
+    process.env.BANGUMI_IMAGE_BASE_URL ||
+    '';
   let openListEnabled = false;
   let embyEnabled = false;
   let xiaoyaEnabled = false;
@@ -101,7 +112,9 @@ export default async function RootLayout({
   let customAdFilterVersion = 0;
   let musicFeatureEnabled = false;
   let suwayomiEnabled = false;
-  let booksEnabled = process.env.OPDS_ENABLED === 'true' && !!(process.env.OPDS_URL || process.env.NEXT_PUBLIC_OPDS_URL || process.env.OPDS_SOURCES_JSON);
+  let booksEnabled =
+    process.env.OPDS_ENABLED === 'true' ||
+    process.env.LEGADO_ENABLED === 'true';
   let musicProxyEnabled = true;
   let advancedRecommendationEnabled = false;
   let userFeatureAccess =
@@ -137,8 +150,13 @@ export default async function RootLayout({
     fluidSearch = config.SiteConfig.FluidSearch;
     enableComments = config.SiteConfig.EnableComments;
     danmakuAutoLoadDefault = config.SiteConfig.DanmakuAutoLoadDefault !== false;
-    recommendationDataSource = config.SiteConfig.RecommendationDataSource || 'Mixed';
+    recommendationDataSource =
+      config.SiteConfig.RecommendationDataSource || 'Mixed';
     tmdbApiKey = config.SiteConfig.TMDBApiKey || '';
+    bangumiDataSource = config.SiteConfig.BangumiDataSource || 'direct';
+    bangumiApiBaseUrl =
+      config.SiteConfig.BangumiApiBaseUrl || 'https://api.bgm.tv';
+    bangumiImageBaseUrl = config.SiteConfig.BangumiImageBaseUrl || '';
     loginBackgroundImage = config.ThemeConfig?.loginBackgroundImage || '';
     registerBackgroundImage = config.ThemeConfig?.registerBackgroundImage || '';
     homeBackgroundImage = config.ThemeConfig?.homeBackgroundImage || '';
@@ -146,9 +164,11 @@ export default async function RootLayout({
     progressThumbPresetId = config.ThemeConfig?.progressThumbPresetId || '';
     progressThumbCustomUrl = config.ThemeConfig?.progressThumbCustomUrl || '';
     enableRegistration = config.SiteConfig.EnableRegistration || false;
-    requireRegistrationInviteCode = config.SiteConfig.RequireRegistrationInviteCode || false;
+    requireRegistrationInviteCode =
+      config.SiteConfig.RequireRegistrationInviteCode || false;
     loginRequireTurnstile = config.SiteConfig.LoginRequireTurnstile || false;
-    registrationRequireTurnstile = config.SiteConfig.RegistrationRequireTurnstile || false;
+    registrationRequireTurnstile =
+      config.SiteConfig.RegistrationRequireTurnstile || false;
     turnstileSiteKey = config.SiteConfig.TurnstileSiteKey || '';
     enableOIDCLogin = config.SiteConfig.EnableOIDCLogin || false;
     enableOIDCRegistration = config.SiteConfig.EnableOIDCRegistration || false;
@@ -173,17 +193,13 @@ export default async function RootLayout({
     musicProxyEnabled = config.MusicConfig?.ProxyEnabled ?? true;
     // 漫画功能配置
     suwayomiEnabled = !!(
-      config.SuwayomiConfig?.Enabled &&
-      config.SuwayomiConfig?.ServerURL
+      config.SuwayomiConfig?.Enabled && config.SuwayomiConfig?.ServerURL
     );
     // 电子书功能配置
     const opdsConfig = config.OPDSConfig;
-    const rawOpdsSources = opdsConfig?.Sources;
-    const opdsSources = Array.isArray(rawOpdsSources) ? rawOpdsSources : [];
-    booksEnabled = !!(
-      opdsConfig?.Enabled &&
-      opdsSources.some((source) => source?.enabled !== false && !!source?.url)
-    );
+    // 电子书馆同时支持 OPDS 与 Legado。Legado 源通过订阅单独配置，
+    // 不一定会出现在 OPDS Sources 中；入口应由“启用电子书馆”开关控制。
+    booksEnabled = !!opdsConfig?.Enabled;
     // 高级推荐功能配置：存在已启用视频源脚本时显示
     advancedRecommendationEnabled =
       (await listEnabledSourceScripts()).length > 0;
@@ -198,19 +214,23 @@ export default async function RootLayout({
     embyEnabled = !!(
       config.EmbyConfig?.Sources &&
       config.EmbyConfig.Sources.length > 0 &&
-      config.EmbyConfig.Sources.some(s => s.enabled && s.ServerURL)
+      config.EmbyConfig.Sources.some((s) => s.enabled && s.ServerURL)
     );
     // 检查是否启用了小雅功能
     xiaoyaEnabled = !!(
-      config.XiaoyaConfig?.Enabled &&
-      config.XiaoyaConfig?.ServerURL
+      config.XiaoyaConfig?.Enabled && config.XiaoyaConfig?.ServerURL
     );
   }
 
   // 将运行时配置注入到全局 window 对象，供客户端在运行时读取
-  const runtimeStorageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-  const isCloudflare = process.env.CF_PAGES === '1' || process.env.BUILD_TARGET === 'cloudflare';
-  const displayStorageType = runtimeStorageType === 'd1' && !isCloudflare ? 'sqlite' : runtimeStorageType;
+  const runtimeStorageType =
+    process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
+  const isCloudflare =
+    process.env.CF_PAGES === '1' || process.env.BUILD_TARGET === 'cloudflare';
+  const displayStorageType =
+    runtimeStorageType === 'd1' && !isCloudflare
+      ? 'sqlite'
+      : runtimeStorageType;
 
   const runtimeConfig = {
     STORAGE_TYPE: runtimeStorageType,
@@ -225,9 +245,15 @@ export default async function RootLayout({
     EnableComments: enableComments,
     DANMAKU_AUTO_LOAD_DEFAULT: danmakuAutoLoadDefault,
     RecommendationDataSource: recommendationDataSource,
+    BANGUMI_DATA_SOURCE: bangumiDataSource,
+    BANGUMI_API_BASE_URL: bangumiApiBaseUrl,
+    BANGUMI_IMAGE_BASE_URL: bangumiImageBaseUrl,
+    ENABLE_TV_MODE: process.env.ENABLE_TV_MODE !== 'false',
     ENABLE_TVBOX_SUBSCRIBE: process.env.ENABLE_TVBOX_SUBSCRIBE === 'true',
-    ENABLE_OFFLINE_DOWNLOAD: process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
-    VOICE_CHAT_STRATEGY: process.env.NEXT_PUBLIC_VOICE_CHAT_STRATEGY || 'webrtc-fallback',
+    ENABLE_OFFLINE_DOWNLOAD:
+      process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
+    VOICE_CHAT_STRATEGY:
+      process.env.NEXT_PUBLIC_VOICE_CHAT_STRATEGY || 'webrtc-fallback',
     OPENLIST_ENABLED: openListEnabled && userFeatureAccess.private_library,
     EMBY_ENABLED: embyEnabled && userFeatureAccess.emby,
     XIAOYA_ENABLED: xiaoyaEnabled && userFeatureAccess.xiaoya,
@@ -273,8 +299,7 @@ export default async function RootLayout({
       userFeatureAccess.magnet_save_private_library,
     NETDISK_TRANSFER_ENABLED: userFeatureAccess.netdisk_transfer,
     NETDISK_TEMP_PLAY_ENABLED: userFeatureAccess.netdisk_temp_play,
-    FESTIVE_EFFECT_ENABLED:
-      process.env.FESTIVE_EFFECT_ENABLED === 'true',
+    FESTIVE_EFFECT_ENABLED: process.env.FESTIVE_EFFECT_ENABLED === 'true',
   };
 
   return (
@@ -307,7 +332,11 @@ export default async function RootLayout({
           <TopProgressBar />
           <RouteScrollReset />
           <TokenRefreshManager />
-          <SiteProvider siteName={siteName} announcement={announcement} tmdbApiKey={tmdbApiKey}>
+          <SiteProvider
+            siteName={siteName}
+            announcement={announcement}
+            tmdbApiKey={tmdbApiKey}
+          >
             <WatchRoomProvider>
               <DownloadProvider>
                 <StartupCacheCleanup />

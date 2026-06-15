@@ -4,11 +4,14 @@
  */
 
 import * as fs from 'fs';
-import * as http from 'http';
-import * as https from 'https';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import nodeFetch, { RequestInit } from 'node-fetch';
 import * as path from 'path';
 import { URL } from 'url';
-import * as zlib from 'zlib';
+
+type NodeFetchOptions = RequestInit & {
+  agent?: HttpsProxyAgent<string>;
+};
 
 export interface OfflineDownloadTask {
   id: string;
@@ -53,9 +56,11 @@ export class OfflineDownloader {
   private maxRetries = 3;
   private retryDelay = 1000; // ms
   private concurrency = 6;
+  private proxy?: string;
 
-  constructor(baseDir: string) {
+  constructor(baseDir: string, proxy?: string) {
     this.baseDir = baseDir;
+    this.proxy = proxy?.trim() || undefined;
     this.ensureDir(this.baseDir);
   }
 
@@ -420,75 +425,82 @@ export class OfflineDownloader {
   }
 
   /**
+   * 检测是否在 Cloudflare 环境中运行。Cloudflare Workers 不支持 Node.js Agent，
+   * 因此系统代理配置在该环境下无效。
+   */
+  private isCloudflareEnvironment(): boolean {
+    return (
+      process.env.CF_PAGES === '1' || process.env.BUILD_TARGET === 'cloudflare'
+    );
+  }
+
+  private getRequestOptions(url: string, timeout = 30000): NodeFetchOptions {
+    const options: NodeFetchOptions = {
+      headers: this.getHeaders(url),
+      signal: AbortSignal.timeout(timeout) as unknown as RequestInit['signal'],
+    };
+
+    if (this.proxy && !this.isCloudflareEnvironment()) {
+      options.agent = new HttpsProxyAgent(this.proxy, {
+        timeout: 30000,
+        keepAlive: false,
+      });
+    }
+
+    return options;
+  }
+
+  private async fetchUrl(url: string, timeout = 30000): Promise<Response> {
+    if (this.isCloudflareEnvironment()) {
+      return fetch(url, {
+        headers: this.getHeaders(url),
+        signal: AbortSignal.timeout(timeout),
+      });
+    }
+
+    return nodeFetch(url, this.getRequestOptions(url, timeout)) as unknown as Promise<Response>;
+  }
+
+  /**
    * 下载单个文件
    */
   private async downloadFile(url: string, savePath: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const urlObj = new URL(url);
-      const client = urlObj.protocol === 'https:' ? https : http;
+    const response = await this.fetchUrl(url, 30000);
 
-      const options = {
-        headers: this.getHeaders(url),
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error('响应体为空');
+    }
+
+    const body = response.body as unknown as NodeJS.ReadableStream | null;
+
+    if (!body || typeof body.pipe !== 'function') {
+      const arrayBuffer = await response.arrayBuffer();
+      fs.writeFileSync(savePath, Buffer.from(arrayBuffer));
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const fileStream = fs.createWriteStream(savePath);
+      body.pipe(fileStream);
+
+      fileStream.on('finish', () => {
+        fileStream.close();
+        resolve();
+      });
+
+      const handleError = (err: Error) => {
+        fs.unlink(savePath, () => {
+          // Ignore unlink errors
+        });
+        reject(err);
       };
 
-      const request = client.get(url, options, (response) => {
-        if (response.statusCode === 301 || response.statusCode === 302) {
-          // 处理重定向
-          const redirectUrl = response.headers.location;
-          if (redirectUrl) {
-            this.downloadFile(redirectUrl, savePath).then(resolve).catch(reject);
-            return;
-          }
-        }
-
-        if (response.statusCode !== 200) {
-          reject(new Error(`HTTP ${response.statusCode}`));
-          return;
-        }
-
-        // 检查内容编码，处理压缩
-        const encoding = response.headers['content-encoding'];
-        let stream: NodeJS.ReadableStream = response;
-
-        if (encoding === 'gzip') {
-          stream = response.pipe(zlib.createGunzip());
-        } else if (encoding === 'deflate') {
-          stream = response.pipe(zlib.createInflate());
-        } else if (encoding === 'br') {
-          stream = response.pipe(zlib.createBrotliDecompress());
-        }
-
-        const fileStream = fs.createWriteStream(savePath);
-        stream.pipe(fileStream);
-
-        fileStream.on('finish', () => {
-          fileStream.close();
-          resolve();
-        });
-
-        fileStream.on('error', (err) => {
-          fs.unlink(savePath, () => {
-            // Ignore unlink errors
-          });
-          reject(err);
-        });
-
-        stream.on('error', (err) => {
-          fs.unlink(savePath, () => {
-            // Ignore unlink errors
-          });
-          reject(err);
-        });
-      });
-
-      request.on('error', (err) => {
-        reject(err);
-      });
-
-      request.setTimeout(30000, () => {
-        request.destroy();
-        reject(new Error('Request timeout'));
-      });
+      fileStream.on('error', handleError);
+      body.on('error', handleError);
     });
   }
 
@@ -496,60 +508,13 @@ export class OfflineDownloader {
    * 获取内容（用于 M3U8 文件）
    */
   private async fetchContent(url: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const urlObj = new URL(url);
-      const client = urlObj.protocol === 'https:' ? https : http;
+    const response = await this.fetchUrl(url, 10000);
 
-      const options = {
-        headers: this.getHeaders(url),
-      };
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
 
-      const request = client.get(url, options, (response) => {
-        if (response.statusCode === 301 || response.statusCode === 302) {
-          const redirectUrl = response.headers.location;
-          if (redirectUrl) {
-            this.fetchContent(redirectUrl).then(resolve).catch(reject);
-            return;
-          }
-        }
-
-        if (response.statusCode !== 200) {
-          reject(new Error(`HTTP ${response.statusCode}`));
-          return;
-        }
-
-        // 检查内容编码，处理压缩
-        const encoding = response.headers['content-encoding'];
-        let stream: NodeJS.ReadableStream = response;
-
-        if (encoding === 'gzip') {
-          stream = response.pipe(zlib.createGunzip());
-        } else if (encoding === 'deflate') {
-          stream = response.pipe(zlib.createInflate());
-        } else if (encoding === 'br') {
-          stream = response.pipe(zlib.createBrotliDecompress());
-        }
-
-        let data = '';
-        stream.on('data', (chunk) => {
-          data += chunk.toString('utf-8');
-        });
-
-        stream.on('end', () => {
-          resolve(data);
-        });
-
-        stream.on('error', (err) => {
-          reject(err);
-        });
-      });
-
-      request.on('error', reject);
-      request.setTimeout(10000, () => {
-        request.destroy();
-        reject(new Error('Request timeout'));
-      });
-    });
+    return response.text();
   }
 
   /**

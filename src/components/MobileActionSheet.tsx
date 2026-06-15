@@ -26,6 +26,7 @@ interface MobileActionSheetProps {
   totalEpisodes?: number; // 总集数
   origin?: 'vod' | 'live';
   onPosterClick?: () => void; // 海报点击回调
+  description?: string; // 标题下方描述文案
 }
 
 const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
@@ -42,6 +43,7 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
   totalEpisodes,
   origin = 'vod',
   onPosterClick,
+  description = '选择操作',
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -322,7 +324,7 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
                 </p>
               )}
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                选择操作
+                {description}
               </p>
             </div>
           </div>

@@ -40,17 +40,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch', message: response.statusText }, { status: 500 });
     }
 
-    const contentType = response.headers.get('Content-Type');
+    const contentType = response.headers.get('Content-Type') || '';
+    const normalizedContentType = contentType.toLowerCase();
+    const finalUrl = response.url || decodedUrl;
+    const normalizedUrl = finalUrl.toLowerCase().split('?')[0];
     if (response.body) {
       response.body.cancel();
     }
-    if (contentType?.includes('video/mp4')) {
+    if (normalizedContentType.includes('video/mp4') || normalizedUrl.endsWith('.mp4')) {
       return NextResponse.json({ success: true, type: 'mp4' }, { status: 200 });
     }
-    if (contentType?.includes('video/x-flv')) {
+    if (
+      normalizedContentType.includes('video/x-flv') ||
+      normalizedContentType.includes('video/flv') ||
+      normalizedUrl.endsWith('.flv')
+    ) {
       return NextResponse.json({ success: true, type: 'flv' }, { status: 200 });
     }
-    return NextResponse.json({ success: true, type: 'm3u8' }, { status: 200 });
+    if (
+      normalizedContentType.includes('mpegurl') ||
+      normalizedContentType.includes('application/vnd.apple') ||
+      normalizedUrl.endsWith('.m3u8') ||
+      normalizedUrl.endsWith('.m3u')
+    ) {
+      return NextResponse.json({ success: true, type: 'm3u8' }, { status: 200 });
+    }
+    return NextResponse.json(
+      {
+        error: 'Unsupported live stream type',
+        contentType,
+      },
+      { status: 415 }
+    );
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch', message: error }, { status: 500 });
   }

@@ -9,6 +9,7 @@ import type {
   ChatMessage,
   LiveState,
   Member,
+  MusicSyncState,
   PlayState,
   Room,
   RoomType,
@@ -333,6 +334,66 @@ export function useWatchRoom(
     sock.emit('screen:stop');
   }, [isOwner]);
 
+  const changeMusic = useCallback(
+    (state: MusicSyncState) => {
+      const sock = watchRoomSocketManager.getSocket();
+      if (!sock || !isOwner) return;
+
+      sock.emit('music:change', state);
+    },
+    [isOwner]
+  );
+
+  const updateMusicState = useCallback(
+    (state: MusicSyncState) => {
+      const sock = watchRoomSocketManager.getSocket();
+      if (!sock || !isOwner) return;
+
+      sock.emit('music:update', state);
+    },
+    [isOwner]
+  );
+
+  const updateMusicQueue = useCallback(
+    (state: MusicSyncState) => {
+      const sock = watchRoomSocketManager.getSocket();
+      if (!sock || !isOwner) return;
+
+      sock.emit('music:update', state);
+    },
+    [isOwner]
+  );
+
+  const playMusic = useCallback(
+    (state: MusicSyncState) => {
+      const sock = watchRoomSocketManager.getSocket();
+      if (!sock || !isOwner) return;
+
+      sock.emit('music:play', state);
+    },
+    [isOwner]
+  );
+
+  const pauseMusic = useCallback(
+    (state: MusicSyncState) => {
+      const sock = watchRoomSocketManager.getSocket();
+      if (!sock || !isOwner) return;
+
+      sock.emit('music:pause', state);
+    },
+    [isOwner]
+  );
+
+  const seekMusic = useCallback(
+    (state: MusicSyncState) => {
+      const sock = watchRoomSocketManager.getSocket();
+      if (!sock || !isOwner) return;
+
+      sock.emit('music:seek', state);
+    },
+    [isOwner]
+  );
+
   // 清除房间播放状态（房主离开播放/直播页面时调用）
   const clearRoomState = useCallback(() => {
     const sock = watchRoomSocketManager.getSocket();
@@ -417,6 +478,43 @@ export function useWatchRoom(
       }
     });
 
+    const handleMusicState = (state: MusicSyncState) => {
+      if (currentRoom) {
+        setCurrentRoom((prev) => (prev ? { ...prev, currentState: state } : null));
+      }
+    };
+
+    socket.on('music:change', handleMusicState);
+    socket.on('music:update', handleMusicState);
+    socket.on('music:queue', handleMusicState);
+    socket.on('music:play', (state) => {
+      setCurrentRoom((prev) => {
+        if (!prev || prev.currentState?.type !== 'music') return prev;
+        return {
+          ...prev,
+          currentState: { ...prev.currentState, ...state, isPlaying: true },
+        };
+      });
+    });
+    socket.on('music:pause', (state) => {
+      setCurrentRoom((prev) => {
+        if (!prev || prev.currentState?.type !== 'music') return prev;
+        return {
+          ...prev,
+          currentState: { ...prev.currentState, ...state, isPlaying: false },
+        };
+      });
+    });
+    socket.on('music:seek', (state) => {
+      setCurrentRoom((prev) => {
+        if (!prev || prev.currentState?.type !== 'music') return prev;
+        return {
+          ...prev,
+          currentState: { ...prev.currentState, ...state },
+        };
+      });
+    });
+
     // 聊天事件
     socket.on('chat:message', (message) => {
       setChatMessages((prev) => [...prev, message]);
@@ -456,6 +554,12 @@ export function useWatchRoom(
       socket.off('live:change');
       socket.off('screen:start');
       socket.off('screen:stop');
+      socket.off('music:change');
+      socket.off('music:update');
+      socket.off('music:queue');
+      socket.off('music:play');
+      socket.off('music:pause');
+      socket.off('music:seek');
       socket.off('chat:message');
       socket.off('state:cleared');
       socket.off('connect');
@@ -494,6 +598,12 @@ export function useWatchRoom(
     changeLiveChannel,
     startScreenShare,
     stopScreenShare,
+    changeMusic,
+    updateMusicState,
+    updateMusicQueue,
+    playMusic,
+    pauseMusic,
+    seekMusic,
     clearRoomState,
   };
 }

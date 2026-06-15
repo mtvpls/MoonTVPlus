@@ -154,6 +154,7 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
           rangeDownload: task.rangeDownload,
           m3u8Content: task.m3u8Content,
           createdAt: task.createdAt || Date.now(),
+          segmentLogs: task.segmentLogs,
         }));
 
       await downloadDB.saveActiveTasks(tasksToSave);
@@ -255,6 +256,7 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
                 task.errorNum = savedTask.errorNum;
                 task.downloadMode = savedTask.downloadMode;
                 task.rangeDownload = savedTask.rangeDownload;
+                task.segmentLogs = savedTask.segmentLogs || [];
 
                 if (dirHandle) {
                   task.filesystemDirHandle = dirHandle;

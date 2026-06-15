@@ -18,6 +18,13 @@ export function createEmptyFeatureAccessMap(): FeatureAccessMap {
   }, {} as FeatureAccessMap);
 }
 
+function createFullFeatureAccessMap(): FeatureAccessMap {
+  return ALL_FEATURE_PERMISSION_KEYS.reduce((acc, key) => {
+    acc[key] = true;
+    return acc;
+  }, {} as FeatureAccessMap);
+}
+
 function isPrivilegedRole(role?: string) {
   return role === 'owner' || role === 'admin';
 }
@@ -25,10 +32,7 @@ function isPrivilegedRole(role?: string) {
 async function getUserFeatureAccessMap(username: string): Promise<FeatureAccessMap> {
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
   if (storageType === 'localstorage') {
-    return ALL_FEATURE_PERMISSION_KEYS.reduce((acc, key) => {
-      acc[key] = true;
-      return acc;
-    }, {} as FeatureAccessMap);
+    return createFullFeatureAccessMap();
   }
 
   const userInfo = await db.getUserInfoV2(username);
@@ -37,10 +41,7 @@ async function getUserFeatureAccessMap(username: string): Promise<FeatureAccessM
   }
 
   if (username === process.env.USERNAME || isPrivilegedRole(userInfo.role)) {
-    return ALL_FEATURE_PERMISSION_KEYS.reduce((acc, key) => {
-      acc[key] = true;
-      return acc;
-    }, {} as FeatureAccessMap);
+    return createFullFeatureAccessMap();
   }
 
   const config = await getConfig();
@@ -48,10 +49,7 @@ async function getUserFeatureAccessMap(username: string): Promise<FeatureAccessM
 
   // 兼容旧用户：未分配用户组时，默认拥有全部功能权限
   if (tags.length === 0) {
-    return ALL_FEATURE_PERMISSION_KEYS.reduce((acc, key) => {
-      acc[key] = true;
-      return acc;
-    }, {} as FeatureAccessMap);
+    return createFullFeatureAccessMap();
   }
 
   const allowedPermissions = new Set<FeaturePermissionKey>();
@@ -71,7 +69,14 @@ async function getUserFeatureAccessMap(username: string): Promise<FeatureAccessM
 
 export async function getUserFeatureAccess(username?: string | null): Promise<FeatureAccessMap> {
   if (!username) return createEmptyFeatureAccessMap();
-  return getUserFeatureAccessMap(username);
+  try {
+    return await getUserFeatureAccessMap(username);
+  } catch (error) {
+    console.error('[Permissions] Failed to load feature access:', error);
+    return username === process.env.USERNAME
+      ? createFullFeatureAccessMap()
+      : createEmptyFeatureAccessMap();
+  }
 }
 
 export async function hasFeaturePermission(

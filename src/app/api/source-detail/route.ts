@@ -111,6 +111,7 @@ export async function GET(request: NextRequest) {
   const sourceCode = normalizeNetdiskSource(searchParams.get('source'));
   const fileName = searchParams.get('fileName'); // 小雅源：用户点击的文件名
   const title = searchParams.get('title');
+  const includeSpecialSources = searchParams.get('special') === '1';
 
   if (!id || !sourceCode) {
     return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
@@ -1201,7 +1202,7 @@ export async function GET(request: NextRequest) {
 
   // 对于其他采集源，直接按 id 获取详情。
   try {
-    const apiSites = await getAvailableApiSites(authInfo.username);
+    const apiSites = await getAvailableApiSites(authInfo.username, includeSpecialSources);
     const apiSite = apiSites.find((site) => site.key === sourceCode);
 
     if (!apiSite) {
