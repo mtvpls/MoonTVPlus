@@ -42,6 +42,7 @@
     "artplayer": "^5.4.0",
     "artplayer-plugin-auto-thumbnail": "^1.1.0",
     "artplayer-plugin-danmuku": "^5.2.0",
+    "artplayer-plugin-jassub": "1.1.0",
     "better-sqlite3": "^12.6.2",
     "bs58": "^6.0.0",
     "cheerio": "^1.1.2",

@@ -121,14 +121,40 @@ interface SearchCachePayload {
   updatedAt: number;
 }
 
+type CustomSubtitleEngine = 'native' | 'jassub';
+
 interface CustomSubtitleState {
   name: string;
-  url: string;
   format: string;
   episodeIndex: number;
+  engine: CustomSubtitleEngine;
+  url?: string;
+  content?: string;
+}
+
+interface SourceSubtitleItem {
+  label: string;
+  url: string;
+  fallbackUrl?: string;
+  fallbackFormat?: string;
+  format?: string;
+  sourceFormat?: string;
+  codec?: string;
+  renderMode?: 'native' | 'jassub';
+}
+
+interface JassubSubtitleInstance {
+  setTrack?: (content: string) => void | Promise<void>;
+  setTrackByUrl?: (url: string) => void | Promise<void>;
+  freeTrack?: () => void | Promise<void>;
+  destroy?: () => void | Promise<void>;
 }
 
 const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+const JASSUB_ASSET_BASE = '/assets/jassub';
+const JASSUB_CJK_FONT_FAMILY = 'noto sans cjk sc';
+const JASSUB_CJK_FONT_URL = `${JASSUB_ASSET_BASE}/NotoSansCJK-Regular.ttc`;
+const ADVANCED_SUBTITLE_FORMATS = new Set(['ass', 'ssa']);
 const PLAY_SHORTCUT_GROUPS = [
   {
     title: '播放控制',
@@ -1933,16 +1959,57 @@ function PlayPageClient() {
     fontSize: typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em',
   });
 
-  const revokeCustomSubtitle = () => {
-    if (customSubtitleRef.current) {
-      URL.revokeObjectURL(customSubtitleRef.current.url);
-      customSubtitleRef.current = null;
+  const getSubtitleFileExtension = (fileName: string) => {
+    return fileName.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || '';
+  };
+
+  const isAdvancedSubtitleFormat = (format: string) => {
+    return ADVANCED_SUBTITLE_FORMATS.has(format.toLowerCase());
+  };
+
+  const getSourceSubtitleFormat = (subtitle?: SourceSubtitleItem | null) => {
+    return (
+      subtitle?.format ||
+      subtitle?.sourceFormat ||
+      subtitle?.codec ||
+      ''
+    ).toLowerCase();
+  };
+
+  const isAdvancedSourceSubtitle = (subtitle?: SourceSubtitleItem | null) => {
+    return subtitle?.renderMode === 'jassub' ||
+      isAdvancedSubtitleFormat(getSourceSubtitleFormat(subtitle));
+  };
+
+  const getJassubSubtitleInstance = (): JassubSubtitleInstance | null => {
+    return artPlayerRef.current?.plugins?.artplayerPluginJassub?.instance || null;
+  };
+
+  const clearJassubSubtitle = () => {
+    try {
+      getJassubSubtitleInstance()?.freeTrack?.();
+    } catch (error) {
+      console.warn('[Subtitle] 清理高级字幕失败:', error);
     }
+  };
+
+  const revokeCustomSubtitle = () => {
+    const customSubtitle = customSubtitleRef.current;
+    if (customSubtitle?.engine === 'native' && customSubtitle.url) {
+      URL.revokeObjectURL(customSubtitle.url);
+    }
+
+    if (customSubtitle?.engine === 'jassub') {
+      clearJassubSubtitle();
+    }
+
+    customSubtitleRef.current = null;
   };
 
   const switchSubtitle = (url: string, label: string) => {
     if (!artPlayerRef.current) return;
 
+    clearJassubSubtitle();
     artPlayerRef.current.subtitle.switch(url, {
       name: label,
       type: 'vtt',
@@ -1951,6 +2018,129 @@ function PlayPageClient() {
     });
     artPlayerRef.current.subtitle.show = true;
     currentSubtitleLabelRef.current = label;
+  };
+
+  const closeSubtitle = () => {
+    if (!artPlayerRef.current) return;
+
+    artPlayerRef.current.subtitle.show = false;
+    clearJassubSubtitle();
+    currentSubtitleLabelRef.current = '关闭';
+  };
+
+  const ensureJassubSubtitleInstance = async (
+    initialTrack: { content?: string; url?: string }
+  ): Promise<{ instance: JassubSubtitleInstance; created: boolean }> => {
+    const existingInstance = getJassubSubtitleInstance();
+    if (existingInstance) {
+      return { instance: existingInstance, created: false };
+    }
+
+    if (!initialTrack.content && !initialTrack.url) {
+      throw new Error('缺少高级字幕内容');
+    }
+
+    if (!artPlayerRef.current) {
+      throw new Error('播放器尚未就绪');
+    }
+
+    const JassubPluginModule = await import('artplayer-plugin-jassub');
+    const artplayerPluginJassub =
+      ((JassubPluginModule as any).default || JassubPluginModule) as any;
+
+    artPlayerRef.current.plugins.add(
+      artplayerPluginJassub({
+        ...(initialTrack.content
+          ? { subContent: initialTrack.content }
+          : { subUrl: initialTrack.url }),
+        workerUrl: `${JASSUB_ASSET_BASE}/jassub-worker.js`,
+        wasmUrl: `${JASSUB_ASSET_BASE}/jassub-worker.wasm`,
+        modernWasmUrl: `${JASSUB_ASSET_BASE}/jassub-worker-modern.wasm`,
+        availableFonts: {
+          [JASSUB_CJK_FONT_FAMILY]: JASSUB_CJK_FONT_URL,
+          'liberation sans': `${JASSUB_ASSET_BASE}/default.woff2`,
+        },
+        fallbackFont: JASSUB_CJK_FONT_FAMILY,
+      })
+    );
+
+    const instance = getJassubSubtitleInstance();
+    if (!instance) {
+      throw new Error('高级字幕渲染器初始化失败');
+    }
+
+    return { instance, created: true };
+  };
+
+  const switchAdvancedSubtitle = async (content: string, label: string) => {
+    if (!artPlayerRef.current) return;
+
+    artPlayerRef.current.subtitle.show = false;
+    const { instance, created } = await ensureJassubSubtitleInstance({ content });
+
+    // 新建实例时 subContent 已作为初始轨道传入；复用实例时需要显式切轨。
+    if (!created) {
+      await instance.setTrack?.(content);
+    }
+
+    currentSubtitleLabelRef.current = label;
+  };
+
+  const switchAdvancedSubtitleByUrl = async (url: string, label: string) => {
+    if (!artPlayerRef.current) return;
+
+    artPlayerRef.current.subtitle.show = false;
+    const { instance, created } = await ensureJassubSubtitleInstance({ url });
+
+    // 新建实例时 subUrl 已作为初始轨道传入；复用实例时需要显式切轨。
+    if (!created) {
+      if (instance.setTrackByUrl) {
+        await instance.setTrackByUrl(url);
+      } else {
+        const response = await fetch(url, {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          throw new Error(`高级字幕加载失败 (${response.status})`);
+        }
+        await instance.setTrack?.(await response.text());
+      }
+    }
+
+    currentSubtitleLabelRef.current = label;
+  };
+
+  const switchSourceSubtitle = async (subtitle: SourceSubtitleItem) => {
+    if (!subtitle.url) return;
+
+    if (isAdvancedSourceSubtitle(subtitle)) {
+      try {
+        await switchAdvancedSubtitleByUrl(subtitle.url, subtitle.label);
+        return;
+      } catch (error) {
+        if (!subtitle.fallbackUrl) {
+          throw error;
+        }
+
+        console.warn('[Subtitle] 高级字幕加载失败，尝试降级为普通字幕:', error);
+        switchSubtitle(subtitle.fallbackUrl, subtitle.label);
+
+        const message = `高级字幕渲染失败，已降级为普通字幕：${subtitle.label}`;
+        if (artPlayerRef.current) {
+          artPlayerRef.current.notice.show = message;
+        }
+        setToast({
+          message,
+          type: 'info',
+          duration: 5000,
+          onClose: () => setToast(null),
+        });
+      }
+      return;
+    }
+
+    switchSubtitle(subtitle.url, subtitle.label);
   };
 
   const removeSubtitleSetting = () => {
@@ -1964,7 +2154,7 @@ function PlayPageClient() {
   const updateSubtitleSetting = () => {
     if (!artPlayerRef.current) return;
 
-    const sourceSubtitles = detailRef.current?.subtitles?.[currentEpisodeIndexRef.current] || [];
+    const sourceSubtitles = (detailRef.current?.subtitles?.[currentEpisodeIndexRef.current] || []) as SourceSubtitleItem[];
     const customSubtitle =
       customSubtitleRef.current?.episodeIndex === currentEpisodeIndexRef.current
         ? customSubtitleRef.current
@@ -1975,17 +2165,27 @@ function PlayPageClient() {
     const subtitleOptions = [
       { html: '关闭', action: 'close' },
       { html: '上传本地字幕', action: 'upload' },
-      ...sourceSubtitles.map((sub: any) => ({
-        html: sub.label,
-        action: 'switch',
-        url: sub.url,
-      })),
+      ...sourceSubtitles.map((sub: SourceSubtitleItem) => {
+        const isAdvanced = isAdvancedSourceSubtitle(sub);
+        const format = getSourceSubtitleFormat(sub);
+        return {
+          html: sub.label,
+          action: 'switch',
+          engine: isAdvanced ? 'jassub' : 'native',
+          url: sub.url,
+          fallbackUrl: sub.fallbackUrl,
+          fallbackFormat: sub.fallbackFormat,
+          format,
+        };
+      }),
       ...(customSubtitle
         ? [
           {
             html: `本地：${customSubtitle.name}`,
             action: 'switch',
+            engine: customSubtitle.engine,
             url: customSubtitle.url,
+            content: customSubtitle.content,
           },
         ]
         : []),
@@ -2001,14 +2201,38 @@ function PlayPageClient() {
         }
 
         if (item.action === 'close') {
-          artPlayerRef.current.subtitle.show = false;
-          currentSubtitleLabelRef.current = '关闭';
+          closeSubtitle();
           return item.html;
         }
 
         if (item.action === 'upload') {
           customSubtitleInputRef.current?.click();
           return currentSubtitleLabelRef.current;
+        }
+
+        if (item.engine === 'jassub') {
+          const switchPromise = item.content
+            ? switchAdvancedSubtitle(item.content, item.html)
+            : item.url
+              ? switchSourceSubtitle({
+                label: item.html,
+                url: item.url,
+                fallbackUrl: item.fallbackUrl,
+                fallbackFormat: item.fallbackFormat,
+                format: item.format,
+                renderMode: 'jassub',
+              })
+              : Promise.resolve();
+
+          void switchPromise.catch((error) => {
+            console.warn('[Subtitle] 高级字幕切换失败:', error);
+            setToast({
+              message: error instanceof Error ? error.message : '高级字幕切换失败',
+              type: 'error',
+              onClose: () => setToast(null),
+            });
+          });
+          return item.html;
         }
 
         if (item.url) {
@@ -2022,6 +2246,41 @@ function PlayPageClient() {
     });
   };
 
+  const loadNativeCustomSubtitle = async (file: File) => {
+    const convertedSubtitle = await convertSubtitleFileToVttObjectUrl(file);
+    revokeCustomSubtitle();
+
+    customSubtitleRef.current = {
+      ...convertedSubtitle,
+      engine: 'native',
+      episodeIndex: currentEpisodeIndexRef.current,
+    };
+
+    switchSubtitle(
+      convertedSubtitle.url,
+      `本地：${convertedSubtitle.name}`
+    );
+    updateSubtitleSetting();
+
+    return convertedSubtitle;
+  };
+
+  const loadAdvancedCustomSubtitle = async (file: File, format: string) => {
+    const content = await file.text();
+    revokeCustomSubtitle();
+
+    customSubtitleRef.current = {
+      name: file.name,
+      format,
+      engine: 'jassub',
+      content,
+      episodeIndex: currentEpisodeIndexRef.current,
+    };
+
+    await switchAdvancedSubtitle(content, `本地：${file.name}`);
+    updateSubtitleSetting();
+  };
+
   const handleCustomSubtitleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -2030,29 +2289,49 @@ function PlayPageClient() {
 
     if (!file) return;
 
+    const extension = getSubtitleFileExtension(file.name);
+
     try {
-      const convertedSubtitle = await convertSubtitleFileToVttObjectUrl(file);
-      revokeCustomSubtitle();
+      if (isAdvancedSubtitleFormat(extension)) {
+        await loadAdvancedCustomSubtitle(file, extension);
+        setToast({
+          message: `已加载高级字幕：${file.name}`,
+          type: 'success',
+          onClose: () => setToast(null),
+        });
+        return;
+      }
 
-      customSubtitleRef.current = {
-        ...convertedSubtitle,
-        episodeIndex: currentEpisodeIndexRef.current,
-      };
-
-      switchSubtitle(
-        convertedSubtitle.url,
-        `本地：${convertedSubtitle.name}`
-      );
-      updateSubtitleSetting();
+      const convertedSubtitle = await loadNativeCustomSubtitle(file);
       setToast({
         message: `已加载本地字幕：${convertedSubtitle.name}`,
         type: 'success',
         onClose: () => setToast(null),
       });
     } catch (error) {
-      console.warn('[Subtitle] 自定义字幕加载失败:', error);
+      let displayError = error;
+
+      if (isAdvancedSubtitleFormat(extension)) {
+        console.warn('[Subtitle] 高级字幕加载失败，尝试降级为普通字幕:', displayError);
+
+        try {
+          const convertedSubtitle = await loadNativeCustomSubtitle(file);
+          setToast({
+            message: `高级字幕渲染失败，已降级为普通字幕：${convertedSubtitle.name}`,
+            type: 'info',
+            duration: 5000,
+            onClose: () => setToast(null),
+          });
+          return;
+        } catch (fallbackError) {
+          console.warn('[Subtitle] 高级字幕降级加载失败:', fallbackError);
+          displayError = fallbackError;
+        }
+      }
+
+      console.warn('[Subtitle] 自定义字幕加载失败:', displayError);
       setToast({
-        message: error instanceof Error ? error.message : '字幕加载失败',
+        message: displayError instanceof Error ? displayError.message : '字幕加载失败',
         type: 'error',
         onClose: () => setToast(null),
       });
@@ -4602,11 +4881,16 @@ function PlayPageClient() {
     if (!artPlayerRef.current || !detail) return;
 
     revokeCustomSubtitle();
-    const currentSubtitles = detail.subtitles?.[currentEpisodeIndex] || [];
+    const currentSubtitles = (detail.subtitles?.[currentEpisodeIndex] || []) as SourceSubtitleItem[];
 
     // 如果有字幕，更新播放器字幕
     if (currentSubtitles.length > 0) {
-      switchSubtitle(currentSubtitles[0].url, currentSubtitles[0].label);
+      currentSubtitleLabelRef.current = currentSubtitles[0].label;
+      void switchSourceSubtitle(currentSubtitles[0]).catch((error) => {
+        console.warn('[Subtitle] 源字幕加载失败:', error);
+        artPlayerRef.current.subtitle.show = false;
+        currentSubtitleLabelRef.current = '关闭';
+      });
     } else {
       artPlayerRef.current.subtitle.show = false;
       currentSubtitleLabelRef.current = '关闭';
@@ -6403,9 +6687,11 @@ function PlayPageClient() {
         Artplayer.USE_RAF = true;
 
         // 获取当前集的字幕
-        const currentSubtitles = detailRef.current?.subtitles?.[currentEpisodeIndex] || [];
+        const currentSubtitles = (detailRef.current?.subtitles?.[currentEpisodeIndex] || []) as SourceSubtitleItem[];
+        const defaultSubtitle = currentSubtitles[0];
+        const shouldUseNativeInitialSubtitle = !!defaultSubtitle && !isAdvancedSourceSubtitle(defaultSubtitle);
         const savedSubtitleSize = typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em';
-        currentSubtitleLabelRef.current = currentSubtitles[0]?.label || '关闭';
+        currentSubtitleLabelRef.current = defaultSubtitle?.label || '关闭';
 
         artPlayerRef.current = new Artplayer({
           container: artRef.current!,
@@ -6427,9 +6713,9 @@ function PlayPageClient() {
           aspectRatio: false,
           fullscreen: !isIOS,  // iOS 禁用原生全屏按钮，避免触发系统播放器
           fullscreenWeb: true,  // 保留网页全屏按钮（所有平台）
-          ...(currentSubtitles.length > 0 ? {
+          ...(shouldUseNativeInitialSubtitle ? {
             subtitle: {
-              url: currentSubtitles[0].url,
+              url: defaultSubtitle!.url,
               type: 'vtt',
               style: {
                 color: '#fff',
@@ -7544,8 +7830,22 @@ function PlayPageClient() {
 
           applyProgressThumbConfig();
 
-          // 添加字幕切换和本地字幕上传功能
-          updateSubtitleSetting();
+          // 添加字幕切换和本地字幕上传功能；ASS/SSA 需要播放器 ready 后挂载 JASSUB
+          const readySubtitles = (detailRef.current?.subtitles?.[currentEpisodeIndexRef.current] || []) as SourceSubtitleItem[];
+          const readyDefaultSubtitle = readySubtitles[0];
+          if (readyDefaultSubtitle && isAdvancedSourceSubtitle(readyDefaultSubtitle)) {
+            void switchSourceSubtitle(readyDefaultSubtitle)
+              .catch((error) => {
+                console.warn('[Subtitle] 高级字幕自动加载失败:', error);
+                if (artPlayerRef.current) {
+                  artPlayerRef.current.subtitle.show = false;
+                }
+                currentSubtitleLabelRef.current = '关闭';
+              })
+              .finally(updateSubtitleSetting);
+          } else {
+            updateSubtitleSetting();
+          }
 
           // 添加字幕大小设置
           if (artPlayerRef.current) {

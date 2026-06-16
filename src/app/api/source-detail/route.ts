@@ -201,10 +201,8 @@ export async function GET(request: NextRequest) {
 
       const client = await embyManager.getClient(embyKey);
 
-      // 获取代理 token（如果启用了代理）
-      const proxyToken = client.isProxyEnabled()
-        ? await getProxyToken(request)
-        : null;
+      // 获取代理 token（图片/字幕代理使用；没有 token 时会回退到登录态校验）
+      const proxyToken = await getProxyToken(request);
 
       // 获取媒体详情
       const item = await client.getItem(id);
@@ -212,7 +210,7 @@ export async function GET(request: NextRequest) {
       // 根据类型处理
       if (item.Type === 'Movie') {
         // 电影
-        const subtitles = client.getSubtitles(item);
+        const subtitles = client.getSubtitles(item, proxyToken);
 
         const result = {
           source: sourceCode, // 保持与请求一致（emby 或 emby_key）
@@ -277,7 +275,7 @@ export async function GET(request: NextRequest) {
               .toString()
               .padStart(2, '0')}`;
           }),
-          subtitles: allEpisodes.map((ep) => client.getSubtitles(ep)),
+          subtitles: allEpisodes.map((ep) => client.getSubtitles(ep, proxyToken)),
           proxyMode: false,
         };
 

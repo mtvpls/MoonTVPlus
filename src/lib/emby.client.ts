@@ -41,6 +41,19 @@ interface EmbyItem {
   }>;
 }
 
+export interface EmbySubtitle {
+  url: string;
+  fallbackUrl?: string;
+  fallbackFormat?: string;
+  language: string;
+  label: string;
+  format: string;
+  sourceFormat: string;
+  codec?: string;
+  isExternal?: boolean;
+  renderMode: 'native' | 'jassub';
+}
+
 interface EmbyItemsResult {
   Items: EmbyItem[];
   TotalRecordCount: number;
@@ -536,8 +549,89 @@ export class EmbyClient {
     return url;
   }
 
-  getSubtitles(item: EmbyItem): Array<{ url: string; language: string; label: string }> {
-    const subtitles: Array<{ url: string; language: string; label: string }> = [];
+  private normalizeSubtitleFormat(codec?: string, deliveryUrl?: string): string {
+    const normalizedCodec = codec?.trim().toLowerCase();
+
+    if (normalizedCodec) {
+      const codecMap: Record<string, string> = {
+        subrip: 'srt',
+        webvtt: 'vtt',
+        'text/vtt': 'vtt',
+        'hdmv_pgs_subtitle': 'pgs',
+        pgssub: 'pgs',
+        dvdsub: 'sub',
+        dvbsub: 'sub',
+      };
+
+      return codecMap[normalizedCodec] || normalizedCodec;
+    }
+
+    const extension = deliveryUrl
+      ?.split('?')[0]
+      ?.match(/\.([a-z0-9]+)$/i)?.[1]
+      ?.toLowerCase();
+
+    return extension || 'unknown';
+  }
+
+  private getSubtitleTargetFormat(sourceFormat: string): string {
+    return sourceFormat === 'ass' || sourceFormat === 'ssa' ? sourceFormat : 'vtt';
+  }
+
+  private buildSubtitleStreamUrl(
+    itemId: string,
+    mediaSourceId: string,
+    streamIndex: number,
+    format: string,
+    proxyToken?: string | null,
+    forceDirectUrl = false
+  ): string {
+    const safeFormat = /^[a-z0-9]+$/i.test(format) ? format.toLowerCase() : 'vtt';
+
+    if (!forceDirectUrl) {
+      const subscribeToken = proxyToken || 'proxy';
+      const params = new URLSearchParams({
+        itemId,
+        mediaSourceId,
+        streamIndex: streamIndex.toString(),
+        format: safeFormat,
+      });
+
+      if (this.embyKey) {
+        params.set('embyKey', this.embyKey);
+      }
+
+      return `/api/emby/subtitle/${encodeURIComponent(subscribeToken)}/subtitle.${safeFormat}?${params.toString()}`;
+    }
+
+    const params = new URLSearchParams();
+    const token = this.apiKey || this.authToken;
+    if (token) params.set('api_key', token);
+
+    const queryString = params.toString();
+    return `${this.serverUrl}/Videos/${itemId}/${mediaSourceId}/Subtitles/${streamIndex}/Stream.${safeFormat}${queryString ? '?' + queryString : ''}`;
+  }
+
+  async getSubtitleStreamUrl(
+    itemId: string,
+    mediaSourceId: string,
+    streamIndex: number,
+    format: string,
+    forceDirectUrl = false
+  ): Promise<string> {
+    await this.ensureAuthenticated();
+    return this.buildSubtitleStreamUrl(
+      itemId,
+      mediaSourceId,
+      streamIndex,
+      format,
+      undefined,
+      forceDirectUrl
+    );
+  }
+
+  getSubtitles(item: EmbyItem, proxyToken?: string | null): EmbySubtitle[] {
+    const subtitles: EmbySubtitle[] = [];
 
     if (!item.MediaSources || item.MediaSources.length === 0) {
       return subtitles;
@@ -548,29 +642,43 @@ export class EmbyClient {
       return subtitles;
     }
 
-    const token = this.apiKey || this.authToken;
-
     mediaSource.MediaStreams
       .filter((stream) => stream.Type === 'Subtitle')
       .forEach((stream) => {
         const language = stream.Language || 'unknown';
-        const label = stream.DisplayTitle || `${language} (${stream.Codec})`;
+        const sourceFormat = this.normalizeSubtitleFormat(stream.Codec, stream.DeliveryUrl);
+        const targetFormat = this.getSubtitleTargetFormat(sourceFormat);
+        const renderMode = targetFormat === 'ass' || targetFormat === 'ssa' ? 'jassub' : 'native';
+        const label = stream.DisplayTitle || `${language} (${stream.Codec || targetFormat})`;
 
-        // 外部字幕使用 DeliveryUrl
-        if (stream.IsExternal && stream.DeliveryUrl) {
-          subtitles.push({
-            url: `${this.serverUrl}${stream.DeliveryUrl}`,
-            language,
-            label,
-          });
-        } else {
-          // 内嵌字幕使用 Stream API
-          subtitles.push({
-            url: `${this.serverUrl}/Videos/${item.Id}/${mediaSource.Id}/Subtitles/${stream.Index}/Stream.vtt?api_key=${token}`,
-            language,
-            label,
-          });
-        }
+        subtitles.push({
+          url: this.buildSubtitleStreamUrl(
+            item.Id,
+            mediaSource.Id,
+            stream.Index,
+            targetFormat,
+            proxyToken
+          ),
+          ...(renderMode === 'jassub'
+            ? {
+              fallbackUrl: this.buildSubtitleStreamUrl(
+                item.Id,
+                mediaSource.Id,
+                stream.Index,
+                'vtt',
+                proxyToken
+              ),
+              fallbackFormat: 'vtt',
+            }
+            : {}),
+          language,
+          label,
+          format: targetFormat,
+          sourceFormat,
+          codec: stream.Codec,
+          isExternal: stream.IsExternal,
+          renderMode,
+        });
       });
 
     return subtitles;

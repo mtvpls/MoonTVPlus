@@ -59,6 +59,9 @@ importers:
       artplayer-plugin-danmuku:
         specifier: ^5.2.0
         version: 5.2.0
+      artplayer-plugin-jassub:
+        specifier: 1.1.0
+        version: 1.1.0
       better-sqlite3:
         specifier: ^12.6.2
         version: 12.6.2
@@ -3801,6 +3804,9 @@ packages:
 
   artplayer-plugin-danmuku@5.2.0:
     resolution: {integrity: sha512-iHHSGEc0J+gl7imX4nmLqqC7LXmv8xeGf2lUevhhyUCoiCRZplecpKQICHjErVb1Yqyp1xCy6Sp8eYN+EpFWFw==}
+
+  artplayer-plugin-jassub@1.1.0:
+    resolution: {integrity: sha512-vQwEtZMmkwr5utbxfUAeE/gRccl2nfcz+SYP2Subn/L8cVIFdMXWMgicm7ZkPVtAoBbCav7p0yP4pwXkCKMzAg==}
 
   artplayer@5.4.0:
     resolution: {integrity: sha512-2B+plbx8N2yNsjK4nJU3+EOG8TULm1LRZk/QPkWRAMEX2Ee/MSnZG/WJYz8kcoZxZuLKcQ3uXifqLuPxZOH29A==}
@@ -13332,6 +13338,8 @@ snapshots:
   artplayer-plugin-auto-thumbnail@1.1.0: {}
 
   artplayer-plugin-danmuku@5.2.0: {}
+
+  artplayer-plugin-jassub@1.1.0: {}
 
   artplayer@5.4.0:
     dependencies:

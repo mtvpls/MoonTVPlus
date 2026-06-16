@@ -1,6 +1,5 @@
 .env
 .env*.local
-pnpm-lock.yaml
 public/screenshot1.png
 public/screenshot2.png
 public/screenshot3.png

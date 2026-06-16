@@ -11,6 +11,20 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "223.1.0",
+    date: "2026-06-15",
+    added: [
+    " web tv模式增加上下键可改为菜单模式",
+    "支持高级字幕（ass，ssa）渲染"
+    ],
+    changed: [
+    "web tv优化选集面板聚焦"
+    ],
+    fixed: [
+      // 无修复内容
+    ]
+  },
+  {
     version: "223.0.0",
     date: "2026-06-11",
     added: [
@@ -36,7 +50,7 @@ export const changelog: ChangelogEntry[] = [
     "web tv模式左右焦点锁定，默认聚焦首页导航",
     "提升播放页带背景图下选集面板的对比度",
     "首页轮播图标题自适应大小",
-    "artplayer到5.4.0",
+    "升级artplayer到5.4.0",
     "cloudflare环境下排除无用nodejs包"
     ],
     fixed: [

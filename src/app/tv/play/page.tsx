@@ -17,16 +17,16 @@ import {
   SkipBack,
   SkipForward,
   SlidersHorizontal,
-  X,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Suspense,
   type Dispatch,
   type FocusEvent,
   type SetStateAction,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -34,16 +34,6 @@ import {
   useState,
 } from 'react';
 
-import {
-  deleteFavorite,
-  generateStorageKey,
-  getAllPlayRecords,
-  getSkipConfig,
-  isFavorited,
-  saveFavorite,
-  savePlayRecord,
-} from '@/lib/db.client';
-import { SearchResult } from '@/lib/types';
 import {
   convertDanmakuFormat,
   getDanmakuById,
@@ -53,6 +43,17 @@ import {
   saveDanmakuDisplayState,
   searchAnime,
 } from '@/lib/danmaku/api';
+import {
+  deleteFavorite,
+  generateStorageKey,
+  getAllPlayRecords,
+  getSkipConfig,
+  isFavorited,
+  saveFavorite,
+  savePlayRecord,
+} from '@/lib/db.client';
+import { loadTVPlayerUpDownAction } from '@/lib/tv-preferences';
+import { SearchResult } from '@/lib/types';
 
 import TVNativeVideo from '@/components/tv/player/TVNativeVideo';
 import {
@@ -70,6 +71,11 @@ const TV_DANMAKU_SETTINGS_KEY = 'tv_danmaku_settings';
 const TV_VOLUME_KEY = 'tv_player_volume';
 const TV_MUTED_KEY = 'tv_player_muted';
 const REMOTE_KEY_DEDUPE_MS = 350;
+const TV_EPISODE_GRID_COLUMNS = 4;
+
+const TV_EPISODE_FOCUS_GROUPS = ['sources', 'pages', 'episodes'] as const;
+type TVEpisodeFocusGroup = (typeof TV_EPISODE_FOCUS_GROUPS)[number];
+type TVEpisodeFocusDirection = 'up' | 'down' | 'left' | 'right';
 
 type TVDanmakuSettings = {
   fontSize: number;
@@ -214,6 +220,198 @@ function moveFocusWithinScope(scope: HTMLElement, direction: 'up' | 'down') {
   elements[nextIndex]?.focus({ preventScroll: true });
 }
 
+function getEpisodePanelGroupElements(
+  panel: HTMLElement,
+  group: TVEpisodeFocusGroup
+) {
+  return Array.from(
+    panel.querySelectorAll<HTMLElement>(
+      `[data-tv-episode-focus-group="${group}"]`
+    )
+  );
+}
+
+function getEpisodePanelFirstElement(panel: HTMLElement) {
+  for (const group of TV_EPISODE_FOCUS_GROUPS) {
+    const first = getEpisodePanelGroupElements(panel, group)[0];
+    if (first) return first;
+  }
+  return null;
+}
+
+function focusEpisodePanelElement(element: HTMLElement | null | undefined) {
+  if (!element) return false;
+  element.focus({ preventScroll: true });
+  element.scrollIntoView({
+    block: 'nearest',
+    inline: 'nearest',
+    behavior: 'smooth',
+  });
+  return true;
+}
+
+function getClosestByHorizontalCenter(
+  elements: HTMLElement[],
+  anchor: HTMLElement
+) {
+  if (elements.length === 0) return null;
+  const anchorRect = anchor.getBoundingClientRect();
+  const anchorCenter = anchorRect.left + anchorRect.width / 2;
+  return elements.reduce((closest, item) => {
+    const itemRect = item.getBoundingClientRect();
+    const itemCenter = itemRect.left + itemRect.width / 2;
+    const closestRect = closest.getBoundingClientRect();
+    const closestCenter = closestRect.left + closestRect.width / 2;
+    return Math.abs(itemCenter - anchorCenter) <
+      Math.abs(closestCenter - anchorCenter)
+      ? item
+      : closest;
+  }, elements[0]);
+}
+
+function getSelectedEpisodePanelButton(
+  panel: HTMLElement,
+  episodeIndex: number
+) {
+  return panel.querySelector<HTMLElement>(
+    `[data-tv-episode-index="${episodeIndex}"]`
+  );
+}
+
+function focusEpisodePanelInitial(
+  panel: HTMLElement | null,
+  episodeIndex: number
+) {
+  if (!panel) return false;
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && panel.contains(active)) {
+    focusEpisodePanelElement(active);
+    return true;
+  }
+
+  return focusEpisodePanelElement(
+    getSelectedEpisodePanelButton(panel, episodeIndex) ||
+      getEpisodePanelFirstElement(panel)
+  );
+}
+
+function moveFocusWithinEpisodePanel(
+  panel: HTMLElement | null,
+  direction: TVEpisodeFocusDirection,
+  episodeIndex: number
+) {
+  if (!panel) return;
+
+  const active = document.activeElement;
+  const activeElement =
+    active instanceof HTMLElement && panel.contains(active)
+      ? active.closest<HTMLElement>('[data-tv-episode-focus-group]')
+      : null;
+
+  if (!activeElement) {
+    focusEpisodePanelInitial(panel, episodeIndex);
+    return;
+  }
+
+  const group = activeElement.dataset.tvEpisodeFocusGroup as
+    | TVEpisodeFocusGroup
+    | undefined;
+  if (!group || !TV_EPISODE_FOCUS_GROUPS.includes(group)) {
+    focusEpisodePanelInitial(panel, episodeIndex);
+    return;
+  }
+
+  const elements = getEpisodePanelGroupElements(panel, group);
+  const index = elements.indexOf(activeElement);
+  if (index < 0) {
+    focusEpisodePanelInitial(panel, episodeIndex);
+    return;
+  }
+
+  let target: HTMLElement | null = activeElement;
+
+  if (direction === 'left' || direction === 'right') {
+    const delta = direction === 'right' ? 1 : -1;
+
+    if (group === 'episodes') {
+      const rowStart =
+        Math.floor(index / TV_EPISODE_GRID_COLUMNS) * TV_EPISODE_GRID_COLUMNS;
+      const rowEnd = Math.min(
+        rowStart + TV_EPISODE_GRID_COLUMNS - 1,
+        elements.length - 1
+      );
+      const nextIndex = Math.max(rowStart, Math.min(rowEnd, index + delta));
+      target = elements[nextIndex] || activeElement;
+    } else {
+      const nextIndex = Math.max(
+        0,
+        Math.min(elements.length - 1, index + delta)
+      );
+      target = elements[nextIndex] || activeElement;
+    }
+
+    focusEpisodePanelElement(target);
+    return;
+  }
+
+  if (group === 'episodes') {
+    const nextIndex =
+      direction === 'up'
+        ? index - TV_EPISODE_GRID_COLUMNS
+        : index + TV_EPISODE_GRID_COLUMNS;
+
+    if (nextIndex >= 0 && nextIndex < elements.length) {
+      target = elements[nextIndex] || activeElement;
+    } else if (direction === 'up') {
+      target =
+        getClosestByHorizontalCenter(
+          getEpisodePanelGroupElements(panel, 'pages'),
+          activeElement
+        ) ||
+        getClosestByHorizontalCenter(
+          getEpisodePanelGroupElements(panel, 'sources'),
+          activeElement
+        ) ||
+        activeElement;
+    }
+
+    focusEpisodePanelElement(target);
+    return;
+  }
+
+  if (group === 'pages') {
+    target =
+      direction === 'up'
+        ? getClosestByHorizontalCenter(
+            getEpisodePanelGroupElements(panel, 'sources'),
+            activeElement
+          ) || activeElement
+        : getSelectedEpisodePanelButton(panel, episodeIndex) ||
+          getClosestByHorizontalCenter(
+            getEpisodePanelGroupElements(panel, 'episodes'),
+            activeElement
+          ) ||
+          activeElement;
+    focusEpisodePanelElement(target);
+    return;
+  }
+
+  target =
+    direction === 'down'
+      ? getClosestByHorizontalCenter(
+          getEpisodePanelGroupElements(panel, 'pages'),
+          activeElement
+        ) ||
+        getSelectedEpisodePanelButton(panel, episodeIndex) ||
+        getClosestByHorizontalCenter(
+          getEpisodePanelGroupElements(panel, 'episodes'),
+          activeElement
+        ) ||
+        activeElement
+      : activeElement;
+  focusEpisodePanelElement(target);
+}
+
 function TVPlayClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -241,6 +439,7 @@ function TVPlayClient() {
   const [muted, setMuted] = useState(initialVolumeState.muted);
   const [volume, setVolume] = useState(initialVolumeState.volume);
   const [showVolumeHint, setShowVolumeHint] = useState(false);
+  const [upDownAction] = useState(loadTVPlayerUpDownAction);
   const [seekHint, setSeekHint] = useState<{
     current: number;
     duration: number;
@@ -285,6 +484,7 @@ function TVPlayClient() {
   } | null>(null);
   const [time, setTime] = useState({ current: 0, duration: 0 });
   const timeRef = useRef({ current: 0, duration: 0 });
+  const episodesPanelRef = useRef<HTMLElement | null>(null);
   const episodeButtonRefs = useRef<Record<number, HTMLButtonElement | null>>(
     {}
   );
@@ -324,7 +524,7 @@ function TVPlayClient() {
         setSources(data.sources);
         const maxIndex = Math.max(0, (data.detail.episodes?.length || 1) - 1);
         const explicitIndex = searchParams.has('index');
-        let safeIndex = Math.max(
+        const safeIndex = Math.max(
           0,
           Math.min(
             initialIndex || data.detail.initialEpisodeIndex || 0,
@@ -906,6 +1106,38 @@ function TVPlayClient() {
       }
 
       if (
+        showEpisodes &&
+        (event.key === 'ArrowLeft' ||
+          event.key === 'ArrowRight' ||
+          event.key === 'ArrowUp' ||
+          event.key === 'ArrowDown')
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        revealPanel();
+        moveFocusWithinEpisodePanel(
+          episodesPanelRef.current,
+          event.key
+            .replace('Arrow', '')
+            .toLowerCase() as TVEpisodeFocusDirection,
+          episodeIndex
+        );
+        return;
+      }
+
+      if (showEpisodes && event.key === 'Tab') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        revealPanel();
+        moveFocusWithinEpisodePanel(
+          episodesPanelRef.current,
+          event.shiftKey ? 'up' : 'down',
+          episodeIndex
+        );
+        return;
+      }
+
+      if (
         !showPanel &&
         !showEpisodes &&
         (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
@@ -922,7 +1154,11 @@ function TVPlayClient() {
         (event.key === 'ArrowUp' || event.key === 'ArrowDown')
       ) {
         event.preventDefault();
-        setVideoVolume(volume + (event.key === 'ArrowUp' ? 0.05 : -0.05));
+        if (upDownAction === 'volume') {
+          setVideoVolume(volume + (event.key === 'ArrowUp' ? 0.05 : -0.05));
+        } else {
+          revealPanel();
+        }
         return;
       }
 
@@ -958,6 +1194,7 @@ function TVPlayClient() {
     showDetail,
     showEpisodes,
     showPanel,
+    upDownAction,
     volume,
   ]);
 
@@ -967,8 +1204,38 @@ function TVPlayClient() {
     setEpisodePage(targetPage);
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     window.requestAnimationFrame(() => {
-      episodeButtonRefs.current[episodeIndex]?.focus({ preventScroll: true });
+      focusEpisodePanelElement(episodeButtonRefs.current[episodeIndex]);
     });
+  }, [episodeIndex, showEpisodes]);
+
+  useEffect(() => {
+    if (!showEpisodes) return;
+
+    let raf = window.requestAnimationFrame(() => {
+      focusEpisodePanelInitial(episodesPanelRef.current, episodeIndex);
+    });
+
+    const keepFocusInsideEpisodesPanel = (event: Event) => {
+      const panel = episodesPanelRef.current;
+      const target = event.target;
+      if (!panel || (target instanceof Node && panel.contains(target))) return;
+
+      if (raf) window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(() => {
+        focusEpisodePanelInitial(episodesPanelRef.current, episodeIndex);
+      });
+    };
+
+    document.addEventListener('focusin', keepFocusInsideEpisodesPanel, true);
+
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      document.removeEventListener(
+        'focusin',
+        keepFocusInsideEpisodesPanel,
+        true
+      );
+    };
   }, [episodeIndex, showEpisodes]);
 
   useEffect(() => {
@@ -1347,7 +1614,11 @@ function TVPlayClient() {
       </div>
 
       {showEpisodes && (
-        <aside className='absolute bottom-40 right-8 max-h-[55vh] w-[560px] overflow-y-auto rounded-[34px] border border-white/10 bg-slate-950/92 p-6 shadow-2xl shadow-black/70 backdrop-blur-2xl'>
+        <aside
+          ref={episodesPanelRef}
+          data-tv-episode-panel
+          className='absolute bottom-40 right-8 max-h-[55vh] w-[560px] overflow-y-auto rounded-[34px] border border-white/10 bg-slate-950/92 p-6 shadow-2xl shadow-black/70 backdrop-blur-2xl'
+        >
           <h2 className='mb-5 flex items-center gap-3 text-3xl font-black'>
             <Layers className='h-8 w-8 text-rose-500' />
             选集与线路
@@ -1361,6 +1632,7 @@ function TVPlayClient() {
                     key={`${item.source}-${item.id}`}
                     onClick={() => switchSource(item)}
                     data-tv-player-control
+                    data-tv-episode-focus-group='sources'
                     className={`tv-focusable shrink-0 cursor-pointer rounded-2xl px-5 py-3 text-xl font-bold outline-none focus:ring-4 focus:ring-rose-300 ${
                       detail.source === item.source && detail.id === item.id
                         ? 'bg-rose-600'
@@ -1382,6 +1654,7 @@ function TVPlayClient() {
                   key={page}
                   onClick={() => setEpisodePage(page)}
                   data-tv-player-control
+                  data-tv-episode-focus-group='pages'
                   className={`tv-focusable shrink-0 cursor-pointer rounded-2xl px-5 py-3 text-xl font-black outline-none focus:ring-4 focus:ring-rose-300 ${
                     page === episodePage ? 'bg-rose-600' : 'bg-white/10'
                   }`}
@@ -1401,6 +1674,8 @@ function TVPlayClient() {
                 }}
                 onClick={() => switchEpisode(index)}
                 data-tv-player-control
+                data-tv-episode-focus-group='episodes'
+                data-tv-episode-index={index}
                 className={`tv-focusable min-h-16 cursor-pointer rounded-2xl px-3 py-3 text-lg font-black outline-none focus:ring-4 focus:ring-rose-300 ${
                   index === episodeIndex ? 'bg-rose-600' : 'bg-white/10'
                 }`}

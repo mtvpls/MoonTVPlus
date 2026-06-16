@@ -28,11 +28,18 @@ const focusableSelector = [
 function isVisible(element: HTMLElement) {
   const rect = element.getBoundingClientRect();
   const style = window.getComputedStyle(element);
-  return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+  return (
+    rect.width > 0 &&
+    rect.height > 0 &&
+    style.visibility !== 'hidden' &&
+    style.display !== 'none'
+  );
 }
 
 function getScopedFocusableElements() {
-  const scope = document.querySelector<HTMLElement>('[data-tv-focus-scope="active"]');
+  const scope = document.querySelector<HTMLElement>(
+    '[data-tv-focus-scope="active"]'
+  );
   if (scope) {
     return Array.from(scope.querySelectorAll<HTMLElement>(focusableSelector))
       .filter((element) => !element.closest('[data-tv-remote]'))
@@ -46,7 +53,9 @@ function getScopedFocusableElements() {
 function getFocusableElements() {
   const scopedElements = getScopedFocusableElements();
   if (scopedElements) {
-    return Array.from(new Set([...getTopNavigationElements(), ...scopedElements]));
+    return Array.from(
+      new Set([...getTopNavigationElements(), ...scopedElements])
+    );
   }
 
   return Array.from(document.querySelectorAll<HTMLElement>(focusableSelector))
@@ -59,8 +68,12 @@ function getScrollableParent(element: HTMLElement) {
   let current = element.parentElement;
   while (current && current !== document.body) {
     const style = window.getComputedStyle(current);
-    const canScrollY = /(auto|scroll)/.test(style.overflowY) && current.scrollHeight > current.clientHeight;
-    const canScrollX = /(auto|scroll)/.test(style.overflowX) && current.scrollWidth > current.clientWidth;
+    const canScrollY =
+      /(auto|scroll)/.test(style.overflowY) &&
+      current.scrollHeight > current.clientHeight;
+    const canScrollX =
+      /(auto|scroll)/.test(style.overflowX) &&
+      current.scrollWidth > current.clientWidth;
     if (canScrollY || canScrollX) return current;
     current = current.parentElement;
   }
@@ -135,7 +148,9 @@ function focusNearestTopNavigationElement(active: HTMLElement) {
     if (!(element instanceof HTMLAnchorElement)) return false;
     const href = element.getAttribute('href');
     if (!href) return false;
-    return href === '/tv' ? pathname === '/tv' : pathname === href || pathname.startsWith(`${href}/`);
+    return href === '/tv'
+      ? pathname === '/tv'
+      : pathname === href || pathname.startsWith(`${href}/`);
   });
 
   if (activeNavigationElement) {
@@ -145,28 +160,35 @@ function focusNearestTopNavigationElement(active: HTMLElement) {
 
   const activeRect = active.getBoundingClientRect();
   const activeCenterX = activeRect.left + activeRect.width / 2;
-  const bestNavigationElement = topNavigationElements.reduce<HTMLElement | null>((best, element) => {
-    if (!best) return element;
-    const rect = element.getBoundingClientRect();
-    const bestRect = best.getBoundingClientRect();
-    const distance = Math.abs(rect.left + rect.width / 2 - activeCenterX);
-    const bestDistance = Math.abs(bestRect.left + bestRect.width / 2 - activeCenterX);
-    return distance < bestDistance ? element : best;
-  }, null);
+  const bestNavigationElement =
+    topNavigationElements.reduce<HTMLElement | null>((best, element) => {
+      if (!best) return element;
+      const rect = element.getBoundingClientRect();
+      const bestRect = best.getBoundingClientRect();
+      const distance = Math.abs(rect.left + rect.width / 2 - activeCenterX);
+      const bestDistance = Math.abs(
+        bestRect.left + bestRect.width / 2 - activeCenterX
+      );
+      return distance < bestDistance ? element : best;
+    }, null);
 
   if (!bestNavigationElement) return false;
   focusElement(bestNavigationElement);
   return true;
 }
 
-function moveTopNavigationFocus(active: HTMLElement, direction: 'left' | 'right') {
+function moveTopNavigationFocus(
+  active: HTMLElement,
+  direction: 'left' | 'right'
+) {
   const topNavigationElements = getTopNavigationElements();
   const currentIndex = topNavigationElements.indexOf(active);
   if (currentIndex === -1) return false;
 
-  const nextIndex = direction === 'right'
-    ? Math.min(currentIndex + 1, topNavigationElements.length - 1)
-    : Math.max(currentIndex - 1, 0);
+  const nextIndex =
+    direction === 'right'
+      ? Math.min(currentIndex + 1, topNavigationElements.length - 1)
+      : Math.max(currentIndex - 1, 0);
 
   if (nextIndex === currentIndex) return true;
 
@@ -174,19 +196,25 @@ function moveTopNavigationFocus(active: HTMLElement, direction: 'left' | 'right'
   return true;
 }
 
-function moveHorizontalRowFocus(active: HTMLElement, direction: 'left' | 'right') {
+function moveHorizontalRowFocus(
+  active: HTMLElement,
+  direction: 'left' | 'right'
+) {
   const row = active.closest<HTMLElement>('[data-tv-focus-row="horizontal"]');
   if (!row) return false;
 
-  const rowElements = Array.from(row.querySelectorAll<HTMLElement>(focusableSelector))
+  const rowElements = Array.from(
+    row.querySelectorAll<HTMLElement>(focusableSelector)
+  )
     .filter((element) => !element.closest('[data-tv-no-focus="true"]'))
     .filter(isVisible);
   const currentIndex = rowElements.indexOf(active);
   if (currentIndex === -1) return false;
 
-  const nextIndex = direction === 'right'
-    ? Math.min(currentIndex + 1, rowElements.length - 1)
-    : Math.max(currentIndex - 1, 0);
+  const nextIndex =
+    direction === 'right'
+      ? Math.min(currentIndex + 1, rowElements.length - 1)
+      : Math.max(currentIndex - 1, 0);
 
   if (nextIndex === currentIndex) return true;
 
@@ -197,7 +225,11 @@ function moveHorizontalRowFocus(active: HTMLElement, direction: 'left' | 'right'
 function focusElement(element: HTMLElement) {
   element.focus({ preventScroll: true });
 
-  const isInFixedChrome = Boolean(element.closest('header, [data-tv-remote], [data-tv-player-control], [data-tv-player-root]'));
+  const isInFixedChrome = Boolean(
+    element.closest(
+      'header, [data-tv-remote], [data-tv-player-control], [data-tv-player-root]'
+    )
+  );
 
   // 播放页浮层是 fixed/absolute，不能 scrollIntoView，否则会把全屏播放器滚出视口。
   if (!isInFixedChrome) {
@@ -222,22 +254,30 @@ function focusElement(element: HTMLElement) {
   }
 }
 
-function moveSpatialFocus(direction: 'up' | 'down' | 'left' | 'right', lastFocused?: HTMLElement | null) {
+function moveSpatialFocus(
+  direction: 'up' | 'down' | 'left' | 'right',
+  lastFocused?: HTMLElement | null
+) {
   const elements = getFocusableElements();
   if (elements.length === 0) return;
 
-  const active = document.activeElement instanceof HTMLElement && !document.activeElement.closest('[data-tv-remote]')
-    ? document.activeElement
-    : lastFocused && document.body.contains(lastFocused)
-    ? lastFocused
-    : null;
+  const active =
+    document.activeElement instanceof HTMLElement &&
+    !document.activeElement.closest('[data-tv-remote]')
+      ? document.activeElement
+      : lastFocused && document.body.contains(lastFocused)
+      ? lastFocused
+      : null;
 
   if (!active || !elements.includes(active)) {
     focusElement(elements[0]);
     return;
   }
 
-  if ((direction === 'left' || direction === 'right') && isTopNavigationElement(active)) {
+  if (
+    (direction === 'left' || direction === 'right') &&
+    isTopNavigationElement(active)
+  ) {
     if (moveTopNavigationFocus(active, direction)) return;
   }
 
@@ -282,15 +322,24 @@ function moveSpatialFocus(direction: 'up' | 'down' | 'left' | 'right', lastFocus
     const dy = ty - cy;
 
     const inDirection =
-      direction === 'right' ? dx > 8 && Math.abs(dx) >= Math.abs(dy) * 0.25 :
-      direction === 'left' ? dx < -8 && Math.abs(dx) >= Math.abs(dy) * 0.25 :
-      direction === 'down' ? dy > 8 && Math.abs(dy) >= Math.abs(dx) * 0.25 :
-      dy < -8 && Math.abs(dy) >= Math.abs(dx) * 0.25;
+      direction === 'right'
+        ? dx > 8 && Math.abs(dx) >= Math.abs(dy) * 0.25
+        : direction === 'left'
+        ? dx < -8 && Math.abs(dx) >= Math.abs(dy) * 0.25
+        : direction === 'down'
+        ? dy > 8 && Math.abs(dy) >= Math.abs(dx) * 0.25
+        : dy < -8 && Math.abs(dy) >= Math.abs(dx) * 0.25;
 
     if (!inDirection) continue;
 
-    const primary = direction === 'left' || direction === 'right' ? Math.abs(dx) : Math.abs(dy);
-    const secondary = direction === 'left' || direction === 'right' ? Math.abs(dy) : Math.abs(dx);
+    const primary =
+      direction === 'left' || direction === 'right'
+        ? Math.abs(dx)
+        : Math.abs(dy);
+    const secondary =
+      direction === 'left' || direction === 'right'
+        ? Math.abs(dy)
+        : Math.abs(dx);
     const score = primary + secondary * 2.4;
 
     candidates.push({ element, score });
@@ -298,14 +347,22 @@ function moveSpatialFocus(direction: 'up' | 'down' | 'left' | 'right', lastFocus
 
   let eligibleCandidates = candidates;
   if (direction === 'up' && !isTopNavigationElement(active)) {
-    const contentCandidates = candidates.filter(({ element }) => !isTopNavigationElement(element));
+    const contentCandidates = candidates.filter(
+      ({ element }) => !isTopNavigationElement(element)
+    );
     if (contentCandidates.length > 0) {
       eligibleCandidates = contentCandidates;
     }
   }
 
-  const best = eligibleCandidates.reduce<{ element: HTMLElement; score: number } | null>(
-    (currentBest, candidate) => (!currentBest || candidate.score < currentBest.score ? candidate : currentBest),
+  const best = eligibleCandidates.reduce<{
+    element: HTMLElement;
+    score: number;
+  } | null>(
+    (currentBest, candidate) =>
+      !currentBest || candidate.score < currentBest.score
+        ? candidate
+        : currentBest,
     null
   );
 
@@ -382,7 +439,10 @@ export default function TVVirtualRemote() {
   useEffect(() => {
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
-      if (target instanceof HTMLElement && !target.closest('[data-tv-remote]')) {
+      if (
+        target instanceof HTMLElement &&
+        !target.closest('[data-tv-remote]')
+      ) {
         lastFocusedRef.current = target;
       }
     };
@@ -396,9 +456,23 @@ export default function TVVirtualRemote() {
 
       if (event.defaultPrevented) return;
 
-      if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      if (
+        event.key === 'ArrowUp' ||
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowLeft' ||
+        event.key === 'ArrowRight'
+      ) {
+        // 播放页选集弹窗有自己的方向键导航和焦点陷阱；
+        // 这里如果也执行全局空间焦点移动，会导致一次按键移动两格。
+        if (document.querySelector('[data-tv-episode-panel]')) {
+          return;
+        }
+
         const active = document.activeElement;
-        if (active instanceof HTMLElement && active.closest('[data-tv-danmaku-settings]')) {
+        if (
+          active instanceof HTMLElement &&
+          active.closest('[data-tv-danmaku-settings]')
+        ) {
           return;
         }
 
@@ -412,24 +486,38 @@ export default function TVVirtualRemote() {
           }
         }
 
-        if (active instanceof HTMLInputElement && active.type === 'range' && active.closest('[data-tv-no-focus="true"]')) {
+        if (
+          active instanceof HTMLInputElement &&
+          active.type === 'range' &&
+          active.closest('[data-tv-no-focus="true"]')
+        ) {
           return;
         }
 
         event.preventDefault();
-        const direction = event.key.replace('Arrow', '').toLowerCase() as 'up' | 'down' | 'left' | 'right';
+        const direction = event.key.replace('Arrow', '').toLowerCase() as
+          | 'up'
+          | 'down'
+          | 'left'
+          | 'right';
         moveSpatialFocus(direction, lastFocusedRef.current);
         return;
       }
 
       if (event.key === 'Enter') {
-        const playerRoot = document.querySelector<HTMLElement>('[data-tv-player-root]');
+        const playerRoot = document.querySelector<HTMLElement>(
+          '[data-tv-player-root]'
+        );
         if (playerRoot?.dataset.tvControlsOpen === 'false') {
           return;
         }
 
         const active = document.activeElement;
-        if (active instanceof HTMLElement && !active.closest('input, textarea, select') && !active.closest('[data-tv-remote]')) {
+        if (
+          active instanceof HTMLElement &&
+          !active.closest('input, textarea, select') &&
+          !active.closest('[data-tv-remote]')
+        ) {
           event.preventDefault();
           activateFocused();
         }
@@ -464,46 +552,93 @@ export default function TVVirtualRemote() {
   if (!open) return null;
 
   return (
-    <aside data-tv-remote className='fixed bottom-6 right-6 z-[80] w-[280px] rounded-[34px] border border-white/10 bg-slate-950/88 p-5 text-white shadow-2xl shadow-black/70 backdrop-blur-2xl'>
+    <aside
+      data-tv-remote
+      className='fixed bottom-6 right-6 z-[80] w-[280px] rounded-[34px] border border-white/10 bg-slate-950/88 p-5 text-white shadow-2xl shadow-black/70 backdrop-blur-2xl'
+    >
       <div className='mb-4 flex items-center justify-between'>
         <div>
           <div className='text-xl font-black'>虚拟遥控器</div>
           <div className='text-sm text-slate-400'>F1 打开 / 关闭</div>
         </div>
-        <RemoteButton label='关闭遥控器' onClick={() => setOpen(false)} className='h-11 w-11 rounded-full bg-rose-600/90 hover:bg-rose-500'>
+        <RemoteButton
+          label='关闭遥控器'
+          onClick={() => setOpen(false)}
+          className='h-11 w-11 rounded-full bg-rose-600/90 hover:bg-rose-500'
+        >
           <Power className='h-5 w-5' />
         </RemoteButton>
       </div>
 
       <div className='grid grid-cols-3 gap-3'>
-        <RemoteButton label='返回' onClick={() => fireTVRemoteKey('back')} className='h-14'>
+        <RemoteButton
+          label='返回'
+          onClick={() => fireTVRemoteKey('back')}
+          className='h-14'
+        >
           <RotateCcw className='h-6 w-6' />
         </RemoteButton>
-        <RemoteButton label='主页' onClick={() => fireTVRemoteKey('home')} className='h-14'>
+        <RemoteButton
+          label='主页'
+          onClick={() => fireTVRemoteKey('home')}
+          className='h-14'
+        >
           <Home className='h-6 w-6' />
         </RemoteButton>
-        <RemoteButton label='菜单' onClick={() => fireTVRemoteKey('menu')} className='h-14'>
+        <RemoteButton
+          label='菜单'
+          onClick={() => fireTVRemoteKey('menu')}
+          className='h-14'
+        >
           <Menu className='h-6 w-6' />
         </RemoteButton>
 
         <div />
-        <RemoteButton label='上' onClick={() => fireTVRemoteKey('up')} onRepeat={() => fireTVRemoteKey('up', true)} repeatable className='h-16'>
+        <RemoteButton
+          label='上'
+          onClick={() => fireTVRemoteKey('up')}
+          onRepeat={() => fireTVRemoteKey('up', true)}
+          repeatable
+          className='h-16'
+        >
           <ChevronUp className='h-9 w-9' />
         </RemoteButton>
         <div />
 
-        <RemoteButton label='左' onClick={() => fireTVRemoteKey('left')} onRepeat={() => fireTVRemoteKey('left', true)} repeatable className='h-16'>
+        <RemoteButton
+          label='左'
+          onClick={() => fireTVRemoteKey('left')}
+          onRepeat={() => fireTVRemoteKey('left', true)}
+          repeatable
+          className='h-16'
+        >
           <ChevronLeft className='h-9 w-9' />
         </RemoteButton>
-        <RemoteButton label='确认' onClick={() => fireTVRemoteKey('ok')} className='h-16 rounded-full bg-white text-black hover:bg-slate-200'>
+        <RemoteButton
+          label='确认'
+          onClick={() => fireTVRemoteKey('ok')}
+          className='h-16 rounded-full bg-white text-black hover:bg-slate-200'
+        >
           <CornerDownLeft className='h-8 w-8' />
         </RemoteButton>
-        <RemoteButton label='右' onClick={() => fireTVRemoteKey('right')} onRepeat={() => fireTVRemoteKey('right', true)} repeatable className='h-16'>
+        <RemoteButton
+          label='右'
+          onClick={() => fireTVRemoteKey('right')}
+          onRepeat={() => fireTVRemoteKey('right', true)}
+          repeatable
+          className='h-16'
+        >
           <ChevronRight className='h-9 w-9' />
         </RemoteButton>
 
         <div />
-        <RemoteButton label='下' onClick={() => fireTVRemoteKey('down')} onRepeat={() => fireTVRemoteKey('down', true)} repeatable className='h-16'>
+        <RemoteButton
+          label='下'
+          onClick={() => fireTVRemoteKey('down')}
+          onRepeat={() => fireTVRemoteKey('down', true)}
+          repeatable
+          className='h-16'
+        >
           <ChevronDown className='h-9 w-9' />
         </RemoteButton>
         <div />
