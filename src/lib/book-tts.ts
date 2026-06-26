@@ -150,11 +150,11 @@ export async function getBookTtsConfig(): Promise<BookTtsRuntimeConfig> {
     defaultRate: '+0%',
     defaultPitch: '+0Hz',
     defaultVolume: '+0%',
-    maxCharsPerChunk: 1200,
+    maxCharsPerChunk: 300,
     prefetchChunks: 1,
     cacheEnabled: false,
     cacheTtl: 0,
-    maxTextLengthPerRequest: 2000,
+    maxTextLengthPerRequest: 500,
   };
 }
 
