@@ -1114,7 +1114,7 @@ function ChapterReader({ manifest }: { manifest: BookReadManifest }) {
       setTtsStatus('error');
       return;
     }
-    const chunks = chunkTtsText(text, 1200);
+    const chunks = chunkTtsText(text, 300);
     setTtsChunks(chunks);
     ttsChunksRef.current = chunks;
     setTtsCurrentChunkIndex(0);
@@ -2684,7 +2684,7 @@ export default function BookReadPage() {
         return;
       }
       cleanupTtsAudioUrls();
-      const chunks = chunkTtsText(text, 1200);
+      const chunks = chunkTtsText(text, 300);
       if (chunks.length === 0) {
         setTtsError('当前章节没有可朗读内容');
         setTtsStatus('error');
