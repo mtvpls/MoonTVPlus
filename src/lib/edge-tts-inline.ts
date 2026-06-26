@@ -303,8 +303,8 @@ async function googleTtsChunk(
       res = await fetch(url, {
         method: 'GET',
         headers: { 'User-Agent': ua },
-        dispatcher: agent as never,
-      });
+        ...({ dispatcher: agent } as unknown as RequestInit),
+      } as RequestInit);
     } catch (proxyErr) {
       console.warn('[edge-tts-inline] 代理访问失败，尝试直连:', (proxyErr as Error).message);
       res = null;
