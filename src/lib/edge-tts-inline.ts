@@ -1,6 +1,6 @@
 /**
  * 内联 Edge TTS 客户端 — 不依赖 edge-tts-universal npm 包
- * 使用 Node.js 22+ 内置 WebSocket API + fetch
+ * 优先使用 WebSocket（Docker 环境），WebSocket 不可用时 fallback 到 HTTP TTS
  * 兼容 Docker / Vercel / EdgeOne Cloud Function 等所有 Node.js 运行时
  */
 
@@ -57,14 +57,13 @@ class InlineVoicesManager {
   }
 }
 
-// ── EdgeTTS synthesizer ────────────────────────────────────────
+// ── UUID helper ────────────────────────────────────────────────
 
 function uuid(): string {
-  // Simple UUID v4 using crypto.getRandomValues (available in Node.js 19+)
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
-  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'));
   return [
     hex.slice(0, 4).join(''),
@@ -83,6 +82,211 @@ function escapeXml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 }
+
+// ── WebSocket-based synthesis ──────────────────────────────────
+
+function synthesizeViaWebSocket(
+  text: string,
+  voice: string,
+  rate: string,
+  pitch: string,
+  volume: string
+): Promise<{ audio: Buffer; mimeType: string; subtitle: RawBoundary[] }> {
+  return new Promise((resolve, reject) => {
+    const connId = uuid().replace(/-/g, '');
+    const url = `${WSS_URL}&ConnectionId=${connId}`;
+    const audioChunks: Buffer[] = [];
+    const boundaries: RawBoundary[] = [];
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        try { ws.close(); } catch {}
+        reject(new Error('Edge TTS WebSocket 超时'));
+      }
+    }, 30_000);
+
+    const finish = (err?: Error) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      if (err) return reject(err);
+      const audio = Buffer.concat(audioChunks);
+      resolve({ audio, mimeType: 'audio/mpeg', subtitle: boundaries });
+    };
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      clearTimeout(timeout);
+      return reject(e);
+    }
+
+    ws.binaryType = 'arraybuffer';
+
+    ws.addEventListener('open', () => {
+      const configMsg =
+        'Content-Type:application/json; charset=utf-8\r\n' +
+        'Path:speech.config\r\n\r\n' +
+        JSON.stringify({
+          context: {
+            synthesis: {
+              audio: {
+                metadataoptions: {
+                  sentenceBoundaryEnabled: 'false',
+                  wordBoundaryEnabled: 'true',
+                },
+                outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
+              },
+            },
+          },
+        });
+      ws.send(configMsg);
+
+      const requestId = uuid().replace(/-/g, '');
+      const timestamp = new Date().toISOString();
+      const prosodyAttrs = `rate="${rate}" pitch="${pitch}" volume="${volume}"`;
+      const ssml =
+        `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'>` +
+        `<voice name='${escapeXml(voice)}'>` +
+        `<prosody ${prosodyAttrs}>${escapeXml(text)}</prosody>` +
+        `</voice></speak>`;
+      const ssmlMsg =
+        `X-RequestId:${requestId}\r\n` +
+        `Content-Type:application/ssml+xml\r\n` +
+        `X-Timestamp:${timestamp}\r\n` +
+        `Path:ssml\r\n\r\n` +
+        ssml;
+      ws.send(ssmlMsg);
+    });
+
+    ws.addEventListener('message', (event) => {
+      const data = event.data;
+      if (typeof data === 'string') {
+        if (data.includes('Path:turn.end')) {
+          ws.close();
+          finish();
+        } else if (data.includes('Path:audio.metadata')) {
+          try {
+            const jsonStart = data.indexOf('\r\n\r\n');
+            if (jsonStart !== -1) {
+              const meta = JSON.parse(data.slice(jsonStart + 4));
+              for (const item of meta.Metadata ?? []) {
+                if (item.Type === 'WordBoundary' && item.Data) {
+                  boundaries.push({
+                    offset: item.Data.Offset ?? 0,
+                    duration: item.Data.Duration ?? 0,
+                    text: item.Data.text?.Text ?? '',
+                  });
+                }
+              }
+            }
+          } catch { /* ignore */ }
+        }
+      } else if (data instanceof ArrayBuffer) {
+        const buf = Buffer.from(data);
+        if (buf.length > 2) {
+          audioChunks.push(buf.subarray(2));
+        }
+      }
+    });
+
+    ws.addEventListener('error', () => {
+      finish(new Error('Edge TTS WebSocket 错误'));
+    });
+
+    ws.addEventListener('close', () => {
+      finish();
+    });
+  });
+}
+
+// ── HTTP-based synthesis (EdgeOne fallback) ────────────────────
+// 当 WebSocket 不可用时（如 EdgeOne Cloud Function），使用 Google Translate TTS
+// 每次请求最多 200 字符，自动分段拼接
+
+const MAX_HTTP_TTS_CHARS = 200;
+
+async function synthesizeViaHttp(
+  text: string,
+  voice: string,
+  _rate: string,
+  _pitch: string,
+  _volume: string
+): Promise<{ audio: Buffer; mimeType: string; subtitle: RawBoundary[] }> {
+  // 从 voice name 提取 locale（如 zh-CN-XiaoxiaoNeural → zh-CN）
+  const locale = voice.split('-').slice(0, 2).join('-') || 'zh-CN';
+
+  // 分段合成（Google TTS 每次最多 ~200 字符）
+  const chunks = splitText(text, MAX_HTTP_TTS_CHARS);
+  const audioBuffers: Buffer[] = [];
+
+  for (const chunk of chunks) {
+    const audio = await googleTtsChunk(chunk, locale);
+    audioBuffers.push(Buffer.from(audio));
+  }
+
+  return {
+    audio: Buffer.concat(audioBuffers),
+    mimeType: 'audio/mpeg',
+    subtitle: [], // HTTP 模式不支持 word boundary
+  };
+}
+
+function splitText(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+    // 在标点符号处断句
+    let splitAt = -1;
+    for (let i = maxLen; i >= maxLen * 0.5; i--) {
+      if ('。！？；\n.!?;'.includes(remaining[i])) {
+        splitAt = i + 1;
+        break;
+      }
+    }
+    if (splitAt <= 0) splitAt = maxLen;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt);
+  }
+  return chunks;
+}
+
+async function googleTtsChunk(
+  text: string,
+  locale: string
+): Promise<ArrayBuffer> {
+  const params = new URLSearchParams({
+    'ie': 'UTF-8',
+    'q': text,
+    'tl': locale,
+    'client': 'tw-ob',
+  });
+
+  const url = `https://translate.google.com/translate_tts?${params.toString()}`;
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Google TTS 请求失败: ${res.status}`);
+  }
+
+  return await res.arrayBuffer();
+}
+
+// ── EdgeTTS synthesizer (auto-detect transport) ────────────────
 
 class InlineEdgeTTS {
   private text: string;
@@ -103,130 +307,30 @@ class InlineEdgeTTS {
     this.volume = options?.volume ?? '+0%';
   }
 
-  synthesize(): Promise<{
+  async synthesize(): Promise<{
     audio: Buffer;
     mimeType: string;
     subtitle: RawBoundary[];
   }> {
-    return new Promise((resolve, reject) => {
-      const connId = uuid().replace(/-/g, '');
-      const url = `${WSS_URL}&ConnectionId=${connId}`;
-      const audioChunks: Buffer[] = [];
-      const boundaries: RawBoundary[] = [];
-      let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          try { ws.close(); } catch {}
-          reject(new Error('Edge TTS WebSocket 超时'));
-        }
-      }, 30_000);
-
-      const finish = (err?: Error) => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timeout);
-        if (err) return reject(err);
-        const audio = Buffer.concat(audioChunks);
-        resolve({ audio, mimeType: 'audio/mpeg', subtitle: boundaries });
-      };
-
-      let ws: WebSocket;
-      try {
-        ws = new WebSocket(url);
-      } catch (e) {
-        clearTimeout(timeout);
-        return reject(e);
-      }
-
-      ws.binaryType = 'arraybuffer';
-
-      ws.addEventListener('open', () => {
-        // 1. Send config
-        const configMsg =
-          'Content-Type:application/json; charset=utf-8\r\n' +
-          'Path:speech.config\r\n\r\n' +
-          JSON.stringify({
-            context: {
-              synthesis: {
-                audio: {
-                  metadataoptions: {
-                    sentenceBoundaryEnabled: 'false',
-                    wordBoundaryEnabled: 'true',
-                  },
-                  outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
-                },
-              },
-            },
-          });
-        ws.send(configMsg);
-
-        // 2. Send SSML
-        const requestId = uuid().replace(/-/g, '');
-        const timestamp = new Date().toISOString();
-        const prosodyAttrs = [
-          `rate="${this.rate}"`,
-          `pitch="${this.pitch}"`,
-          `volume="${this.volume}"`,
-        ].join(' ');
-        const ssml =
-          `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'>` +
-          `<voice name='${escapeXml(this.voice)}'>` +
-          `<prosody ${prosodyAttrs}>${escapeXml(this.text)}</prosody>` +
-          `</voice></speak>`;
-        const ssmlMsg =
-          `X-RequestId:${requestId}\r\n` +
-          `Content-Type:application/ssml+xml\r\n` +
-          `X-Timestamp:${timestamp}\r\n` +
-          `Path:ssml\r\n\r\n` +
-          ssml;
-        ws.send(ssmlMsg);
-      });
-
-      ws.addEventListener('message', (event) => {
-        const data = event.data;
-        if (typeof data === 'string') {
-          // Text frame — parse headers
-          if (data.includes('Path:turn.end')) {
-            ws.close();
-            finish();
-          } else if (data.includes('Path:audio.metadata')) {
-            // Parse word boundary metadata
-            try {
-              const jsonStart = data.indexOf('\r\n\r\n');
-              if (jsonStart !== -1) {
-                const meta = JSON.parse(data.slice(jsonStart + 4));
-                for (const item of meta.Metadata ?? []) {
-                  if (item.Type === 'WordBoundary' && item.Data) {
-                    boundaries.push({
-                      offset: item.Data.Offset ?? 0,
-                      duration: item.Data.Duration ?? 0,
-                      text: item.Data.text?.Text ?? '',
-                    });
-                  }
-                }
-              }
-            } catch {
-              // ignore metadata parse errors
-            }
-          }
-        } else if (data instanceof ArrayBuffer) {
-          // Binary frame — skip 2-byte header
-          const buf = Buffer.from(data);
-          if (buf.length > 2) {
-            audioChunks.push(buf.subarray(2));
-          }
-        }
-      });
-
-      ws.addEventListener('error', (event) => {
-        finish(new Error('Edge TTS WebSocket 错误'));
-      });
-
-      ws.addEventListener('close', () => {
-        finish();
-      });
-    });
+    // 先尝试 WebSocket（Docker 环境支持）
+    try {
+      return await synthesizeViaWebSocket(
+        this.text,
+        this.voice,
+        this.rate,
+        this.pitch,
+        this.volume
+      );
+    } catch {
+      // WebSocket 不可用时 fallback 到 HTTP（EdgeOne 等 serverless 环境）
+      return await synthesizeViaHttp(
+        this.text,
+        this.voice,
+        this.rate,
+        this.pitch,
+        this.volume
+      );
+    }
   }
 }
 
