@@ -78,12 +78,14 @@ type EdgeTtsModule = {
   };
 };
 
-function resolveEdgeTtsModule(): EdgeTtsModule {
+function resolveEdgeTtsModule(): EdgeTtsModule | null {
   try {
     // eslint-disable-next-line no-eval
     return eval('require')('edge-tts-universal') as EdgeTtsModule;
   } catch (error) {
-    throw new Error(`未安装 edge-tts-universal，请先执行 pnpm add edge-tts-universal。${(error as Error).message}`);
+    // edge-tts-universal 需要 native Node.js，边缘运行时不可用
+    console.warn('[book-tts] edge-tts-universal 不可用:', (error as Error).message);
+    return null;
   }
 }
 
@@ -152,6 +154,7 @@ export async function getBookTtsConfig(): Promise<BookTtsRuntimeConfig> {
 
 export async function listBookTtsVoices(): Promise<BookTtsVoice[]> {
   const mod = resolveEdgeTtsModule();
+  if (!mod) throw new Error('TTS 功能不可用：edge-tts-universal 未安装或当前运行环境不支持');
   const VoicesManager = mod.VoicesManager || mod.default?.VoicesManager;
   if (!VoicesManager) throw new Error('edge-tts-universal 未导出 VoicesManager');
 
@@ -197,6 +200,7 @@ export async function synthesizeBookTts(input: {
   });
 
   const mod = resolveEdgeTtsModule();
+  if (!mod) throw new Error('TTS 功能不可用：edge-tts-universal 未安装或当前运行环境不支持');
   const EdgeTTS = mod.EdgeTTS || mod.default?.EdgeTTS;
   if (!EdgeTTS) throw new Error('edge-tts-universal 未导出 EdgeTTS');
 

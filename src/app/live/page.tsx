@@ -319,6 +319,20 @@ function LivePageClient() {
   // 播放器引用
   const artPlayerRef = useRef<any>(null);
   const artRef = useRef<HTMLDivElement | null>(null);
+
+  // 画面比例辅助函数
+  const applyAspectRatio = (video: HTMLVideoElement, val: string) => {
+    if (val === 'original') {
+      video.style.objectFit = '';
+      video.style.aspectRatio = '';
+    } else if (['contain', 'fill', 'cover'].includes(val)) {
+      video.style.objectFit = val;
+      video.style.aspectRatio = '';
+    } else {
+      video.style.aspectRatio = val;
+      video.style.objectFit = 'contain';
+    }
+  };
   const syncAnime4KCanvasFlip = (flip?: string) => {
     const canvas = anime4kRef.current?.canvas as HTMLCanvasElement | undefined;
     if (!canvas) return;
@@ -2064,6 +2078,28 @@ function LivePageClient() {
                 },
               }
             ] : []),
+            {
+              name: '画面比例',
+              html: '画面比例',
+              icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 3H3C1.9 3 1 3.9 1 5v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z" fill="#ffffff"/><path d="M5 7h4v2H7v2H5V7zm14 10h-4v-2h2v-2h2v4zm-8-2h-2v-2H7v-2h2v2h2v2zm2-6h2v2h2v2h-2v-2h-2V9z" fill="#ffffff"/></svg>',
+              selector: [
+                { html: '原始', value: 'original', default: true },
+                { html: '填充', value: 'contain' },
+                { html: '拉伸', value: 'fill' },
+                { html: '裁剪', value: 'cover' },
+                { html: '16:10', value: '16/10' },
+                { html: '16:9', value: '16/9' },
+                { html: '4:3', value: '4/3' },
+              ],
+              onSelect: function (item: any) {
+                const player = artPlayerRef.current;
+                if (!player?.video) return item.html;
+                const video = player.video as HTMLVideoElement;
+                applyAspectRatio(video, item.value);
+                try { localStorage.setItem('liveAspectRatio', item.value); } catch (_) {}
+                return item.html;
+              },
+            },
           ],
         });
 
@@ -2074,6 +2110,13 @@ function LivePageClient() {
           setError(null);
           setIsVideoLoading(false);
 
+          // 恢复保存的画面比例设置
+          try {
+            const savedAr = localStorage.getItem('liveAspectRatio');
+            if (savedAr && artPlayerRef.current?.video) {
+              applyAspectRatio(artPlayerRef.current.video as HTMLVideoElement, savedAr);
+            }
+          } catch (_) {}
         });
 
         artPlayerRef.current.on('loadstart', () => {
