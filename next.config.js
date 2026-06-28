@@ -55,7 +55,7 @@ const createNextConfig = (phase) => {
     ],
   },
 
-  webpack(config, { isServer }) {
+  webpack(config, { isServer, nextRuntime }) {
     // Grab the existing rule that handles SVG imports
     const fileLoaderRule = config.module.rules.find((rule) =>
       rule.test?.test?.('.svg')
@@ -91,6 +91,32 @@ const createNextConfig = (phase) => {
       crypto: false,
       path: false,
     };
+
+    // Edge runtime (e.g. proxy/route.ts with `runtime = 'edge'`) lacks Node.js built-ins.
+    // Webpack compiles edge routes during every `next build`, regardless of build target.
+    if (nextRuntime === 'edge') {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        http: false,
+        https: false,
+        fs: false,
+      };
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'better-sqlite3': path.resolve(
+          __dirname,
+          'src/lib/cloudflare-shims/node-unsupported.ts'
+        ),
+        'https-proxy-agent': path.resolve(
+          __dirname,
+          'src/lib/cloudflare-shims/https-proxy-agent.ts'
+        ),
+        'node-fetch': path.resolve(
+          __dirname,
+          'src/lib/cloudflare-shims/node-fetch.ts'
+        ),
+      };
+    }
 
     // Cloudflare 使用 D1，不需要把 better-sqlite3 原生模块带入 Worker 产物。
     if (isEdgeBuild) {
