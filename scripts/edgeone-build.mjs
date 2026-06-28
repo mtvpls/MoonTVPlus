@@ -77,6 +77,7 @@ const runtimeEnvKeys = [
   'WEB_PUSH_PRIVATE_KEY',
   'WEB_PUSH_PUBLIC_KEY',
   'WEB_PUSH_BASEURL',
+  'BAIDU_RELAY_URL',
   'NEXT_PUBLIC_BASE_PATH',
 ];
 
