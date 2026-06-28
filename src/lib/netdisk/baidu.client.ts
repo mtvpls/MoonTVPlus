@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { createHash } from 'crypto';
 
 import type { BaiduNetdiskSessionFile, BaiduNetdiskSessionMeta } from './baidu-session-cache';
 
@@ -16,9 +15,12 @@ const VIDEO_EXTS = [
   '.mp4', '.mkv', '.avi', '.rmvb', '.mov', '.flv', '.wmv', '.webm', '.3gp', '.mpeg', '.mpg', '.ts', '.mts', '.m2ts', '.vob', '.divx', '.xvid', '.m4v', '.ogv', '.f4v', '.rm', '.asf', '.dat', '.dv', '.m2v',
 ];
 
-function sha1(value: string) {
-  return createHash('sha1').update(value).digest('hex');
-}
+async function sha1(value: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(value);
+  const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
 export function normalizeBaiduCookie(cookie: string): string {
   return cookie.replace(/；/g, ';').replace(/：/g, ':').replace(/，/g, ',').trim();
@@ -248,8 +250,9 @@ export async function getBaiduDirectPlayUrl(
   if (!bduss) {
     throw new Error('百度网盘 Cookie 缺少 BDUSS');
   }
-  const rand = sha1(
-    sha1(bduss) + uid + 'ebrcUYiuxaZv2XGu7KIYKxUrqfnOfpDF' + time + devuid + '11.30.2ae5821440fab5e1a61a025f014bd8972'
+  const innerHash = await sha1(bduss);
+  const rand = await sha1(
+    innerHash + uid + 'ebrcUYiuxaZv2XGu7KIYKxUrqfnOfpDF' + time + devuid + '11.30.2ae5821440fab5e1a61a025f014bd8972'
   );
   const path = `share/list?shareid=${meta.shareid}&uk=${meta.uk}&fid=${fid}&sekey=${encodeURIComponent(meta.randsk)}&origin=dlna&devuid=${encodeURIComponent(devuid)}&clienttype=1&channel=android_12_zhao_bd-netdisk_1024266h&version=11.30.2&time=${time}&rand=${rand}`;
   const response = await fetch(`${API_BASE}${path}`, {
