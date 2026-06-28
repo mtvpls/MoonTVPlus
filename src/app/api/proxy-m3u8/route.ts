@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const DIRECT_PLAY_SOURCE = 'directplay';
 
     // 判断是否为直链播放类源（网盘类源返回直链，需要代理分片避免 CORS 问题）
-    function isDirectPlayLikeSource(src: string): boolean {
+    const isDirectPlayLikeSource = (src: string): boolean => {
       if (src === DIRECT_PLAY_SOURCE) return true;
       // 网盘类源（百度盘、阿里盘等）返回直链，需代理视频分片
       const directPlaySources = ['netdisk-baidu'];
