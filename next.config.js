@@ -92,6 +92,18 @@ const createNextConfig = (phase) => {
       path: false,
     };
 
+    // Edge runtime: make native Node modules external so webpack doesn't try to
+    // bundle bindings → fs for routes with `runtime = 'edge'` that only import
+    // better-sqlite3 transitively (e.g. baidu/proxy → baidu-session-resolver → config → db → better-sqlite3).
+    // At runtime on real Node.js these resolve fine; the alias is only for Cloudflare/EdgeOne.
+    if (nextRuntime === 'edge') {
+      config.externals = (config.externals || []).concat([
+        'better-sqlite3',
+        'bindings',
+        'file-uri-to-path',
+      ]);
+    }
+
     // Cloudflare / EdgeOne 使用 D1/边缘运行时，不需要把 better-sqlite3 等原生模块带入产物。
     if (isEdgeBuild) {
       config.resolve.alias = {
