@@ -89,6 +89,7 @@ const createNextConfig = (phase) => {
       net: false,
       tls: false,
       crypto: false,
+      path: false,
     };
 
     // Cloudflare 使用 D1，不需要把 better-sqlite3 原生模块带入 Worker 产物。
