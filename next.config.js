@@ -103,6 +103,7 @@ const createNextConfig = (phase) => {
         'file-uri-to-path',
         'https-proxy-agent',
         'agent-base',
+        'node-fetch',
       ]);
     }
 
