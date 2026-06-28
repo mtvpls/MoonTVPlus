@@ -4,7 +4,7 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getBaiduDirectPlayUrl } from '@/lib/netdisk/baidu.client';
 import { resolveBaiduSession } from '@/lib/netdisk/baidu-session-resolver';
 
-export const runtime = 'nodejs';
+export const runtime = 'edge';
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,83 +33,35 @@ export async function GET(request: NextRequest) {
 
     const { url, headers } = await getBaiduDirectPlayUrl(session.meta, file.fid, cookie);
     const range = request.headers.get('range');
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 300000);
 
-    try {
-      const upstream = await fetch(url, {
-        headers: {
-          ...headers,
-          Cookie: cookie,
-          ...(range ? { Range: range } : {}),
-        },
-        cache: 'no-store',
-        signal: abortController.signal,
-      });
+    const upstream = await fetch(url, {
+      headers: {
+        ...headers,
+        Cookie: cookie,
+        ...(range ? { Range: range } : {}),
+      },
+      cache: 'no-store',
+    });
 
-      clearTimeout(timeoutId);
-
-      if (!upstream.ok || !upstream.body) {
-        return NextResponse.json(
-          { error: `百度网盘视频代理失败 (${upstream.status})` },
-          { status: upstream.status || 500 }
-        );
-      }
-
-      const responseHeaders = new Headers();
-      const copyHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified'];
-      copyHeaders.forEach((name) => {
-        const value = upstream.headers.get(name);
-        if (value) responseHeaders.set(name, value);
-      });
-      responseHeaders.set('Cache-Control', 'private, no-store');
-
-      const { readable, writable } = new TransformStream();
-      const reader = upstream.body.getReader();
-
-      void (async () => {
-        const writer = writable.getWriter();
-        try {
-          let streamDone = false;
-          while (!streamDone) {
-            const { done, value } = await reader.read();
-            if (done) {
-              streamDone = true;
-            } else {
-              await writer.write(value);
-            }
-          }
-        } catch {
-          try {
-            await reader.cancel();
-          } catch {
-            void 0;
-          }
-        } finally {
-          try {
-            reader.releaseLock();
-          } catch {
-            void 0;
-          }
-          try {
-            await writer.close();
-          } catch {
-            void 0;
-          }
-        }
-      })();
-
-      return new Response(readable, {
-        status: range && upstream.headers.get('content-range') ? 206 : upstream.status,
-        headers: responseHeaders,
-      });
-    } catch (error) {
-      clearTimeout(timeoutId);
-      if (error instanceof Error && error.name === 'AbortError') {
-        return NextResponse.json({ error: '百度网盘代理超时' }, { status: 504 });
-      }
-      throw error;
+    if (!upstream.ok || !upstream.body) {
+      return NextResponse.json(
+        { error: `百度网盘视频代理失败 (${upstream.status})` },
+        { status: upstream.status || 500 }
+      );
     }
+
+    const responseHeaders = new Headers();
+    const copyHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified'];
+    copyHeaders.forEach((name) => {
+      const value = upstream.headers.get(name);
+      if (value) responseHeaders.set(name, value);
+    });
+    responseHeaders.set('Cache-Control', 'private, no-store');
+
+    return new Response(upstream.body, {
+      status: range && upstream.headers.get('content-range') ? 206 : upstream.status,
+      headers: responseHeaders,
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '百度网盘代理失败' },
