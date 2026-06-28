@@ -118,7 +118,7 @@ const createNextConfig = (phase) => {
           __dirname,
           'src/lib/cloudflare-shims/node-fetch.ts'
         ),
-        ...(isCloudflare
+        ...(isEdgeBuild
           ? {
               'https-proxy-agent': path.resolve(
                 __dirname,
