@@ -12,6 +12,17 @@ export const maxDuration = 60; // 设置最大执行时间为 60 秒
  * 用于外部播放器访问,会执行去广告逻辑并处理相对链接
  * GET /api/proxy-m3u8?url=<原始m3u8地址>&source=<播放源>&token=<鉴权token>
  */
+
+// 直链播放源标识，用于 proxy-m3u8 判断特定源是否需要直链代理
+const DIRECT_PLAY_SOURCE = 'directplay';
+
+// 判断是否为直链播放类源（网盘类源返回直链，需要代理分片避免 CORS 问题）
+const isDirectPlayLikeSource = (src: string): boolean => {
+  if (src === DIRECT_PLAY_SOURCE) return true;
+  // 网盘类源（百度盘、阿里盘等）返回直链，需代理视频分片
+  const directPlaySources = ['netdisk-baidu'];
+  return directPlaySources.includes(src);
+}
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -35,16 +46,6 @@ export async function GET(request: NextRequest) {
         { error: '缺少必要参数: url' },
         { status: 400 }
       );
-    }
-
-    const DIRECT_PLAY_SOURCE = 'directplay';
-
-    // 判断是否为直链播放类源（网盘类源返回直链，需要代理分片避免 CORS 问题）
-    const isDirectPlayLikeSource = (src: string): boolean => {
-      if (src === DIRECT_PLAY_SOURCE) return true;
-      // 网盘类源（百度盘、阿里盘等）返回直链，需代理视频分片
-      const directPlaySources = ['netdisk-baidu'];
-      return directPlaySources.includes(src);
     }
 
     // 安全校验：防 SSRF / 域名重绑定，只允许合法的公网 URL。对所有经过 proxy-m3u8 的请求强制校验，不仅限于 directplay
