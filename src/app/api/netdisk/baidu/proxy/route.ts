@@ -4,7 +4,9 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getBaiduDirectPlayUrl } from '@/lib/netdisk/baidu.client';
 import { resolveBaiduSession } from '@/lib/netdisk/baidu-session-resolver';
 
-export const runtime = 'edge';
+// EdgeOne requires edge runtime; on Docker (Node.js) use nodejs to avoid
+// Next.js vm sandbox __import_unsupported issue in edge runtime emulation.
+export const runtime = process.env.EDGEONE_PAGES === '1' ? 'edge' : 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
