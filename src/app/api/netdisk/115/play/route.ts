@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const isIso = file.name.toLowerCase().endsWith('.iso');
     const onDocker = process.env.DOCKER_ENV === 'true';
 
-    if (isIso && onDocker && format !== 'redirect') {
+    if (isIso && onDocker && format === 'iso-stream') {
       // Stream ISO through ffmpeg — fetch the 115 CDN URL and pipe through ffmpeg
       try {
         const cdnResponse = await fetch(url);
