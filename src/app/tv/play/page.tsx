@@ -54,6 +54,7 @@ import {
 } from '@/lib/db.client';
 import { loadTVPlayerUpDownAction } from '@/lib/tv-preferences';
 import { SearchResult } from '@/lib/types';
+import { useMediaSession } from '@/lib/media-session';
 
 import TVNativeVideo from '@/components/tv/player/TVNativeVideo';
 import {
@@ -750,6 +751,36 @@ function TVPlayClient() {
     setEpisodePage(Math.floor(target / 30));
     setShowPanel(true);
   };
+
+  // Media Session 集成：在锁屏/控制中心显示播放信息和媒体控制
+  useMediaSession({
+    title: detail?.title || title || '',
+    artwork: detail?.poster ? [{ src: detail.poster, sizes: '512x512' }] : [],
+    onPlay: () => {
+      if (!isPlaying) setToggleCommand((c) => c + 1);
+    },
+    onPause: () => {
+      if (isPlaying) setToggleCommand((c) => c + 1);
+    },
+    onSeekBackward: () => {
+      const video = document.querySelector<HTMLVideoElement>(
+        '[data-tv-player-root] video',
+      );
+      if (video) video.currentTime = Math.max(0, video.currentTime - 10);
+    },
+    onSeekForward: () => {
+      const video = document.querySelector<HTMLVideoElement>(
+        '[data-tv-player-root] video',
+      );
+      if (video) video.currentTime = Math.min(video.duration, video.currentTime + 10);
+    },
+    onPreviousTrack: () => {
+      if (detail?.episodes) switchEpisode(episodeIndex - 1);
+    },
+    onNextTrack: () => {
+      if (detail?.episodes) switchEpisode(episodeIndex + 1);
+    },
+  });
 
   const onTime = useCallback(
     (current: number, duration: number) => {

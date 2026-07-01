@@ -69,6 +69,7 @@ import {
 import { getTMDBImageUrl } from '@/lib/tmdb.search';
 import { DanmakuFilterConfig, EpisodeFilterConfig, SearchResult } from '@/lib/types';
 import { base58Decode, getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
+import { useMediaSession } from '@/lib/media-session';
 import { useEnableAIComments } from '@/hooks/useEnableAIComments';
 import { useEnableComments } from '@/hooks/useEnableComments';
 import { usePlaySync } from '@/hooks/usePlaySync';
@@ -1918,6 +1919,38 @@ function PlayPageClient() {
 
   const artPlayerRef = useRef<any>(null);
   const artRef = useRef<HTMLDivElement | null>(null);
+
+  // Media Session 集成：在锁屏/控制中心显示播放信息和媒体控制
+  useMediaSession({
+    title: videoTitle,
+    artwork: videoCover ? [{ src: videoCover, sizes: '512x512' }] : [],
+    onPlay: () => artPlayerRef.current?.play(),
+    onPause: () => artPlayerRef.current?.pause(),
+    onSeekBackward: () => {
+      if (artPlayerRef.current)
+        artPlayerRef.current.currentTime = Math.max(0, artPlayerRef.current.currentTime - 10);
+    },
+    onSeekForward: () => {
+      if (artPlayerRef.current)
+        artPlayerRef.current.currentTime = Math.min(
+          artPlayerRef.current.duration,
+          artPlayerRef.current.currentTime + 10,
+        );
+    },
+    onPreviousTrack: () => {
+      const episodes = detail?.episodes;
+      if (episodes && currentEpisodeIndex > 0) {
+        setCurrentEpisodeIndex(currentEpisodeIndex - 1);
+      }
+    },
+    onNextTrack: () => {
+      const episodes = detail?.episodes;
+      if (episodes && currentEpisodeIndex < episodes.length - 1) {
+        setCurrentEpisodeIndex(currentEpisodeIndex + 1);
+      }
+    },
+  });
+
   const syncAnime4KCanvasFlip = (flip?: string) => {
     const canvas = anime4kRef.current?.canvas as HTMLCanvasElement | undefined;
     if (!canvas) return;
