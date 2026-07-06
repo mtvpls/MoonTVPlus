@@ -287,6 +287,7 @@ async function getInitConfig(
           : BUILTIN_DANMAKU_API_BASE),
       DanmakuApiToken: process.env.DANMAKU_API_TOKEN || '87654321',
       DanmakuAutoLoadDefault: true,
+      AnnouncementDisplayMode: 'once',
       // TMDB配置
       TMDBApiKey: process.env.TMDB_API_KEY || '',
       TMDBProxy: process.env.TMDB_PROXY || '',
@@ -502,6 +503,7 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       DanmakuApiBase: BUILTIN_DANMAKU_API_BASE,
       DanmakuApiToken: '87654321',
       DanmakuAutoLoadDefault: true,
+      AnnouncementDisplayMode: 'once',
       PansouApiUrl: '',
       PansouUsername: '',
       PansouPassword: '',

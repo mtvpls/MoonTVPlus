@@ -45,6 +45,7 @@ export interface AdminConfig {
     MagnetNyaaReverseProxy?: string;
     // 评论功能开关
     EnableComments: boolean;
+    AnnouncementDisplayMode?: 'once' | 'every';
     // 自定义去广告代码
     CustomAdFilterCode?: string;
     CustomAdFilterVersion?: number; // 代码版本号（时间戳）
