@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, Quark, Mobile, Baidu, Tianyi, Pan123, UC, Pan115, provider } = body;
+    const { action, Quark, Mobile, Baidu, Tianyi, Pan123, UC, Pan115, Pansou, provider } = body;
     const adminConfig = await getConfig();
 
     if (action === 'save') {
@@ -109,6 +109,13 @@ export async function POST(request: NextRequest) {
       adminConfig.NetDiskConfig.Pan115 = {
         Enabled: Boolean(Pan115?.Enabled),
         Cookie: normalizedPan115Cookie,
+      };
+      adminConfig.NetDiskConfig.Pansou = {
+        Enabled: Boolean(Pansou?.Enabled),
+        ApiUrl: Pansou?.ApiUrl || '',
+        Username: Pansou?.Username || '',
+        Password: Pansou?.Password || '',
+        KeywordBlocklist: Pansou?.KeywordBlocklist || '',
       };
 
       await db.saveAdminConfig(adminConfig);

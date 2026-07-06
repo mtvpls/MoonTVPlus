@@ -4364,6 +4364,11 @@ const NetDiskConfigComponent = ({
   const [ucSavePath, setUcSavePath] = useState('/');
   const [pan115Enabled, setPan115Enabled] = useState(false);
   const [pan115Cookie, setPan115Cookie] = useState('');
+  const [pansouEnabled, setPansouEnabled] = useState(false);
+  const [pansouApiUrl, setPansouApiUrl] = useState('');
+  const [pansouUsername, setPansouUsername] = useState('');
+  const [pansouPassword, setPansouPassword] = useState('');
+  const [pansouKeywordBlocklist, setPansouKeywordBlocklist] = useState('');
 
   useEffect(() => {
     const quark = config?.NetDiskConfig?.Quark;
@@ -4391,6 +4396,11 @@ const NetDiskConfigComponent = ({
     setUcSavePath(config?.NetDiskConfig?.UC?.SavePath || '/');
     setPan115Enabled(config?.NetDiskConfig?.Pan115?.Enabled || false);
     setPan115Cookie(config?.NetDiskConfig?.Pan115?.Cookie || '');
+    setPansouEnabled(config?.NetDiskConfig?.Pansou?.Enabled || false);
+    setPansouApiUrl(config?.NetDiskConfig?.Pansou?.ApiUrl || config?.SiteConfig?.PansouApiUrl || '');
+    setPansouUsername(config?.NetDiskConfig?.Pansou?.Username || config?.SiteConfig?.PansouUsername || '');
+    setPansouPassword(config?.NetDiskConfig?.Pansou?.Password || config?.SiteConfig?.PansouPassword || '');
+    setPansouKeywordBlocklist(config?.NetDiskConfig?.Pansou?.KeywordBlocklist || config?.SiteConfig?.PansouKeywordBlocklist || '');
   }, [config]);
 
   const handleSave = async () => {
@@ -4434,6 +4444,13 @@ const NetDiskConfigComponent = ({
           Pan115: {
             Enabled: pan115Enabled,
             Cookie: pan115Cookie,
+          },
+          Pansou: {
+            Enabled: pansouEnabled,
+            ApiUrl: pansouApiUrl,
+            Username: pansouUsername,
+            Password: pansouPassword,
+            KeywordBlocklist: pansouKeywordBlocklist,
           },
         }),
       });
@@ -5219,6 +5236,107 @@ const NetDiskConfigComponent = ({
                 ? '校验中...'
                 : '校验115 Cookie'}
             </button>
+            <button
+              onClick={handleSave}
+              disabled={isLoading('saveNetDisk')}
+              className={buttonStyles.success}
+            >
+              {isLoading('saveNetDisk') ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+        </div>
+      </details>
+
+      {/* 光鸭云盘（Pansou） */}
+      <details className='group border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden'>
+        <summary className='flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors'>
+          <div>
+            <h3 className='text-sm font-medium text-gray-900 dark:text-gray-100'>
+              光鸭云盘（Pansou）
+            </h3>
+            <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+              配置 Pansou 网盘搜索服务，用于网盘资源搜索
+            </p>
+          </div>
+        </summary>
+        <div className='p-4 space-y-4'>
+          <div className='flex items-center justify-between'>
+            <div>
+              <h3 className='text-sm font-medium text-gray-900 dark:text-gray-100'>
+                启用光鸭云盘
+              </h3>
+              <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                开启后，可在私人影库搜索光鸭云盘资源
+              </p>
+            </div>
+            <label className='relative inline-flex items-center cursor-pointer'>
+              <input
+                type='checkbox'
+                checked={pansouEnabled}
+                onChange={(e) => setPansouEnabled(e.target.checked)}
+                className='sr-only peer'
+              />
+              <div className=\"w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 dark:peer-focus:ring-purple-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600\"></div>
+            </label>
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              API 地址
+            </label>
+            <input
+              type='text'
+              value={pansouApiUrl}
+              onChange={(e) => setPansouApiUrl(e.target.value)}
+              disabled={!pansouEnabled}
+              placeholder='http://localhost:8888'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              账号（可选）
+            </label>
+            <input
+              type='text'
+              value={pansouUsername}
+              onChange={(e) => setPansouUsername(e.target.value)}
+              disabled={!pansouEnabled}
+              placeholder='如果 Pansou 启用了认证，请输入账号'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              密码（可选）
+            </label>
+            <input
+              type='password'
+              value={pansouPassword}
+              onChange={(e) => setPansouPassword(e.target.value)}
+              disabled={!pansouEnabled}
+              placeholder='如果 Pansou 启用了认证，请输入密码'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              关键词屏蔽列表
+            </label>
+            <textarea
+              value={pansouKeywordBlocklist}
+              onChange={(e) => setPansouKeywordBlocklist(e.target.value)}
+              disabled={!pansouEnabled}
+              rows={3}
+              placeholder='每行一个关键词，包含这些关键词的资源将不会显示'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+          </div>
+
+          <div className='flex gap-3'>
             <button
               onClick={handleSave}
               disabled={isLoading('saveNetDisk')}

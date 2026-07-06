@@ -591,6 +591,18 @@ export default function PrivateLibraryPage() {
               <span>求片</span>
             </button>
           )}
+          {mounted && (
+            <button
+              onClick={() => router.push('/search')}
+              className='flex items-center gap-2 px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors'
+              style={{ marginTop: '10px', marginLeft: '8px' }}
+            >
+              <svg className='w-5 h-5' fill='currentColor' viewBox='0 0 24 24'>
+                <path d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' />
+              </svg>
+              <span>搜索</span>
+            </button>
+          )}
         </div>
 
         {/* 第一级：源类型选择（OpenList / Emby / 小雅） */}

@@ -195,6 +195,13 @@ export interface AdminConfig {
       Enabled: boolean;
       Cookie: string;
     };
+    Pansou?: {
+      Enabled: boolean;
+      ApiUrl: string;
+      Username?: string;
+      Password?: string;
+      KeywordBlocklist?: string;
+    };
   };
   AIConfig?: {
     Enabled: boolean; // 是否启用AI问片功能
