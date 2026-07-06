@@ -9940,9 +9940,9 @@ function PlayPageClient() {
                             }
                             // 使用代理 URL
                             const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : '';
-                            const proxyUrl = externalPlayerAdBlock && isNetdiskSource
+                            const proxyUrl = externalPlayerAdBlock && isNetdiskSource(detail?.source)
                               ? `${urlToUse}${urlToUse.includes('?') ? '&' : '?'}format=proxy`
-                              : externalPlayerAdBlock && !isNetdiskSource
+                              : externalPlayerAdBlock && !isNetdiskSource(detail?.source)
                                 ? `${window.location.origin}/api/proxy-m3u8?url=${encodeURIComponent(urlToUse)}&source=${encodeURIComponent(currentSource)}${tokenParam}`
                                 : urlToUse;
                             // URL encode 避免冒号被吃掉
@@ -9972,9 +9972,9 @@ function PlayPageClient() {
                             }
                             // 使用代理 URL
                             const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : '';
-                            const proxyUrl = externalPlayerAdBlock && isNetdiskSource
+                            const proxyUrl = externalPlayerAdBlock && isNetdiskSource(detail?.source)
                               ? `${urlToUse}${urlToUse.includes('?') ? '&' : '?'}format=proxy`
-                              : externalPlayerAdBlock && !isNetdiskSource
+                              : externalPlayerAdBlock && !isNetdiskSource(detail?.source)
                                 ? `${window.location.origin}/api/proxy-m3u8?url=${encodeURIComponent(urlToUse)}&source=${encodeURIComponent(currentSource)}${tokenParam}`
                                 : urlToUse;
                             // URL encode 避免冒号被吃掉
@@ -10004,9 +10004,9 @@ function PlayPageClient() {
                             }
                             // 使用代理 URL
                             const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : '';
-                            const proxyUrl = externalPlayerAdBlock && isNetdiskSource
+                            const proxyUrl = externalPlayerAdBlock && isNetdiskSource(detail?.source)
                               ? `${urlToUse}${urlToUse.includes('?') ? '&' : '?'}format=proxy`
-                              : externalPlayerAdBlock && !isNetdiskSource
+                              : externalPlayerAdBlock && !isNetdiskSource(detail?.source)
                                 ? `${window.location.origin}/api/proxy-m3u8?url=${encodeURIComponent(urlToUse)}&source=${encodeURIComponent(currentSource)}${tokenParam}`
                                 : urlToUse;
                             // URL encode 避免冒号被吃掉
