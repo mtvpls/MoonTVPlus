@@ -393,6 +393,8 @@ export interface TelegramConfig {
   bindingEnabled?: boolean;
   registrationEnabled?: boolean;
   requireInviteCode?: boolean;
+  notificationsEnabled?: boolean;
+  defaultNotifications?: boolean;
   allowedUserIds?: number[];
   adminUserIds?: number[];
 }
