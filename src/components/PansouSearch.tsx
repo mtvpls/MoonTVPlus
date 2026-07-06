@@ -43,6 +43,7 @@ export const CLOUD_TYPE_NAMES: Record<string, string> = {
   pikpak: 'PikPak',
   xunlei: '迅雷网盘',
   '123': '123网盘',
+  guangya: '光鸭云盘',
   magnet: '磁力链接',
   ed2k: '电驴链接',
   others: '其他',
@@ -64,6 +65,8 @@ const CLOUD_TYPE_COLORS: Record<string, string> = {
     'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
   xunlei: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200',
   '123': 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200',
+  guangya:
+    'bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-200',
   magnet: 'bg-gray-100 text-gray-800 dark:bg-gray-700/40 dark:text-gray-200',
   ed2k: 'bg-gray-100 text-gray-800 dark:bg-gray-700/40 dark:text-gray-200',
   others: 'bg-gray-100 text-gray-800 dark:bg-gray-700/40 dark:text-gray-200',

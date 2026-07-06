@@ -44,6 +44,7 @@ import {
   Palette,
   Plus,
   Search,
+  Send,
   Settings,
   Smartphone,
   Tablet,
@@ -356,6 +357,7 @@ interface StandaloneSourceScript {
 interface SiteConfig {
   SiteName: string;
   Announcement: string;
+  AnnouncementDisplayMode?: 'once' | 'every';
   SearchDownstreamMaxPage: number;
   SiteInterfaceCacheTime: number;
   DoubanProxyType: string;
@@ -10149,6 +10151,7 @@ const SiteConfigComponent = ({
   const [siteSettings, setSiteSettings] = useState<SiteConfig>({
     SiteName: '',
     Announcement: '',
+    AnnouncementDisplayMode: 'once',
     SearchDownstreamMaxPage: 1,
     SiteInterfaceCacheTime: 7200,
     DoubanProxyType: 'cmliussss-cdn-tencent',
@@ -10303,6 +10306,10 @@ const SiteConfigComponent = ({
           config.SiteConfig.MagnetAcgripReverseProxy || '',
         MagnetNyaaReverseProxy: config.SiteConfig.MagnetNyaaReverseProxy || '',
         EnableComments: config.SiteConfig.EnableComments || false,
+        AnnouncementDisplayMode:
+          config.SiteConfig.AnnouncementDisplayMode === 'every'
+            ? 'every'
+            : 'once',
       });
     }
   }, [config]);
@@ -10459,6 +10466,51 @@ const SiteConfigComponent = ({
           rows={3}
           className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent'
         />
+      </div>
+
+      {/* 公告显示模式 */}
+      <div>
+        <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+          公告显示模式
+        </label>
+        <div className='flex gap-4'>
+          <label className='inline-flex items-center gap-2 cursor-pointer'>
+            <input
+              type='radio'
+              name='announcementDisplayMode'
+              value='once'
+              checked={siteSettings.AnnouncementDisplayMode !== 'every'}
+              onChange={() =>
+                setSiteSettings((prev) => ({
+                  ...prev,
+                  AnnouncementDisplayMode: 'once',
+                }))
+              }
+              className='text-green-600 focus:ring-green-500'
+            />
+            <span className='text-sm text-gray-700 dark:text-gray-300'>
+              单次显示
+            </span>
+          </label>
+          <label className='inline-flex items-center gap-2 cursor-pointer'>
+            <input
+              type='radio'
+              name='announcementDisplayMode'
+              value='every'
+              checked={siteSettings.AnnouncementDisplayMode === 'every'}
+              onChange={() =>
+                setSiteSettings((prev) => ({
+                  ...prev,
+                  AnnouncementDisplayMode: 'every',
+                }))
+              }
+              className='text-green-600 focus:ring-green-500'
+            />
+            <span className='text-sm text-gray-700 dark:text-gray-300'>
+              每次显示
+            </span>
+          </label>
+        </div>
       </div>
 
       {/* 豆瓣数据源设置 */}
@@ -12774,6 +12826,8 @@ const SuwayomiConfigComponent = ({
   const [defaultLang, setDefaultLang] = useState('zh');
   const [sourceIds, setSourceIds] = useState('');
   const [maxSources, setMaxSources] = useState(10);
+  const [showMangaDisclaimer, setShowMangaDisclaimer] = useState(false);
+  const [mangaCountdown, setMangaCountdown] = useState(10);
 
   useEffect(() => {
     if (config?.SuwayomiConfig) {
@@ -12787,6 +12841,14 @@ const SuwayomiConfigComponent = ({
       setMaxSources(config.SuwayomiConfig.MaxSources || 10);
     }
   }, [config]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (showMangaDisclaimer && mangaCountdown > 0) {
+      timer = setTimeout(() => setMangaCountdown(mangaCountdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [showMangaDisclaimer, mangaCountdown]);
 
   const buildConfig = () => ({
     Enabled: enabled,
@@ -12895,7 +12957,14 @@ const SuwayomiConfigComponent = ({
             </p>
           </div>
           <button
-            onClick={() => setEnabled(!enabled)}
+            onClick={() => {
+              if (!enabled) {
+                setShowMangaDisclaimer(true);
+                setMangaCountdown(10);
+              } else {
+                setEnabled(false);
+              }
+            }}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
               enabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
             }`}
@@ -12907,6 +12976,62 @@ const SuwayomiConfigComponent = ({
             />
           </button>
         </div>
+
+        {/* 漫画展馆免责声明弹窗 */}
+        {showMangaDisclaimer &&
+          createPortal(
+            <div className='fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4'>
+              <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-red-200 dark:border-red-800'>
+                <div className='p-6'>
+                  <div className='flex justify-center mb-4'>
+                    <AlertTriangle className='w-12 h-12 text-red-500' />
+                  </div>
+
+                  <h3 className='text-xl font-bold text-gray-900 dark:text-gray-100 mb-4 text-center'>
+                    免责声明
+                  </h3>
+
+                  <div className='bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6'>
+                    <p className='text-sm text-gray-700 dark:text-gray-300 leading-relaxed'>
+                      本功能仅供个人学习和技术研究使用，请勿将其部署在公网环境中，更不得用于任何违法违规行为。
+                      使用本功能所产生的一切法律责任由使用者自行承担，与开发者无关。
+                      启用此功能即表示您已充分理解并同意承担相应风险。
+                    </p>
+                  </div>
+
+                  <div className='flex gap-3 justify-center'>
+                    <button
+                      onClick={() => {
+                        setShowMangaDisclaimer(false);
+                        setMangaCountdown(10);
+                      }}
+                      className={buttonStyles.secondary}
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEnabled(true);
+                        setShowMangaDisclaimer(false);
+                        setMangaCountdown(10);
+                      }}
+                      disabled={mangaCountdown > 0}
+                      className={
+                        mangaCountdown > 0
+                          ? buttonStyles.disabled
+                          : buttonStyles.danger
+                      }
+                    >
+                      {mangaCountdown > 0
+                        ? `确认 (${mangaCountdown}s)`
+                        : '确认启用'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
 
         <div>
           <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
@@ -13076,6 +13201,8 @@ const OPDSConfigComponent = ({
   const [legadoSubscriptions, setLegadoSubscriptions] = useState<
     NonNullable<AdminConfig['OPDSConfig']>['LegadoSubscriptions']
   >([]);
+  const [showBooksDisclaimer, setShowBooksDisclaimer] = useState(false);
+  const [booksCountdown, setBooksCountdown] = useState(10);
 
   useEffect(() => {
     if (!config?.OPDSConfig) return;
@@ -13101,6 +13228,14 @@ const OPDSConfigComponent = ({
     setLegadoSubscriptions(config.OPDSConfig.LegadoSubscriptions || []);
     setEditingIndex(null);
   }, [config]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (showBooksDisclaimer && booksCountdown > 0) {
+      timer = setTimeout(() => setBooksCountdown(booksCountdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [showBooksDisclaimer, booksCountdown]);
 
   const updateSource = (index: number, patch: Partial<BookSource>) => {
     setSources((prev) =>
@@ -13325,7 +13460,14 @@ const OPDSConfigComponent = ({
           </p>
         </div>
         <button
-          onClick={() => setEnabled(!enabled)}
+          onClick={() => {
+            if (!enabled) {
+              setShowBooksDisclaimer(true);
+              setBooksCountdown(10);
+            } else {
+              setEnabled(false);
+            }
+          }}
           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
             enabled ? 'bg-amber-600' : 'bg-gray-200 dark:bg-gray-700'
           }`}
@@ -13337,6 +13479,62 @@ const OPDSConfigComponent = ({
           />
         </button>
       </div>
+
+      {/* 电子书馆免责声明弹窗 */}
+      {showBooksDisclaimer &&
+        createPortal(
+          <div className='fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4'>
+            <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-red-200 dark:border-red-800'>
+              <div className='p-6'>
+                <div className='flex justify-center mb-4'>
+                  <AlertTriangle className='w-12 h-12 text-red-500' />
+                </div>
+
+                <h3 className='text-xl font-bold text-gray-900 dark:text-gray-100 mb-4 text-center'>
+                  免责声明
+                </h3>
+
+                <div className='bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6'>
+                  <p className='text-sm text-gray-700 dark:text-gray-300 leading-relaxed'>
+                    本功能仅供个人学习和技术研究使用，请勿将其部署在公网环境中，更不得用于任何违法违规行为。
+                    使用本功能所产生的一切法律责任由使用者自行承担，与开发者无关。
+                    启用此功能即表示您已充分理解并同意承担相应风险。
+                  </p>
+                </div>
+
+                <div className='flex gap-3 justify-center'>
+                  <button
+                    onClick={() => {
+                      setShowBooksDisclaimer(false);
+                      setBooksCountdown(10);
+                    }}
+                    className={buttonStyles.secondary}
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEnabled(true);
+                      setShowBooksDisclaimer(false);
+                      setBooksCountdown(10);
+                    }}
+                    disabled={booksCountdown > 0}
+                    className={
+                      booksCountdown > 0
+                        ? buttonStyles.disabled
+                        : buttonStyles.danger
+                    }
+                  >
+                    {booksCountdown > 0
+                      ? `确认 (${booksCountdown}s)`
+                      : '确认启用'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
       <div>
         <label className='mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300'>
@@ -13922,6 +14120,249 @@ const XiaoyaConfigComponent = ({
             className={buttonStyles.success}
           >
             {isLoading('saveXiaoya') ? '保存中...' : '保存配置'}
+          </button>
+        </div>
+      </div>
+
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={hideAlert}
+        type={alertModal.type}
+        title={alertModal.title}
+        message={alertModal.message}
+        timer={alertModal.timer}
+        showConfirm={alertModal.showConfirm}
+      />
+    </div>
+  );
+};
+
+
+// Telegram Bot 配置组件
+const TelegramConfigComponent = ({
+  config,
+  refreshConfig,
+}: {
+  config: AdminConfig | null;
+  refreshConfig: () => Promise<void>;
+}) => {
+  const { alertModal, showAlert, hideAlert } = useAlertModal();
+  const { isLoading, withLoading } = useLoadingState();
+  const [enabled, setEnabled] = useState(false);
+  const [botToken, setBotToken] = useState('');
+  const [botUsername, setBotUsername] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
+  const [apiProxy, setApiProxy] = useState('');
+  const [apiBaseUrl, setApiBaseUrl] = useState('');
+  const [loginEnabled, setLoginEnabled] = useState(true);
+  const [bindingEnabled, setBindingEnabled] = useState(true);
+  const [registrationEnabled, setRegistrationEnabled] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [defaultNotifications, setDefaultNotifications] = useState(true);
+  const [testChatId, setTestChatId] = useState('');
+
+  useEffect(() => {
+    const telegram = config?.TelegramConfig;
+    if (telegram) {
+      setEnabled(Boolean(telegram.enabled));
+      setBotToken(telegram.botToken || '');
+      setBotUsername(telegram.botUsername || '');
+      setWebhookSecret(telegram.webhookSecret || '');
+      setApiProxy(telegram.apiProxy || '');
+      setApiBaseUrl(telegram.apiBaseUrl || '');
+      setLoginEnabled(telegram.loginEnabled !== false);
+      setBindingEnabled(telegram.bindingEnabled !== false);
+      setRegistrationEnabled(telegram.registrationEnabled === true);
+      setNotificationsEnabled(telegram.notificationsEnabled !== false);
+      setDefaultNotifications(telegram.defaultNotifications !== false);
+    }
+  }, [config]);
+
+  const buildConfig = (): AdminConfig['TelegramConfig'] => ({
+    enabled,
+    botToken,
+    botUsername: botUsername.replace(/^@/, ''),
+    webhookSecret,
+    apiProxy,
+    apiBaseUrl,
+    loginEnabled,
+    bindingEnabled,
+    registrationEnabled,
+    notificationsEnabled,
+    defaultNotifications,
+  });
+
+  const handleSave = async () => {
+    await withLoading('saveTelegram', async () => {
+      try {
+        const response = await fetch('/api/admin/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save', config: buildConfig() }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || '保存失败');
+        showSuccess('Telegram 配置保存成功', showAlert);
+        await refreshConfig();
+      } catch (error) {
+        showError(error instanceof Error ? error.message : '保存失败', showAlert);
+        throw error;
+      }
+    });
+  };
+
+  const handleSetWebhook = async () => {
+    await withLoading('setTelegramWebhook', async () => {
+      try {
+        if (!enabled) {
+          throw new Error('请先开启 Telegram Bot');
+        }
+        if (!botToken.trim() || !botUsername.trim() || !webhookSecret.trim()) {
+          throw new Error('请先填写 Bot Token、Bot 用户名 和 Webhook Secret');
+        }
+
+        const webhookUrlValue = webhookSecret === '******'
+          ? ''
+          : `${window.location.origin}/api/telegram/webhook/${webhookSecret}`;
+        const response = await fetch('/api/admin/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'set_webhook',
+            config: buildConfig(),
+            webhookUrl: webhookUrlValue,
+            origin: window.location.origin,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const telegramDetail = data.telegram
+            ? `（HTTP ${data.telegram.status || '-'}，响应：${data.telegram.body || data.telegram.statusText || '-'}）`
+            : '';
+          throw new Error(`${data.error || 'Webhook 设置失败'}${telegramDetail}`);
+        }
+        showSuccess('Webhook 设置成功', showAlert);
+      } catch (error) {
+        showError(error instanceof Error ? error.message : 'Webhook 设置失败', showAlert);
+        throw error;
+      }
+    });
+  };
+
+  const handleTest = async () => {
+    if (!testChatId.trim()) {
+      showError('请输入测试 Chat ID', showAlert);
+      return;
+    }
+
+    await withLoading('testTelegram', async () => {
+      try {
+        const response = await fetch('/api/admin/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'test', config: buildConfig(), testChatId: testChatId.trim() }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || '发送失败');
+        showSuccess('测试消息发送成功', showAlert);
+      } catch (error) {
+        showError(error instanceof Error ? error.message : '发送失败', showAlert);
+        throw error;
+      }
+    });
+  };
+
+  const webhookUrl = webhookSecret
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/telegram/webhook/${webhookSecret === '******' ? '<secret>' : webhookSecret}`
+    : '';
+
+  return (
+    <div className='space-y-6'>
+      <div className='bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-lg p-4'>
+        <h3 className='text-sm font-medium text-sky-900 dark:text-sky-100 mb-2'>
+          关于 Telegram Bot
+        </h3>
+        <div className='text-sm text-sky-800 dark:text-sky-200 space-y-1'>
+          <p>• 支持用户绑定 Telegram、快捷确认登录和站内通知推送</p>
+          <p>• 开启 Telegram 注册后，用户可在 Bot 中发送 /register 用户名 密码 注册账号</p>
+          <p>• Webhook 地址需在 Telegram Bot API 中手动设置</p>
+          <p>• Bot Token 和 Webhook Secret 仅服务端保存，不会暴露给前端</p>
+        </div>
+      </div>
+
+      <div className='space-y-4'>
+        <div className='flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700'>
+          <div>
+            <h3 className='text-sm font-medium text-gray-900 dark:text-white'>启用 Telegram Bot</h3>
+            <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>开启后显示绑定与 Telegram 登录入口</p>
+          </div>
+          <button
+            onClick={() => setEnabled(!enabled)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+
+        <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>Bot Token *</label>
+            <input type='password' value={botToken} onChange={(e) => setBotToken(e.target.value)} placeholder='123456:ABC...' className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white' />
+          </div>
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>Bot 用户名 *</label>
+            <input type='text' value={botUsername} onChange={(e) => setBotUsername(e.target.value)} placeholder='your_bot' className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white' />
+          </div>
+        </div>
+
+        <div>
+          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>Webhook Secret</label>
+          <input type='password' value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder='建议填写随机长字符串' className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white' />
+          {webhookUrl && <p className='mt-2 break-all text-xs text-gray-500 dark:text-gray-400'>Webhook URL：{webhookUrl}</p>}
+          <div className='mt-3 flex flex-col gap-2 sm:flex-row'>
+            <button onClick={handleSetWebhook} disabled={isLoading('setTelegramWebhook')} className={`w-full sm:w-auto ${buttonStyles.primary}`}>{isLoading('setTelegramWebhook') ? '设置中...' : '一键设置 Webhook'}</button>
+          </div>
+        </div>
+
+        <div className='grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700'>
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>系统代理</label>
+            <input type='text' value={apiProxy} onChange={(e) => setApiProxy(e.target.value)} placeholder='http://127.0.0.1:7890' className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white' />
+            <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>Node 部署可用；Cloudflare/Edge 环境会忽略。</p>
+          </div>
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>反代 Base URL</label>
+            <input type='text' value={apiBaseUrl} onChange={(e) => setApiBaseUrl(e.target.value)} placeholder='https://telegram-api.example.com' className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white' />
+            <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>用于替换 https://api.telegram.org。</p>
+          </div>
+        </div>
+
+        <div className='grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-gray-200 p-4 dark:border-gray-700'>
+          {[
+            ['允许绑定', bindingEnabled, setBindingEnabled],
+            ['允许 Telegram 注册', registrationEnabled, setRegistrationEnabled],
+            ['允许 Telegram 登录', loginEnabled, setLoginEnabled],
+            ['启用 Telegram 通知', notificationsEnabled, setNotificationsEnabled],
+            ['新绑定默认开启通知', defaultNotifications, setDefaultNotifications],
+          ].map(([label, value, setter]) => (
+            <label key={label as string} className='flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300'>
+              <input type='checkbox' checked={value as boolean} onChange={(e) => (setter as (value: boolean) => void)(e.target.checked)} />
+              {label as string}
+            </label>
+          ))}
+        </div>
+
+        <div className='rounded-lg border border-gray-200 p-4 dark:border-gray-700'>
+          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>测试 Chat ID</label>
+          <div className='flex flex-col gap-2 sm:flex-row'>
+            <input type='text' value={testChatId} onChange={(e) => setTestChatId(e.target.value)} placeholder='用户或群组 chat_id' className='min-w-0 flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white' />
+            <button onClick={handleTest} disabled={isLoading('testTelegram')} className={`w-full shrink-0 sm:w-auto ${buttonStyles.primary}`}>{isLoading('testTelegram') ? '发送中...' : '测试'}</button>
+          </div>
+        </div>
+
+        <div className='flex justify-end'>
+          <button onClick={handleSave} disabled={isLoading('saveTelegram')} className={buttonStyles.success}>
+            {isLoading('saveTelegram') ? '保存中...' : '保存配置'}
           </button>
         </div>
       </div>
@@ -15259,6 +15700,8 @@ const MusicConfigComponent = ({
   const [baseUrl, setBaseUrl] = useState('');
   const [token, setToken] = useState('');
   const [proxyEnabled, setProxyEnabled] = useState(true);
+  const [showMusicDisclaimer, setShowMusicDisclaimer] = useState(false);
+  const [musicCountdown, setMusicCountdown] = useState(10);
 
   useEffect(() => {
     if (config?.MusicConfig) {
@@ -15268,6 +15711,14 @@ const MusicConfigComponent = ({
       setProxyEnabled(config.MusicConfig.ProxyEnabled ?? true);
     }
   }, [config]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (showMusicDisclaimer && musicCountdown > 0) {
+      timer = setTimeout(() => setMusicCountdown(musicCountdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [showMusicDisclaimer, musicCountdown]);
 
   const handleSave = async () => {
     await withLoading('saveMusicConfig', async () => {
@@ -15362,12 +15813,75 @@ const MusicConfigComponent = ({
           <input
             type='checkbox'
             checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setShowMusicDisclaimer(true);
+                setMusicCountdown(10);
+              } else {
+                setEnabled(false);
+              }
+            }}
             className='sr-only peer'
           />
           <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
         </label>
       </div>
+
+      {/* 音乐免责声明弹窗 */}
+      {showMusicDisclaimer &&
+        createPortal(
+          <div className='fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4'>
+            <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-red-200 dark:border-red-800'>
+              <div className='p-6'>
+                <div className='flex justify-center mb-4'>
+                  <AlertTriangle className='w-12 h-12 text-red-500' />
+                </div>
+
+                <h3 className='text-xl font-bold text-gray-900 dark:text-gray-100 mb-4 text-center'>
+                  免责声明
+                </h3>
+
+                <div className='bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6'>
+                  <p className='text-sm text-gray-700 dark:text-gray-300 leading-relaxed'>
+                    本功能仅供个人学习和技术研究使用，请勿将其部署在公网环境中，更不得用于任何违法违规行为。
+                    使用本功能所产生的一切法律责任由使用者自行承担，与开发者无关。
+                    启用此功能即表示您已充分理解并同意承担相应风险。
+                  </p>
+                </div>
+
+                <div className='flex gap-3 justify-center'>
+                  <button
+                    onClick={() => {
+                      setShowMusicDisclaimer(false);
+                      setMusicCountdown(10);
+                    }}
+                    className={buttonStyles.secondary}
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEnabled(true);
+                      setShowMusicDisclaimer(false);
+                      setMusicCountdown(10);
+                    }}
+                    disabled={musicCountdown > 0}
+                    className={
+                      musicCountdown > 0
+                        ? buttonStyles.disabled
+                        : buttonStyles.danger
+                    }
+                  >
+                    {musicCountdown > 0
+                      ? `确认 (${musicCountdown}s)`
+                      : '确认启用'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
       <div className='space-y-4'>
         <div className='flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700'>
@@ -16757,6 +17271,7 @@ function AdminPageClient() {
     customAdFilter: false,
     themeConfig: false,
     emailConfig: false,
+    telegramConfig: false,
   });
 
   // 获取管理员配置
@@ -17387,6 +17902,21 @@ function AdminPageClient() {
               onToggle={() => toggleTab('emailConfig')}
             >
               <EmailConfigComponent
+                config={config}
+                refreshConfig={fetchConfig}
+              />
+            </CollapsibleTab>
+
+            {/* Telegram Bot 配置标签 */}
+            <CollapsibleTab
+              title='Telegram Bot'
+              icon={
+                <Send size={20} className='text-gray-600 dark:text-gray-400' />
+              }
+              isExpanded={expandedTabs.telegramConfig}
+              onToggle={() => toggleTab('telegramConfig')}
+            >
+              <TelegramConfigComponent
                 config={config}
                 refreshConfig={fetchConfig}
               />

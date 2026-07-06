@@ -123,6 +123,7 @@ interface SearchCachePayload {
 }
 
 type CustomSubtitleEngine = 'native' | 'jassub';
+type PlaybackSourceBadge = 'local' | 'offline' | null;
 
 interface CustomSubtitleState {
   name: string;
@@ -1535,6 +1536,7 @@ function PlayPageClient() {
 
   // 视频播放地址
   const [videoUrl, setVideoUrl] = useState('');
+  const [playbackSourceBadge, setPlaybackSourceBadge] = useState<PlaybackSourceBadge>(null);
 
   // 视频清晰度列表
   const [videoQualities, setVideoQualities] = useState<Array<{ name: string, url: string }>>([]);
@@ -1625,6 +1627,7 @@ function PlayPageClient() {
       setCorsFailedUrl(null);
       setIsVideoLoading(true);
       setVideoLoadingStage('sourceChanging');
+      setPlaybackSourceBadge(null);
       setVideoUrl(playUrl);
       setToast({
         message: '转码任务已创建，等待 3 秒后已切换到转码地址',
@@ -3112,8 +3115,10 @@ function PlayPageClient() {
     ) {
       // 这类源统一先走详情懒加载，如果 episodes 为空则跳过
       if (isLazyDetailSource(detailData?.source) && (!detailData?.episodes || detailData.episodes.length === 0)) {
+        setPlaybackSourceBadge(null);
         return;
       }
+      setPlaybackSourceBadge(null);
       setVideoUrl('');
       return;
     }
@@ -3124,6 +3129,7 @@ function PlayPageClient() {
     const requestSeq = ++videoUrlRequestSeqRef.current;
 
     let newUrl = detailData?.episodes[episodeIndex] || '';
+    let nextPlaybackSourceBadge: PlaybackSourceBadge = null;
     const isXiaoyaLazyPlayUrl = newUrl.startsWith('/api/xiaoya/play');
 
     if (isEpisodeSwitchRequest && isXiaoyaLazyPlayUrl) {
@@ -3266,6 +3272,7 @@ function PlayPageClient() {
         const modifiedContent = modifiedLines.join('\n');
         const m3u8Blob = new Blob([modifiedContent], { type: 'application/vnd.apple.mpegurl' });
         newUrl = URL.createObjectURL(m3u8Blob);
+        nextPlaybackSourceBadge = 'local';
 
         // 保存 Blob URLs 到 window，以便在切换视频时清理
         (window as any).__localFileBlobUrls = blobUrls;
@@ -3297,6 +3304,7 @@ function PlayPageClient() {
           (window as any).__localFileBlobUrls = indexedDBCheck.objectUrls;
         }
         newUrl = indexedDBCheck.url;
+        nextPlaybackSourceBadge = 'local';
         console.log(
           `使用 IndexedDB 本地缓存播放（${indexedDBCheck.mode === 'service-worker' ? 'Service Worker' : 'Blob 降级'} 模式）:`,
           episodeTitle
@@ -3314,6 +3322,7 @@ function PlayPageClient() {
       if (hasLocalFile) {
         // 使用本地代理接口,URL以.m3u8结尾以便Artplayer自动识别
         newUrl = `/api/offline-download/local/${currentSource}/${currentId}/${episodeIndex}/playlist.m3u8`;
+        nextPlaybackSourceBadge = 'offline';
         console.log('使用服务器端本地下载文件播放:', newUrl);
       } else {
         const isM3u8 = newUrl.toLowerCase().includes('.m3u') || !newUrl.toLowerCase().match(/\.(mp4|flv|webm|mkv|avi|mov)(\?.*)?$/);
@@ -3343,6 +3352,7 @@ function PlayPageClient() {
       }
       setVideoUrl(newUrl);
     }
+    setPlaybackSourceBadge(nextPlaybackSourceBadge);
   };
 
   // 处理下载指定集数（支持批量下载）
@@ -6736,20 +6746,6 @@ function PlayPageClient() {
         const savedSubtitleSize = typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em';
         currentSubtitleLabelRef.current = defaultSubtitle?.label || '关闭';
 
-        // 画面比例辅助函数
-        const applyAspectRatio = (video: HTMLVideoElement, val: string) => {
-          if (val === 'original') {
-            video.style.objectFit = '';
-            video.style.aspectRatio = '';
-          } else if (['contain', 'fill', 'cover'].includes(val)) {
-            video.style.objectFit = val;
-            video.style.aspectRatio = '';
-          } else {
-            video.style.aspectRatio = val;
-            video.style.objectFit = 'contain';
-          }
-        };
-
         artPlayerRef.current = new Artplayer({
           container: artRef.current!,
           url: videoUrl,
@@ -7406,29 +7402,6 @@ function PlayPageClient() {
                 return '';
               },
             },
-            {
-                name: '画面比例',
-                html: '画面比例',
-                icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 3H3C1.9 3 1 3.9 1 5v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z" fill="#ffffff"/><path d="M5 7h4v2H7v2H5V7zm14 10h-4v-2h2v-2h2v4zm-8-2h-2v-2H7v-2h2v2h2v2zm2-6h2v2h2v2h-2v-2h-2V9z" fill="#ffffff"/></svg>',
-                selector: [
-                    { html: '原始', value: 'original', default: true },
-                    { html: '填充', value: 'contain' },
-                    { html: '拉伸', value: 'fill' },
-                    { html: '裁剪', value: 'cover' },
-                    { html: '16:10', value: '16/10' },
-                    { html: '16:9', value: '16/9' },
-                    { html: '4:3', value: '4/3' },
-                ],
-                onSelect: function (item: any) {
-                    const player = artPlayerRef.current;
-                    if (!player?.video) return item.html;
-                    const video = player.video as HTMLVideoElement;
-                    const val = item.value;
-                    applyAspectRatio(video, val);
-                    try { localStorage.setItem('aspectRatio', val); } catch (_) {}
-                    return item.html;
-                },
-            },
           ],
           // 控制栏配置
           controls: [
@@ -7830,14 +7803,6 @@ function PlayPageClient() {
           // 标记播放器已就绪，触发 usePlaySync 设置事件监听器
           setPlayerReady(true);
           console.log('[PlayPage] Player ready, triggering sync setup');
-
-          // 恢复保存的画面比例设置
-          try {
-            const savedAr = localStorage.getItem('aspectRatio');
-            if (savedAr && artPlayerRef.current?.video) {
-              applyAspectRatio(artPlayerRef.current.video as HTMLVideoElement, savedAr);
-            }
-          } catch (_) {}
 
           // 应用进度条图标配置 - 尽早执行
           const applyProgressThumbConfig = () => {
@@ -9586,6 +9551,11 @@ function PlayPageClient() {
                 </span>
               );
             })()}
+            {playbackSourceBadge && (
+              <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'>
+                {playbackSourceBadge === 'local' ? '本地播放' : '离线播放'}
+              </span>
+            )}
           </h1>
         </div>
         {/* 第二行：播放器和选集 */}
@@ -9970,9 +9940,6 @@ function PlayPageClient() {
                             }
                             // 使用代理 URL
                             const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : '';
-                            // netdisk 类源的播放地址是内部 API（需要 Cookie 鉴权），Proxy-M3U8 服务端 fetch 不带 Cookie 会返回 401
-                            // 因此 netdisk 源直接使用原始 URL，外部播放器（PotPlayer/VLC/MPV）能跟随 307 重定向到 CDN
-                            const isNetdiskSource = currentSource?.startsWith?.('netdisk-');
                             const proxyUrl = externalPlayerAdBlock && isNetdiskSource
                               ? `${urlToUse}${urlToUse.includes('?') ? '&' : '?'}format=proxy`
                               : externalPlayerAdBlock && !isNetdiskSource
@@ -10005,7 +9972,6 @@ function PlayPageClient() {
                             }
                             // 使用代理 URL
                             const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : '';
-                            const isNetdiskSource = currentSource?.startsWith?.('netdisk-');
                             const proxyUrl = externalPlayerAdBlock && isNetdiskSource
                               ? `${urlToUse}${urlToUse.includes('?') ? '&' : '?'}format=proxy`
                               : externalPlayerAdBlock && !isNetdiskSource
@@ -10038,7 +10004,6 @@ function PlayPageClient() {
                             }
                             // 使用代理 URL
                             const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : '';
-                            const isNetdiskSource = currentSource?.startsWith?.('netdisk-');
                             const proxyUrl = externalPlayerAdBlock && isNetdiskSource
                               ? `${urlToUse}${urlToUse.includes('?') ? '&' : '?'}format=proxy`
                               : externalPlayerAdBlock && !isNetdiskSource

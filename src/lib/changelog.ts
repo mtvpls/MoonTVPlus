@@ -11,6 +11,22 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "223.3.0",
+    date: "2026-07-06",
+    added: [
+    "接入Telegram Bot功能",
+    "增加本地播放/离线播放状态标识",
+    "公告增加每次显示模式",
+    "增加光鸭云盘名称映射"
+    ],
+    changed: [
+      // 无变更内容
+    ],
+    fixed: [
+      // 无修复内容
+    ]
+  },
+  {
     version: "223.2.0",
     date: "2026-06-25",
     added: [

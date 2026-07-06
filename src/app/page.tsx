@@ -53,7 +53,7 @@ function HomeClient() {
     BangumiCalendarData[]
   >([]);
   const [loading, setLoading] = useState(true);
-  const { announcement } = useSite();
+  const { announcement, announcementDisplayMode } = useSite();
   // 首页模块配置状态
   const [homeModules, setHomeModules] = useState<HomeModule[]>([
     { id: 'hotMovies', name: '热门电影', enabled: true, order: 0 },
@@ -362,6 +362,17 @@ function HomeClient() {
   // 检查公告弹窗状态
   useEffect(() => {
     if (typeof window !== 'undefined' && announcement) {
+      // 会话级标记：只在首次访问站点时弹出，导航切回首页不重复弹
+      if (sessionStorage.getItem('announcementShown')) {
+        return;
+      }
+      // 每次显示模式：每次新会话首次访问弹出一次
+      if (announcementDisplayMode === 'every') {
+        setShowAnnouncement(true);
+        sessionStorage.setItem('announcementShown', '1');
+        return;
+      }
+      // 单次显示模式：localStorage 记住已看过的公告文本，换公告则重新弹出
       const hasSeenAnnouncement = localStorage.getItem('hasSeenAnnouncement');
       if (hasSeenAnnouncement !== announcement) {
         setShowAnnouncement(true);
@@ -369,7 +380,8 @@ function HomeClient() {
         setShowAnnouncement(Boolean(!hasSeenAnnouncement && announcement));
       }
     }
-  }, [announcement]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [announcement, announcementDisplayMode]);
 
   useEffect(() => {
     const CACHE_DURATION = 60 * 60 * 1000; // 1小时

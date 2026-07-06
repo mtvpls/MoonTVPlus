@@ -2,7 +2,7 @@
 
 'use client';
 
-import { AlertCircle, CheckCircle, Eye, EyeOff, User, Lock } from 'lucide-react';
+import { AlertCircle, CheckCircle, Eye, EyeOff, Send, User, Lock } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
@@ -108,6 +108,9 @@ function LoginPageClient() {
   const [siteConfig, setSiteConfig] = useState<any>(null);
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
   const [backgroundImage, setBackgroundImage] = useState<string>('');
+  const [telegramLoginEnabled, setTelegramLoginEnabled] = useState(false);
+  const [telegramLoginLoading, setTelegramLoginLoading] = useState(false);
+  const [telegramLoginHint, setTelegramLoginHint] = useState<string | null>(null);
 
   const { siteName } = useSite();
 
@@ -150,6 +153,7 @@ function LoginPageClient() {
         EnableOIDCLogin: runtimeConfig?.ENABLE_OIDC_LOGIN || false,
         OIDCButtonText: runtimeConfig?.OIDC_BUTTON_TEXT || '',
       });
+      setTelegramLoginEnabled(Boolean(runtimeConfig?.ENABLE_TELEGRAM_LOGIN));
 
       // 从localStorage读取记住的密码信息
       const rememberedCredentials = localStorage.getItem('rememberedCredentials');
@@ -274,6 +278,61 @@ function LoginPageClient() {
       setLoading(false);
     }
   };
+
+  const handleTelegramLogin = async () => {
+    setError(null);
+    setTelegramLoginHint(null);
+
+    try {
+      setTelegramLoginLoading(true);
+      const createRes = await fetch('/api/telegram/login/create', { method: 'POST' });
+      const createData = await createRes.json().catch(() => ({}));
+      if (!createRes.ok) {
+        const configDetail = createData.config
+          ? `（enabled=${String(createData.config.enabled)}, loginEnabled=${String(createData.config.loginEnabled)}, hasBotToken=${String(createData.config.hasBotToken)}, hasBotUsername=${String(createData.config.hasBotUsername)}, botUsername=${createData.config.botUsername || '-'}）`
+          : `（HTTP ${createRes.status}）`;
+        setError(`${createData.error || 'Telegram 登录接口不可用'}${configDetail}`);
+        return;
+      }
+
+      setTelegramLoginHint('请在 Telegram 中确认登录');
+      window.open(createData.deepLink, '_blank', 'noopener,noreferrer');
+
+      const startedAt = Date.now();
+      const timer = window.setInterval(async () => {
+        if (Date.now() - startedAt > 5 * 60 * 1000) {
+          window.clearInterval(timer);
+          setTelegramLoginLoading(false);
+          setTelegramLoginHint(null);
+          setError('Telegram 登录已超时，请重试');
+          return;
+        }
+
+        const statusRes = await fetch(`/api/telegram/login/status?token=${encodeURIComponent(createData.token)}`);
+        const statusData = await statusRes.json().catch(() => ({}));
+        if (statusData.status === 'confirmed') {
+          window.clearInterval(timer);
+          const redirect = searchParams.get('redirect') || '/';
+          window.location.replace(redirect);
+        } else if (statusData.status === 'denied') {
+          window.clearInterval(timer);
+          setTelegramLoginLoading(false);
+          setTelegramLoginHint(null);
+          setError('已拒绝 Telegram 登录');
+        } else if (statusData.status === 'expired') {
+          window.clearInterval(timer);
+          setTelegramLoginLoading(false);
+          setTelegramLoginHint(null);
+          setError('Telegram 登录已过期');
+        }
+      }, 2000);
+    } catch (error) {
+      setError('Telegram 登录请求失败，请稍后重试');
+      setTelegramLoginLoading(false);
+      setTelegramLoginHint(null);
+    }
+  };
+
 
 
 
@@ -400,27 +459,49 @@ function LoginPageClient() {
           )}
         </form>
 
-        {/* OIDC登录按钮 */}
-        {siteConfig?.EnableOIDCLogin && shouldAskUsername && (
+        {/* 第三方登录区域 */}
+        {shouldAskUsername && (telegramLoginEnabled || siteConfig?.EnableOIDCLogin) && (
           <div className='mt-6'>
             <div className='relative'>
               <div className='absolute inset-0 flex items-center'>
                 <div className='w-full border-t border-gray-300 dark:border-gray-600'></div>
               </div>
               <div className='relative flex justify-center text-sm'>
-                <span className='px-2 bg-white/60 dark:bg-zinc-900/60 text-gray-500 dark:text-gray-400'>
+                <span className='px-2 text-gray-500 dark:text-gray-400'>
                   或
                 </span>
               </div>
             </div>
-            <button
-              type='button'
-              onClick={() => window.location.href = '/api/auth/oidc/login'}
-              className='mt-4 w-full inline-flex justify-center items-center rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white/60 dark:bg-zinc-800/60 py-3 text-base font-semibold text-gray-700 dark:text-gray-200 shadow-sm transition-all duration-200 hover:bg-gray-50 dark:hover:bg-zinc-700/60'
-            >
-              {getOIDCProviderIcon(siteConfig?.OIDCButtonText || '')}
-              {siteConfig?.OIDCButtonText || '使用OIDC登录'}
-            </button>
+            <div className='mt-4 space-y-3'>
+              {/* Telegram登录按钮 */}
+              {telegramLoginEnabled && (
+                <button
+                  type='button'
+                  disabled={telegramLoginLoading}
+                  onClick={handleTelegramLogin}
+                  className='w-full inline-flex justify-center items-center rounded-lg border-2 border-sky-300 dark:border-sky-700 bg-white/60 dark:bg-zinc-800/60 py-3 text-base font-semibold text-sky-700 dark:text-sky-300 shadow-sm transition-all duration-200 hover:bg-sky-50 dark:hover:bg-sky-900/30 disabled:cursor-not-allowed disabled:opacity-60'
+                >
+                  <Send className='w-5 h-5 mr-2' />
+                  {telegramLoginLoading ? '等待 Telegram 确认...' : '使用 Telegram 登录'}
+                </button>
+              )}
+              {telegramLoginHint && (
+                <p className='text-center text-xs text-gray-500 dark:text-gray-400'>
+                  {telegramLoginHint}
+                </p>
+              )}
+              {/* OIDC登录按钮 */}
+              {siteConfig?.EnableOIDCLogin && (
+                <button
+                  type='button'
+                  onClick={() => window.location.href = '/api/auth/oidc/login'}
+                  className='w-full inline-flex justify-center items-center rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white/60 dark:bg-zinc-800/60 py-3 text-base font-semibold text-gray-700 dark:text-gray-200 shadow-sm transition-all duration-200 hover:bg-gray-50 dark:hover:bg-zinc-700/60'
+                >
+                  {getOIDCProviderIcon(siteConfig?.OIDCButtonText || '')}
+                  {siteConfig?.OIDCButtonText || '使用OIDC登录'}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

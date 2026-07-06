@@ -12,17 +12,6 @@ export const maxDuration = 60; // 设置最大执行时间为 60 秒
  * 用于外部播放器访问,会执行去广告逻辑并处理相对链接
  * GET /api/proxy-m3u8?url=<原始m3u8地址>&source=<播放源>&token=<鉴权token>
  */
-
-// 直链播放源标识，用于 proxy-m3u8 判断特定源是否需要直链代理
-const DIRECT_PLAY_SOURCE = 'directplay';
-
-// 判断是否为直链播放类源（网盘类源返回直链，需要代理分片避免 CORS 问题）
-const isDirectPlayLikeSource = (src: string): boolean => {
-  if (src === DIRECT_PLAY_SOURCE) return true;
-  // 网盘类源（百度盘、阿里盘等）返回直链，需代理视频分片
-  const directPlaySources = ['netdisk-baidu'];
-  return directPlaySources.includes(src);
-}
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -48,6 +37,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const DIRECT_PLAY_SOURCE = 'directplay';
     // 安全校验：防 SSRF / 域名重绑定，只允许合法的公网 URL。对所有经过 proxy-m3u8 的请求强制校验，不仅限于 directplay
     const isSafeUrl = await validateProxyUrlServerSide(m3u8Url);
     if (!isSafeUrl) {
@@ -115,20 +105,33 @@ export async function GET(request: NextRequest) {
     );
 
     if (!isTextType) {
-      console.log(`[Proxy-M3U8] 检测到非文本媒体流 (Content-Type: ${contentType}), 直接透传二进制流, URL: ${m3u8Url}`);
-      // 构造一个新的 Response 对象用于二进制直接透传，确保包含了支持跨域的 header
-      const newHeaders = new Headers(response.headers);
-      newHeaders.set('Access-Control-Allow-Origin', '*');
+      if (source === DIRECT_PLAY_SOURCE) {
+        console.log(`[Proxy-M3U8] 检测到非文本媒体流 (Content-Type: ${contentType}), 针对 directplay 直链代理模式，直接透传二进制流, URL: ${m3u8Url}`);
+        // 构造一个新的 Response 对象用于二进制直接透传，确保包含了支持跨域的 header
+        const newHeaders = new Headers(response.headers);
+        newHeaders.set('Access-Control-Allow-Origin', '*');
 
-      // 如果源站返回了跨站相关的禁止头，尽量移除它们
-      newHeaders.delete('X-Frame-Options');
-      newHeaders.delete('Content-Security-Policy');
+        // 如果源站返回了跨站相关的禁止头，尽量移除它们
+        newHeaders.delete('X-Frame-Options');
+        newHeaders.delete('Content-Security-Policy');
 
-      return new NextResponse(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: newHeaders,
-      });
+        return new NextResponse(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: newHeaders,
+        });
+      }
+
+      console.warn(`[Proxy-M3U8] 拦截到非文本媒体流 (Content-Type: ${contentType}), 拒绝按文本解析, URL: ${m3u8Url}`);
+      return NextResponse.json(
+        {
+          error: 'Unsupported Media Type',
+          details: `The source returned Content-Type "${contentType}", which is not a text m3u8 playlist.`,
+          fallbackToDirect: true,
+          originalUrl: m3u8Url
+        },
+        { status: 415, headers: { 'Access-Control-Allow-Origin': '*' } }
+      );
     }
 
     let m3u8Content = await response.text();
@@ -283,7 +286,7 @@ function resolveM3u8Links(m3u8Content: string, baseUrl: string, source: string, 
         }
 
         // 直链播放模式：通过代理访问密钥，避免 CORS 问题
-        if (isDirectPlayLikeSource(source)) {
+        if (source === 'directplay') {
           keyUri = `${proxyOrigin}/api/proxy/vod/segment?url=${encodeURIComponent(keyUri)}&source=directplay`;
         }
 
@@ -329,7 +332,7 @@ function resolveM3u8Links(m3u8Content: string, baseUrl: string, source: string, 
     if (isM3u8) {
       const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
       url = `${proxyOrigin}/api/proxy-m3u8?url=${encodeURIComponent(url)}${source ? `&source=${encodeURIComponent(source)}` : ''}${tokenParam}`;
-    } else if (isDirectPlayLikeSource(source)) {
+    } else if (source === 'directplay') {
       // 直链播放模式：通过代理访问媒体分片（ts/jpeg/png 等），避免 CORS 问题
       url = `${proxyOrigin}/api/proxy/vod/segment?url=${encodeURIComponent(url)}&source=directplay`;
     }
