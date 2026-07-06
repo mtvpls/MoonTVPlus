@@ -73,6 +73,9 @@ COPY --from=builder --chown=nextjs:nodejs /tmp/prod-deps/node_modules ./node_mod
 RUN mkdir -p /app/.data "$OFFLINE_DOWNLOAD_DIR" \
   && chown -R nextjs:nodejs /app/.data "$OFFLINE_DOWNLOAD_DIR"
 
+# 安装 ffmpeg（用于 ISO 镜像流式播放）
+RUN apk add --no-cache ffmpeg
+
 # 切换到非特权用户
 USER nextjs
 

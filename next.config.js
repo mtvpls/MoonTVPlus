@@ -55,7 +55,7 @@ const createNextConfig = (phase) => {
     ],
   },
 
-  webpack(config, { isServer }) {
+  webpack(config, { isServer, nextRuntime }) {
     // Grab the existing rule that handles SVG imports
     const fileLoaderRule = config.module.rules.find((rule) =>
       rule.test?.test?.('.svg')
@@ -89,9 +89,14 @@ const createNextConfig = (phase) => {
       net: false,
       tls: false,
       crypto: false,
+      path: false,
     };
 
-    // Cloudflare 使用 D1，不需要把 better-sqlite3 原生模块带入 Worker 产物。
+    // Edge runtime: make native Node modules external so webpack doesn't try to
+    // bundle bindings → fs for routes with `runtime = 'edge'` that only import
+    // better-sqlite3 transitively (e.g. baidu/proxy → baidu-session-resolver → config → db → better-sqlite3).
+    // At runtime on real Node.js these resolve fine; the alias is only for Cloudflare/EdgeOne.
+    // Cloudflare / EdgeOne 使用 D1/边缘运行时，不需要把 better-sqlite3 等原生模块带入产物。
     if (isEdgeBuild) {
       config.resolve.alias = {
         ...config.resolve.alias,
@@ -118,7 +123,7 @@ const createNextConfig = (phase) => {
           __dirname,
           'src/lib/cloudflare-shims/node-fetch.ts'
         ),
-        ...(isCloudflare
+        ...(isEdgeBuild
           ? {
               'https-proxy-agent': path.resolve(
                 __dirname,

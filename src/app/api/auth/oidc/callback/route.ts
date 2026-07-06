@@ -11,6 +11,7 @@ import {
 } from '@/lib/refresh-token';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // 生成签名
 async function generateSignature(

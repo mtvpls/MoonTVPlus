@@ -12,7 +12,7 @@ import {
 import { refreshQuarkNetdiskSession } from '@/lib/netdisk/quark-session-cache';
 import { resolveQuarkSession } from '@/lib/netdisk/quark-session-resolver';
 
-export const runtime = 'nodejs';
+export const runtime = process.env.EDGEONE_PAGES === '1' ? 'edge' : 'nodejs';
 
 const QUARK_PC_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/2.5.20 Chrome/100.0.4896.160 Electron/18.3.5.4-b478491100 Safari/537.36 Channel/pckk_other_ch';

@@ -6746,6 +6746,20 @@ function PlayPageClient() {
         const savedSubtitleSize = typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em';
         currentSubtitleLabelRef.current = defaultSubtitle?.label || '关闭';
 
+        // 画面比例辅助函数
+        const applyAspectRatio = (video: HTMLVideoElement, val: string) => {
+          if (val === 'original') {
+            video.style.objectFit = '';
+            video.style.aspectRatio = '';
+          } else if (['contain', 'fill', 'cover'].includes(val)) {
+            video.style.objectFit = val;
+            video.style.aspectRatio = '';
+          } else {
+            video.style.aspectRatio = val;
+            video.style.objectFit = 'contain';
+          }
+        };
+
         artPlayerRef.current = new Artplayer({
           container: artRef.current!,
           url: videoUrl,
@@ -7402,6 +7416,29 @@ function PlayPageClient() {
                 return '';
               },
             },
+            {
+                name: '画面比例',
+                html: '画面比例',
+                icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 3H3C1.9 3 1 3.9 1 5v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z" fill="#ffffff"/><path d="M5 7h4v2H7v2H5V7zm14 10h-4v-2h2v-2h2v4zm-8-2h-2v-2H7v-2h2v2h2v2zm2-6h2v2h2v2h-2v-2h-2V9z" fill="#ffffff"/></svg>',
+                selector: [
+                    { html: '原始', value: 'original', default: true },
+                    { html: '填充', value: 'contain' },
+                    { html: '拉伸', value: 'fill' },
+                    { html: '裁剪', value: 'cover' },
+                    { html: '16:10', value: '16/10' },
+                    { html: '16:9', value: '16/9' },
+                    { html: '4:3', value: '4/3' },
+                ],
+                onSelect: function (item: any) {
+                    const player = artPlayerRef.current;
+                    if (!player?.video) return item.html;
+                    const video = player.video as HTMLVideoElement;
+                    const val = item.value;
+                    applyAspectRatio(video, val);
+                    try { localStorage.setItem('aspectRatio', val); } catch (_) {}
+                    return item.html;
+                },
+            },
           ],
           // 控制栏配置
           controls: [
@@ -7803,6 +7840,14 @@ function PlayPageClient() {
           // 标记播放器已就绪，触发 usePlaySync 设置事件监听器
           setPlayerReady(true);
           console.log('[PlayPage] Player ready, triggering sync setup');
+
+          // 恢复保存的画面比例设置
+          try {
+            const savedAr = localStorage.getItem('aspectRatio');
+            if (savedAr && artPlayerRef.current?.video) {
+              applyAspectRatio(artPlayerRef.current.video as HTMLVideoElement, savedAr);
+            }
+          } catch (_) {}
 
           // 应用进度条图标配置 - 尽早执行
           const applyProgressThumbConfig = () => {
@@ -9940,9 +9985,14 @@ function PlayPageClient() {
                             }
                             // 使用代理 URL
                             const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : '';
-                            const proxyUrl = externalPlayerAdBlock
-                              ? `${window.location.origin}/api/proxy-m3u8?url=${encodeURIComponent(urlToUse)}&source=${encodeURIComponent(currentSource)}${tokenParam}`
-                              : urlToUse;
+                            // netdisk 类源的播放地址是内部 API（需要 Cookie 鉴权），Proxy-M3U8 服务端 fetch 不带 Cookie 会返回 401
+                            // 因此 netdisk 源直接使用原始 URL，外部播放器（PotPlayer/VLC/MPV）能跟随 307 重定向到 CDN
+                            const isNetdiskSource = currentSource?.startsWith?.('netdisk-');
+                            const proxyUrl = externalPlayerAdBlock && isNetdiskSource
+                              ? `${urlToUse}${urlToUse.includes('?') ? '&' : '?'}format=proxy`
+                              : externalPlayerAdBlock && !isNetdiskSource
+                                ? `${window.location.origin}/api/proxy-m3u8?url=${encodeURIComponent(urlToUse)}&source=${encodeURIComponent(currentSource)}${tokenParam}`
+                                : urlToUse;
                             // URL encode 避免冒号被吃掉
                             window.open(`potplayer://${proxyUrl}`, '_blank');
                           }}
@@ -9970,9 +10020,12 @@ function PlayPageClient() {
                             }
                             // 使用代理 URL
                             const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : '';
-                            const proxyUrl = externalPlayerAdBlock
-                              ? `${window.location.origin}/api/proxy-m3u8?url=${encodeURIComponent(urlToUse)}&source=${encodeURIComponent(currentSource)}${tokenParam}`
-                              : urlToUse;
+                            const isNetdiskSource = currentSource?.startsWith?.('netdisk-');
+                            const proxyUrl = externalPlayerAdBlock && isNetdiskSource
+                              ? `${urlToUse}${urlToUse.includes('?') ? '&' : '?'}format=proxy`
+                              : externalPlayerAdBlock && !isNetdiskSource
+                                ? `${window.location.origin}/api/proxy-m3u8?url=${encodeURIComponent(urlToUse)}&source=${encodeURIComponent(currentSource)}${tokenParam}`
+                                : urlToUse;
                             // URL encode 避免冒号被吃掉
                             window.open(`vlc://${proxyUrl}`, '_blank');
                           }}
@@ -10000,9 +10053,12 @@ function PlayPageClient() {
                             }
                             // 使用代理 URL
                             const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : '';
-                            const proxyUrl = externalPlayerAdBlock
-                              ? `${window.location.origin}/api/proxy-m3u8?url=${encodeURIComponent(urlToUse)}&source=${encodeURIComponent(currentSource)}${tokenParam}`
-                              : urlToUse;
+                            const isNetdiskSource = currentSource?.startsWith?.('netdisk-');
+                            const proxyUrl = externalPlayerAdBlock && isNetdiskSource
+                              ? `${urlToUse}${urlToUse.includes('?') ? '&' : '?'}format=proxy`
+                              : externalPlayerAdBlock && !isNetdiskSource
+                                ? `${window.location.origin}/api/proxy-m3u8?url=${encodeURIComponent(urlToUse)}&source=${encodeURIComponent(currentSource)}${tokenParam}`
+                                : urlToUse;
                             // URL encode 避免冒号被吃掉
                             window.open(`mpv://${proxyUrl}`, '_blank');
                           }}

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { spawn } from 'child_process';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getPan115PlayUrl } from '@/lib/netdisk/pan115.client';
 import { getPan115NetdiskSession, refreshPan115NetdiskSession } from '@/lib/netdisk/pan115-session-cache';
 import { resolvePan115Session } from '@/lib/netdisk/pan115-session-resolver';
 
-export const runtime = 'nodejs';
+export const runtime = process.env.EDGEONE_PAGES === '1' ? 'edge' : 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,8 +38,129 @@ export async function GET(request: NextRequest) {
     const url = await getPan115PlayUrl(file, cookie);
     refreshPan115NetdiskSession(id);
 
+    // Check if file is .iso and we're on Docker (has ffmpeg)
+    const isIso = file.name.toLowerCase().endsWith('.iso');
+    const onDocker = process.env.DOCKER_ENV === 'true';
+
+    if (isIso && onDocker && format === 'iso-stream') {
+      // Stream ISO through ffmpeg — fetch the 115 CDN URL and pipe through ffmpeg
+      try {
+        const cdnResponse = await fetch(url);
+        if (!cdnResponse.ok || !cdnResponse.body) {
+          throw new Error(`CDN 返回 ${cdnResponse.status}`);
+        }
+
+        const reader = cdnResponse.body.getReader();
+        const ffmpeg = spawn('ffmpeg', [
+          '-i', 'pipe:0',
+          '-map', '0:v:0',
+          '-map', '0:a:0',
+          '-c', 'copy',
+          '-f', 'mp4',
+          '-movflags', 'frag_keyframe+empty_moov',
+          '-movflags', 'faststart',
+          '-analyzeduration', '100000000',
+          '-probesize', '100000000',
+          'pipe:1',
+        ], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+        // Pipe CDN download to ffmpeg stdin
+        const writable = ffmpeg.stdin;
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) {
+                writable.end();
+                break;
+              }
+              writable.write(value);
+            }
+          } catch (err) {
+            writable.destroy(err as Error);
+          }
+        };
+        pump();
+
+        // Collect ffmpeg stderr for debugging
+        let stderr = '';
+        ffmpeg.stderr?.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString();
+        });
+
+        // Create a ReadableStream from ffmpeg stdout
+        const stream = new ReadableStream({
+          start(controller) {
+            ffmpeg.stdout.on('data', (chunk: Buffer) => {
+              controller.enqueue(chunk);
+            });
+            ffmpeg.stdout.on('end', () => {
+              controller.close();
+            });
+            ffmpeg.stdout.on('error', (err) => {
+              controller.error(err);
+            });
+          },
+          cancel() {
+            ffmpeg.kill();
+            reader.cancel();
+          },
+        });
+
+        return new NextResponse(stream, {
+          headers: {
+            'Content-Type': 'video/mp4',
+            'Cache-Control': 'no-store',
+            'Transfer-Encoding': 'chunked',
+          },
+        });
+      } catch (streamErr) {
+        const msg = streamErr instanceof Error ? streamErr.message : 'ISO 流式播放失败';
+        return NextResponse.json({ error: msg }, { status: 500 });
+      }
+    }
+
     if (format === 'json') {
       return NextResponse.json({ url, headers: {} });
+    }
+
+    if (format === 'proxy') {
+      // 代理模式：服务端下载 CDN 流并透传给客户端（用于 PotPlayer/VLC/MPV 等外部播放器）
+      const rangeHeader = request.headers.get('range') || '';
+      const cdnHeaders: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://115.com/',
+      };
+      if (rangeHeader) {
+        cdnHeaders['Range'] = rangeHeader;
+      }
+
+      const cdnResponse = await fetch(url, { headers: cdnHeaders });
+      if (!cdnResponse.ok && cdnResponse.status !== 206) {
+        return NextResponse.json({ error: `CDN 代理错误 ${cdnResponse.status}` }, { status: 502 });
+      }
+
+      const responseHeaders: Record<string, string> = {
+        'Content-Type': cdnResponse.headers.get('content-type') || 'video/mp2t',
+        'Accept-Ranges': cdnResponse.headers.get('accept-ranges') || 'bytes',
+        'Cache-Control': 'no-store',
+      };
+      const contentLength = cdnResponse.headers.get('content-length');
+      if (contentLength) {
+        responseHeaders['Content-Length'] = contentLength;
+      }
+      const contentRange = cdnResponse.headers.get('content-range');
+      if (contentRange) {
+        responseHeaders['Content-Range'] = contentRange;
+      }
+
+      return new NextResponse(cdnResponse.body, {
+        status: cdnResponse.status,
+        statusText: cdnResponse.statusText,
+        headers: responseHeaders,
+      });
     }
 
     return NextResponse.redirect(url);

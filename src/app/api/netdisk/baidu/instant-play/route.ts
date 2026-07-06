@@ -7,7 +7,7 @@ import { createBaiduNetdiskSession } from '@/lib/netdisk/baidu-session-cache';
 import { NETDISK_BAIDU_SOURCE } from '@/lib/netdisk/source';
 import { hasFeaturePermission } from '@/lib/permissions';
 
-export const runtime = 'nodejs';
+export const runtime = process.env.EDGEONE_PAGES === '1' ? 'edge' : 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {

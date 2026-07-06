@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getNetdiskCheckCooldownRemainingMs, getNetdiskCheckTask } from '@/lib/netdisk-check-task';
 import { requireFeaturePermission } from '@/lib/permissions';
 
-export const runtime = 'nodejs';
+export const runtime = process.env.EDGEONE_PAGES === '1' ? 'edge' : 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
