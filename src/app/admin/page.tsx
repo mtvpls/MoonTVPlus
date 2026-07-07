@@ -5418,6 +5418,7 @@ const EmbyConfigComponent = ({
     removeEmbyPrefix: false,
     appendMediaSourceId: false,
     transcodeMp4: false,
+    transcodeAudio: false,
     proxyPlay: false,
     customUserAgent: '',
     embyAuthorizationHeader: '',
@@ -6317,6 +6318,37 @@ const EmbyConfigComponent = ({
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                       formData.transcodeMp4 ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* 音频转码开关 */}
+              <div className='flex items-center justify-between mb-3'>
+                <div className='flex-1'>
+                  <label className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                    音频转码
+                  </label>
+                  <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                    视频直通，音频转AAC，解决浏览器无声音问题（AC3/EAC3/DTS）
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      transcodeAudio: !formData.transcodeAudio,
+                    })
+                  }
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    formData.transcodeAudio
+                      ? 'bg-blue-600'
+                      : 'bg-gray-200 dark:bg-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      formData.transcodeAudio ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
                 </button>
