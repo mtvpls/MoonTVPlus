@@ -1086,7 +1086,7 @@ export default function PrivateLibraryPage() {
           </div>
         ) : (
           <>
-            {showLocalSearch && sourceType !== 'xiaoya' && (
+            {showLocalSearch && (
               <div className='mb-4 flex justify-center'>
                 <div className='relative w-full max-w-md'>
                   <input
