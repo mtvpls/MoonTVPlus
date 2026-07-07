@@ -52,13 +52,6 @@ export default function PrivateLibraryPage() {
     return { OPENLIST_ENABLED: false, EMBY_ENABLED: false, XIAOYA_ENABLED: false };
   }, []);
 
-  // 本地搜索过滤
-  const filteredVideos = useMemo(() => {
-    if (!localSearchKeyword.trim()) return videos;
-    const kw = localSearchKeyword.trim().toLowerCase();
-    return videos.filter((v) => v.title.toLowerCase().includes(kw));
-  }, [videos, localSearchKeyword]);
-
   // 解析URL中的source参数（支持 emby:emby1 格式）
   const parseSourceParam = (sourceParam: string | null): { sourceType: LibrarySourceType; embyKey?: string } => {
     if (!sourceParam) return { sourceType: 'openlist' };
@@ -75,6 +68,12 @@ export default function PrivateLibraryPage() {
   const [embyKey, setEmbyKey] = useState<string | undefined>();
   const [embySourceOptions, setEmbySourceOptions] = useState<EmbySourceOption[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
+  // 本地搜索过滤（videos 声明之后）
+  const filteredVideos = useMemo(() => {
+    if (!localSearchKeyword.trim()) return videos;
+    const kw = localSearchKeyword.trim().toLowerCase();
+    return videos.filter((v) => v.title.toLowerCase().includes(kw));
+  }, [videos, localSearchKeyword]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
