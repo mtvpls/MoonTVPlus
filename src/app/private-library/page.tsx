@@ -594,14 +594,7 @@ export default function PrivateLibraryPage() {
           {mounted && (
             <button
               onClick={() => {
-                // 导航到搜索页，传入当前源参数
-                let sourceParam = sourceType;
-                if (sourceType === 'emby' && embyKey) {
-                  sourceParam = `emby_${embyKey}`;
-                }
-                const runtimeSource = runtimeConfig.OPENLIST_ENABLED ? 'openlist' :
-                  runtimeConfig.EMBY_ENABLED ? 'emby' : '';
-                router.push(`/search?source=${sourceParam}&from=private_library`);
+                router.push('/private-library-search');
               }}
               className='flex items-center gap-2 px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors'
               style={{ marginTop: '10px', marginLeft: '8px' }}
