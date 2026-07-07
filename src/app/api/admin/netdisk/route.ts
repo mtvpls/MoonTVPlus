@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, Quark, Mobile, Baidu, Tianyi, Pan123, UC, Pan115, Pansou, provider } = body;
+    const { action, Quark, Mobile, Baidu, Tianyi, Pan123, UC, Pan115, GuangYa, provider } = body;
     const adminConfig = await getConfig();
 
     if (action === 'save') {
@@ -110,12 +110,11 @@ export async function POST(request: NextRequest) {
         Enabled: Boolean(Pan115?.Enabled),
         Cookie: normalizedPan115Cookie,
       };
-      adminConfig.NetDiskConfig.Pansou = {
-        Enabled: Boolean(Pansou?.Enabled),
-        ApiUrl: Pansou?.ApiUrl || '',
-        Username: Pansou?.Username || '',
-        Password: Pansou?.Password || '',
-        KeywordBlocklist: Pansou?.KeywordBlocklist || '',
+      adminConfig.NetDiskConfig.GuangYa = {
+        Enabled: Boolean(GuangYa?.Enabled),
+        RefreshToken: GuangYa?.RefreshToken || '',
+        ClientId: GuangYa?.ClientId || '',
+        DeviceId: GuangYa?.DeviceId || '',
       };
 
       await db.saveAdminConfig(adminConfig);
@@ -190,6 +189,23 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: true,
           message: '115 Cookie 格式正常',
+        });
+      }
+      if (provider === 'guangya') {
+        if (!GuangYa?.RefreshToken) {
+          return NextResponse.json({ error: '请先填写 Refresh Token' }, { status: 400 });
+        }
+
+        // Verify all three fields are present
+        const guangyaConfig = {
+          refreshToken: GuangYa.RefreshToken,
+          clientId: GuangYa.ClientId || '',
+          deviceId: GuangYa.DeviceId || '',
+        };
+
+        return NextResponse.json({
+          success: true,
+          message: '光鸭云盘配置格式正常',
         });
       }
 

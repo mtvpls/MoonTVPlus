@@ -195,12 +195,11 @@ export interface AdminConfig {
       Enabled: boolean;
       Cookie: string;
     };
-    Pansou?: {
+    GuangYa?: {
       Enabled: boolean;
-      ApiUrl: string;
-      Username?: string;
-      Password?: string;
-      KeywordBlocklist?: string;
+      RefreshToken: string;
+      ClientId: string;
+      DeviceId: string;
     };
   };
   AIConfig?: {
