@@ -5464,6 +5464,7 @@ const EmbyConfigComponent = ({
       removeEmbyPrefix: false,
       appendMediaSourceId: false,
       transcodeMp4: false,
+      transcodeAudio: false,
       proxyPlay: false,
       customUserAgent: '',
       embyAuthorizationHeader: '',
