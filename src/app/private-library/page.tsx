@@ -68,12 +68,6 @@ export default function PrivateLibraryPage() {
   const [embyKey, setEmbyKey] = useState<string | undefined>();
   const [embySourceOptions, setEmbySourceOptions] = useState<EmbySourceOption[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
-  // 本地搜索过滤（videos 声明之后）
-  const filteredVideos = useMemo(() => {
-    if (!localSearchKeyword.trim()) return videos;
-    const kw = localSearchKeyword.trim().toLowerCase();
-    return videos.filter((v) => v.title.toLowerCase().includes(kw));
-  }, [videos, localSearchKeyword]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
@@ -98,6 +92,12 @@ export default function PrivateLibraryPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [showLocalSearch, setShowLocalSearch] = useState(false);
   const [localSearchKeyword, setLocalSearchKeyword] = useState('');
+  // 本地搜索过滤（localSearchKeyword 声明之后）
+  const filteredVideos = useMemo(() => {
+    if (!localSearchKeyword.trim()) return videos;
+    const kw = localSearchKeyword.trim().toLowerCase();
+    return videos.filter((v) => v.title.toLowerCase().includes(kw));
+  }, [videos, localSearchKeyword]);
   const [mounted, setMounted] = useState(false);
   const pageSize = 20;
   const observerTarget = useRef<HTMLDivElement>(null);
