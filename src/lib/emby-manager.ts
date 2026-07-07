@@ -22,7 +22,6 @@ interface EmbySourceConfig {
   removeEmbyPrefix?: boolean;
   appendMediaSourceId?: boolean;
   transcodeMp4?: boolean;
-  transcodeAudio?: boolean;
   proxyPlay?: boolean; // 视频播放代理开关
   customUserAgent?: string; // 自定义User-Agent
   embyAuthorizationHeader?: string; // 自定义 X-Emby-Authorization 请求头
@@ -188,7 +187,6 @@ export function migrateEmbyConfig(config: AdminConfig): AdminConfig {
         removeEmbyPrefix: false,
         appendMediaSourceId: false,
         transcodeMp4: false,
-        transcodeAudio: false,
         proxyPlay: false,
       }],
     };

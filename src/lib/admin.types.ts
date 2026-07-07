@@ -267,7 +267,6 @@ export interface AdminConfig {
       removeEmbyPrefix?: boolean; // 播放链接移除/emby前缀
       appendMediaSourceId?: boolean; // 拼接MediaSourceId参数
       transcodeMp4?: boolean; // 转码mp4
-      transcodeAudio?: boolean; // 音频转码（视频直通，音频转AAC解决无声音问题）
       proxyPlay?: boolean; // 视频播放代理开关
       customUserAgent?: string; // 自定义User-Agent
       embyAuthorizationHeader?: string; // 自定义 X-Emby-Authorization 请求头
