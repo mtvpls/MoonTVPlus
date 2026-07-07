@@ -52,6 +52,13 @@ export default function PrivateLibraryPage() {
     return { OPENLIST_ENABLED: false, EMBY_ENABLED: false, XIAOYA_ENABLED: false };
   }, []);
 
+  // 本地搜索过滤
+  const filteredVideos = useMemo(() => {
+    if (!localSearchKeyword.trim()) return videos;
+    const kw = localSearchKeyword.trim().toLowerCase();
+    return videos.filter((v) => v.title.toLowerCase().includes(kw));
+  }, [videos, localSearchKeyword]);
+
   // 解析URL中的source参数（支持 emby:emby1 格式）
   const parseSourceParam = (sourceParam: string | null): { sourceType: LibrarySourceType; embyKey?: string } => {
     if (!sourceParam) return { sourceType: 'openlist' };
@@ -90,6 +97,8 @@ export default function PrivateLibraryPage() {
   const [xiaoyaSearchKeyword, setXiaoyaSearchKeyword] = useState<string>('');
   const [xiaoyaSearchResults, setXiaoyaSearchResults] = useState<Array<{ name: string; path: string }>>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [showLocalSearch, setShowLocalSearch] = useState(false);
+  const [localSearchKeyword, setLocalSearchKeyword] = useState('');
   const [mounted, setMounted] = useState(false);
   const pageSize = 20;
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -593,14 +602,17 @@ export default function PrivateLibraryPage() {
           )}
           {mounted && (
             <button
-              onClick={() => router.push('/search')}
+              onClick={() => {
+                setShowLocalSearch(!showLocalSearch);
+                if (showLocalSearch) setLocalSearchKeyword('');
+              }}
               className='flex items-center gap-2 px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors'
               style={{ marginTop: '10px', marginLeft: '8px' }}
             >
               <svg className='w-5 h-5' fill='currentColor' viewBox='0 0 24 24'>
                 <path d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' />
               </svg>
-              <span>搜索</span>
+              <span>{showLocalSearch ? '关闭' : '搜索'}</span>
             </button>
           )}
         </div>
@@ -1075,8 +1087,25 @@ export default function PrivateLibraryPage() {
           </div>
         ) : (
           <>
+            {showLocalSearch && sourceType !== 'xiaoya' && (
+              <div className='mb-4 flex justify-center'>
+                <div className='relative w-full max-w-md'>
+                  <input
+                    type='text'
+                    placeholder='搜索当前影库视频标题...'
+                    value={localSearchKeyword}
+                    onChange={(e) => setLocalSearchKeyword(e.target.value)}
+                    autoFocus
+                    className='w-full px-4 py-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent'
+                  />
+                  <svg className='absolute left-3 top-2.5 w-5 h-5 text-gray-400' fill='currentColor' viewBox='0 0 24 24'>
+                    <path d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' />
+                  </svg>
+                </div>
+              </div>
+            )}
             <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'>
-              {videos.map((video) => {
+              {filteredVideos.map((video) => {
                 // 构建source参数用于VideoCard
                 // 如果是emby源且有embyKey，使用下划线格式
                 let sourceParam = sourceType;

@@ -4365,10 +4365,9 @@ const NetDiskConfigComponent = ({
   const [pan115Enabled, setPan115Enabled] = useState(false);
   const [pan115Cookie, setPan115Cookie] = useState('');
   const [pansouEnabled, setPansouEnabled] = useState(false);
-  const [pansouApiUrl, setPansouApiUrl] = useState('');
-  const [pansouUsername, setPansouUsername] = useState('');
-  const [pansouPassword, setPansouPassword] = useState('');
-  const [pansouKeywordBlocklist, setPansouKeywordBlocklist] = useState('');
+  const [guangYaRefreshToken, setGuangYaRefreshToken] = useState('');
+  const [guangYaClientId, setGuangYaClientId] = useState('');
+  const [guangYaDeviceId, setGuangYaDeviceId] = useState('');
 
   useEffect(() => {
     const quark = config?.NetDiskConfig?.Quark;
@@ -4396,11 +4395,10 @@ const NetDiskConfigComponent = ({
     setUcSavePath(config?.NetDiskConfig?.UC?.SavePath || '/');
     setPan115Enabled(config?.NetDiskConfig?.Pan115?.Enabled || false);
     setPan115Cookie(config?.NetDiskConfig?.Pan115?.Cookie || '');
-    setPansouEnabled(config?.NetDiskConfig?.Pansou?.Enabled || false);
-    setPansouApiUrl(config?.NetDiskConfig?.Pansou?.ApiUrl || config?.SiteConfig?.PansouApiUrl || '');
-    setPansouUsername(config?.NetDiskConfig?.Pansou?.Username || config?.SiteConfig?.PansouUsername || '');
-    setPansouPassword(config?.NetDiskConfig?.Pansou?.Password || config?.SiteConfig?.PansouPassword || '');
-    setPansouKeywordBlocklist(config?.NetDiskConfig?.Pansou?.KeywordBlocklist || config?.SiteConfig?.PansouKeywordBlocklist || '');
+    setPansouEnabled(config?.NetDiskConfig?.GuangYa?.Enabled || false);
+    setGuangYaRefreshToken(config?.NetDiskConfig?.GuangYa?.RefreshToken || '');
+    setGuangYaClientId(config?.NetDiskConfig?.GuangYa?.ClientId || '');
+    setGuangYaDeviceId(config?.NetDiskConfig?.GuangYa?.DeviceId || '');
   }, [config]);
 
   const handleSave = async () => {
@@ -4445,12 +4443,11 @@ const NetDiskConfigComponent = ({
             Enabled: pan115Enabled,
             Cookie: pan115Cookie,
           },
-          Pansou: {
+          GuangYa: {
             Enabled: pansouEnabled,
-            ApiUrl: pansouApiUrl,
-            Username: pansouUsername,
-            Password: pansouPassword,
-            KeywordBlocklist: pansouKeywordBlocklist,
+            RefreshToken: guangYaRefreshToken,
+            ClientId: guangYaClientId,
+            DeviceId: guangYaDeviceId,
           },
         }),
       });
@@ -4676,6 +4673,39 @@ const NetDiskConfigComponent = ({
         }
 
         showSuccess(data.message || '115 Cookie 格式正常', showAlert);
+      } catch (error) {
+        showError(
+          error instanceof Error ? error.message : '校验失败',
+          showAlert
+        );
+        throw error;
+      }
+    });
+  };
+
+  const handleValidateGuangYa = async () => {
+    await withLoading('validateGuangYaNetDisk', async () => {
+      try {
+        const response = await fetch('/api/admin/netdisk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'validate',
+            provider: 'guangya',
+            GuangYa: {
+              RefreshToken: guangYaRefreshToken,
+              ClientId: guangYaClientId,
+              DeviceId: guangYaDeviceId,
+            },
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || '校验失败');
+        }
+
+        showSuccess(data.message || '光鸭云盘配置可用', showAlert);
       } catch (error) {
         showError(
           error instanceof Error ? error.message : '校验失败',
@@ -5247,26 +5277,25 @@ const NetDiskConfigComponent = ({
         </div>
       </details>
 
-      {/* 光鸭云盘（Pansou） */}
       <details className='group border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden'>
         <summary className='flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors'>
           <div>
             <h3 className='text-sm font-medium text-gray-900 dark:text-gray-100'>
-              光鸭云盘（Pansou）
+              光鸭云盘
             </h3>
             <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
-              配置 Pansou 网盘搜索服务，用于网盘资源搜索
+              配置光鸭云盘，开启后可在网盘搜索中搜索光鸭云盘资源
             </p>
           </div>
         </summary>
         <div className='p-4 space-y-4'>
-          <div className='flex items-center justify-between'>
+          <div className='flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700'>
             <div>
               <h3 className='text-sm font-medium text-gray-900 dark:text-gray-100'>
                 启用光鸭云盘
               </h3>
               <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
-                开启后，可在私人影库搜索光鸭云盘资源
+                开启后，网盘搜索中的光鸭云盘资源会显示"立即播放"按钮
               </p>
             </div>
             <label className='relative inline-flex items-center cursor-pointer'>
@@ -5276,67 +5305,60 @@ const NetDiskConfigComponent = ({
                 onChange={(e) => setPansouEnabled(e.target.checked)}
                 className='sr-only peer'
               />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 dark:peer-focus:ring-purple-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600"></div>
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-lime-300 dark:peer-focus:ring-lime-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-lime-600"></div>
             </label>
           </div>
 
           <div>
             <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-              API 地址
-            </label>
-            <input
-              type='text'
-              value={pansouApiUrl}
-              onChange={(e) => setPansouApiUrl(e.target.value)}
-              disabled={!pansouEnabled}
-              placeholder='http://localhost:8888'
-              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
-            />
-          </div>
-
-          <div>
-            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-              账号（可选）
-            </label>
-            <input
-              type='text'
-              value={pansouUsername}
-              onChange={(e) => setPansouUsername(e.target.value)}
-              disabled={!pansouEnabled}
-              placeholder='如果 Pansou 启用了认证，请输入账号'
-              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
-            />
-          </div>
-
-          <div>
-            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-              密码（可选）
-            </label>
-            <input
-              type='password'
-              value={pansouPassword}
-              onChange={(e) => setPansouPassword(e.target.value)}
-              disabled={!pansouEnabled}
-              placeholder='如果 Pansou 启用了认证，请输入密码'
-              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
-            />
-          </div>
-
-          <div>
-            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-              关键词屏蔽列表
+              Refresh Token
             </label>
             <textarea
-              value={pansouKeywordBlocklist}
-              onChange={(e) => setPansouKeywordBlocklist(e.target.value)}
+              value={guangYaRefreshToken}
+              onChange={(e) => setGuangYaRefreshToken(e.target.value)}
               disabled={!pansouEnabled}
               rows={3}
-              placeholder='每行一个关键词，包含这些关键词的资源将不会显示'
-              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+              placeholder='粘贴光鸭云盘 Refresh Token'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-lime-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              Client ID
+            </label>
+            <input
+              type='text'
+              value={guangYaClientId}
+              onChange={(e) => setGuangYaClientId(e.target.value)}
+              disabled={!pansouEnabled}
+              placeholder='输入 Client ID'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-lime-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              Device ID
+            </label>
+            <input
+              type='text'
+              value={guangYaDeviceId}
+              onChange={(e) => setGuangYaDeviceId(e.target.value)}
+              disabled={!pansouEnabled}
+              placeholder='输入 Device ID'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-lime-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
             />
           </div>
 
           <div className='flex gap-3'>
+            <button
+              onClick={handleValidateGuangYa}
+              disabled={!pansouEnabled || !guangYaRefreshToken || isLoading('validateGuangYaNetDisk')}
+              className={buttonStyles.primary}
+            >
+              {isLoading('validateGuangYaNetDisk') ? '校验中...' : '校验光鸭配置'}
+            </button>
             <button
               onClick={handleSave}
               disabled={isLoading('saveNetDisk')}
