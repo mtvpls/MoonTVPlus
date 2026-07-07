@@ -11,6 +11,7 @@ interface EmbyConfig {
   removeEmbyPrefix?: boolean;
   appendMediaSourceId?: boolean;
   transcodeMp4?: boolean;
+  transcodeAudio?: boolean;
   proxyPlay?: boolean; // 视频播放代理开关
   customUserAgent?: string; // 自定义User-Agent
   embyAuthorizationHeader?: string; // 自定义 X-Emby-Authorization 请求头
@@ -90,6 +91,7 @@ export class EmbyClient {
   private removeEmbyPrefix: boolean;
   private appendMediaSourceId: boolean;
   private transcodeMp4: boolean;
+  private transcodeAudio: boolean;
   private proxyPlay: boolean;
   private embyKey?: string;
   private customUserAgent: string;
@@ -102,6 +104,7 @@ export class EmbyClient {
     this.removeEmbyPrefix = config.removeEmbyPrefix || false;
     this.appendMediaSourceId = config.appendMediaSourceId || false;
     this.transcodeMp4 = config.transcodeMp4 || false;
+    this.transcodeAudio = config.transcodeAudio || false;
     this.proxyPlay = config.proxyPlay || false;
     this.embyKey = config.key;
     // 设置自定义UA，如果没有设置则使用默认浏览器UA
@@ -532,6 +535,9 @@ export class EmbyClient {
       // 选项3: 转码mp4
       if (this.transcodeMp4) {
         url = `${this.serverUrl}/Videos/${itemId}/stream.mp4?api_key=${token}`;
+      } else if (this.transcodeAudio) {
+        // 音频转码：视频直通，音频转AAC（解决AC3/EAC3/DTS等浏览器不支持的音频编码）
+        url = `${this.serverUrl}/Videos/${itemId}/stream?api_key=${token}&AllowVideoStreamCopy=true&AllowAudioStreamCopy=false&AudioCodec=aac&MaxAudioChannels=2`;
       } else {
         url = `${this.serverUrl}/Videos/${itemId}/stream?Static=true&api_key=${token}`;
       }

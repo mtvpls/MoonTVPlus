@@ -240,6 +240,16 @@ function PlayPageClient() {
   // 快捷键说明弹窗状态
   const [showShortcutDialog, setShowShortcutDialog] = useState(false);
 
+  // 音频转码开关（Emby 视频直通，音频转AAC，解决AC3/EAC3/DTS无声音问题）
+  const [audioTranscode, setAudioTranscode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('audioTranscode') === 'true';
+    }
+    return false;
+  });
+  // 保存原始Emby URL，用于切换音频转码时重新处理
+  const originalEmbyUrlRef = useRef<string>('');
+
   useEffect(() => {
     if (!showShortcutDialog) {
       return;
@@ -495,6 +505,27 @@ function PlayPageClient() {
     anime4kModeRef.current = anime4kMode;
     anime4kScaleRef.current = anime4kScale;
   }, [anime4kEnabled, anime4kMode, anime4kScale]);
+
+  // 音频转码开关变化时，重新处理视频URL
+  useEffect(() => {
+    if (originalEmbyUrlRef.current) {
+      let newUrl = originalEmbyUrlRef.current;
+      if (audioTranscode) {
+        try {
+          const urlObj = new URL(newUrl);
+          urlObj.searchParams.delete('Static');
+          urlObj.searchParams.set('AllowVideoStreamCopy', 'true');
+          urlObj.searchParams.set('AllowAudioStreamCopy', 'false');
+          urlObj.searchParams.set('AudioCodec', 'aac');
+          urlObj.searchParams.set('MaxAudioChannels', '2');
+          newUrl = urlObj.toString();
+        } catch (e) {
+          console.warn('音频转码URL处理失败:', e);
+        }
+      }
+      setVideoUrl(newUrl);
+    }
+  }, [audioTranscode]);
 
   // 检测WebGPU支持
   useEffect(() => {
@@ -3343,6 +3374,21 @@ function PlayPageClient() {
         } else if (!isM3u8) {
           console.log('非 m3u8 格式，豁免代理框架，直接播放原始URL:', newUrl);
         }
+      }
+    }
+
+    // 音频转码处理：如果是Emby流媒体URL，且启用了音频转码，修改URL参数
+    if (newUrl && newUrl.includes('/Videos/') && newUrl.includes('stream')) {
+      originalEmbyUrlRef.current = newUrl;
+      if (audioTranscode) {
+        // 移除 Static=true，添加音频转码参数
+        const urlObj = new URL(newUrl);
+        urlObj.searchParams.delete('Static');
+        urlObj.searchParams.set('AllowVideoStreamCopy', 'true');
+        urlObj.searchParams.set('AllowAudioStreamCopy', 'false');
+        urlObj.searchParams.set('AudioCodec', 'aac');
+        urlObj.searchParams.set('MaxAudioChannels', '2');
+        newUrl = urlObj.toString();
       }
     }
 
@@ -7926,6 +7972,27 @@ function PlayPageClient() {
                 return item.html;
               },
               default: defaultOption,
+            });
+          }
+
+          // 添加音频转码开关（解决Emby播放AC3/EAC3/DTS无声音问题）
+          if (artPlayerRef.current) {
+            const savedAudioTranscode = typeof window !== 'undefined' ? localStorage.getItem('audioTranscode') === 'true' : false;
+            artPlayerRef.current.setting.add({
+              html: '音频转码',
+              selector: [
+                { html: '关闭', value: false },
+                { html: '开启', value: true },
+              ],
+              onSelect: function (item: any) {
+                const newValue = item.value === true;
+                setAudioTranscode(newValue);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('audioTranscode', String(newValue));
+                }
+                return item.html;
+              },
+              default: savedAudioTranscode ? '开启' : '关闭',
             });
           }
 
