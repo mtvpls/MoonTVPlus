@@ -1,5 +1,5 @@
 # ---- 第 1 阶段：安装依赖 ----
-# Cache-bust: 2026-07-07T14:30 (force clean rebuild)
+# Cache-bust: 2026-07-07T23:45 (force clean rebuild)
 FROM node:24-alpine AS deps
 
 # 启用 corepack 并激活 pnpm（Node20 默认提供 corepack）
