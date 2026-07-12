@@ -33,26 +33,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '播放文件不存在' }, { status: 404 });
     }
 
-    const { url, headers } = await getBaiduDirectPlayUrl(session.meta, file.fid, cookie);
     const range = request.headers.get('range');
 
-    // Fetch Baidu dlink directly (EdgeOne global area uses Chinese IPs directly)
+    async function fetchWithRetry(retries = 1): Promise<Response> {
+      const { url, headers } = await getBaiduDirectPlayUrl(session.meta, file.fid, cookie);
 
-    const upstream = await fetch(url, {
-      headers: {
-        ...headers,
-        Cookie: cookie,
-        ...(range ? { Range: range } : {}),
-      },
-      cache: 'no-store',
-    });
+      const upstream = await fetch(url, {
+        headers: {
+          ...headers,
+          Cookie: cookie,
+          ...(range ? { Range: range } : {}),
+        },
+        cache: 'no-store',
+      });
 
-    if (!upstream.ok || !upstream.body) {
-      return NextResponse.json(
-        { error: `百度网盘视频代理失败 (${upstream.status})` },
-        { status: upstream.status || 500 }
-      );
+      if (upstream.ok && upstream.body) {
+        return upstream;
+      }
+
+      // dlink 可能已过期，重试一次（重新获取 dlink）
+      if (retries > 0) {
+        return fetchWithRetry(retries - 1);
+      }
+
+      throw new Error(`百度网盘视频代理失败 (${upstream.status})`);
     }
+
+    const upstream = await fetchWithRetry(1);
 
     const responseHeaders = new Headers();
     const copyHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified'];
