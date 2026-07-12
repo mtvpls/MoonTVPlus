@@ -399,6 +399,11 @@ export function processImageUrl(originalUrl: string): string {
     return originalUrl;
   }
 
+  // 如果不是 http/https 开头（相对路径、data URI 等），直接返回
+  if (!originalUrl.startsWith('http://') && !originalUrl.startsWith('https://')) {
+    return originalUrl;
+  }
+
   // 处理 TMDB 图片 URL 替换
   if (originalUrl.includes('image.tmdb.org')) {
     if (typeof window !== 'undefined') {
@@ -424,12 +429,21 @@ export function processImageUrl(originalUrl: string): string {
   }
 
   // 处理豆瓣图片代理
-  if (!originalUrl.includes('doubanio.com')) {
-    return originalUrl;
+  if (originalUrl.includes('doubanio.com')) {
+    const { proxyType, proxyUrl } = getDoubanImageProxyConfig();
+    return buildDoubanImageUrl(originalUrl, proxyType, proxyUrl);
   }
 
-  const { proxyType, proxyUrl } = getDoubanImageProxyConfig();
-  return buildDoubanImageUrl(originalUrl, proxyType, proxyUrl);
+  // 其他图片（视频源封面图等）走本站代理，带缓存
+  // 可通过 localStorage 'proxyAllImages' = 'false' 关闭
+  if (typeof window !== 'undefined') {
+    const proxyAll = localStorage.getItem('proxyAllImages');
+    if (proxyAll !== 'false') {
+      return `/api/image-proxy?url=${encodeURIComponent(originalUrl)}`;
+    }
+  }
+
+  return originalUrl;
 }
 
 /**
