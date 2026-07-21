@@ -1,6 +1,9 @@
 name: Deploy to Cloudflare
 
 on:
+  push:
+    branches:
+      - mtvpls/MoonTVPlus:main
   workflow_dispatch:
 
 concurrency:
