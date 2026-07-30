@@ -69,9 +69,12 @@ export function TokenRefreshManager() {
                 // 登出失败时清除前端cookie
                 clearAuthCookie();
               }
-              window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
-            }
-            return false;
+              const currentPath = window.location.pathname;
+              if (currentPath === '/login' || currentPath === '/tv/login') {
+                window.location.href = '/login';
+              } else {
+                window.location.href = `/login?redirect=${encodeURIComponent(currentPath + window.location.search)}`;
+              }
           }
         } catch (error) {
           console.error('[Token] Refresh error:', error);
@@ -106,7 +109,12 @@ export function TokenRefreshManager() {
           // 登出失败时清除前端cookie
           clearAuthCookie();
         }).finally(() => {
-          window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+          const currentPath = window.location.pathname;
+          if (currentPath === '/login' || currentPath === '/tv/login') {
+            window.location.href = '/login';
+          } else {
+            window.location.href = `/login?redirect=${encodeURIComponent(currentPath + window.location.search)}`;
+          }
         });
         return false;
       }
@@ -193,7 +201,12 @@ export function TokenRefreshManager() {
                   // 登出失败时清除前端cookie
                   clearAuthCookie();
                 }
-                window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+                const currentPath = window.location.pathname;
+                if (currentPath === '/login' || currentPath === '/tv/login') {
+                  window.location.href = '/login';
+                } else {
+                  window.location.href = `/login?redirect=${encodeURIComponent(currentPath + window.location.search)}`;
+                }
               }
             }
           } else {

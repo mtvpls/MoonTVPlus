@@ -163,7 +163,10 @@ function handleAuthFailure(
     : new URL('/login', request.url);
   // 保留完整的URL，包括查询参数
   const fullUrl = `${pathname}${request.nextUrl.search}`;
-  loginUrl.searchParams.set('redirect', fullUrl);
+  // 防止重定向循环：若当前路径已是登录页，不设置 redirect 参数
+  if (!pathname.startsWith('/login') && !pathname.startsWith('/tv/login')) {
+    loginUrl.searchParams.set('redirect', fullUrl);
+  }
   return NextResponse.redirect(loginUrl);
 }
 
@@ -177,6 +180,8 @@ function shouldSkipAuth(pathname: string): boolean {
     '/icons/',
     '/logo.png',
     '/screenshot.png',
+    '/login',
+    '/tv/login',
   ];
 
   return skipPaths.some((path) => pathname.startsWith(path));
