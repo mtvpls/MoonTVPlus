@@ -720,9 +720,12 @@ export async function fetchWithAuth(
             // 登出失败时清除前端cookie
             clearAuthCookie();
           }
-          const currentUrl = window.location.pathname + window.location.search;
+          const currentPathname = window.location.pathname;
+          const currentUrl = currentPathname + window.location.search;
           const loginUrl = new URL('/login', window.location.origin);
-          loginUrl.searchParams.set('redirect', currentUrl);
+          if (currentPathname !== '/login' && currentPathname !== '/tv/login') {
+            loginUrl.searchParams.set('redirect', currentUrl);
+          }
           window.location.href = loginUrl.toString();
         }
         throw new Error('用户未授权，已跳转到登录页面');
