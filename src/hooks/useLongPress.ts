@@ -126,7 +126,13 @@ export const useLongPress = ({
 
   const onTouchEnd = useCallback(
     (e: React.TouchEvent) => {
-      // 始终阻止默认行为，避免任何系统长按菜单
+      // 只有本 hook 实际接管了触摸手势时才阻止浏览器默认 click。
+      // 若 touchstart 命中 data-button 区域会提前 return，不应在 touchend 阶段
+      // 再 preventDefault/stopPropagation，否则会吞掉外层卡片点击。
+      if (!isActive.current) {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
       handleEnd();

@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { isAnimeCategoryText } from '@/lib/anime-keyword-expr';
+import { createAnime4KRenderer } from '@/lib/anime4k';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import {
   clearDanmakuCacheByTitle,
@@ -164,6 +165,7 @@ const PLAY_SHORTCUT_GROUPS = [
     items: [
       { keys: ['空格'], description: '播放 / 暂停' },
       { keys: ['←', '→'], description: '快退 / 快进 10 秒' },
+      { keys: ['P'], description: '快捷快进' },
       { keys: ['↑', '↓'], description: '音量增加 / 减少' },
       { keys: ['F'], description: '切换全屏' },
     ],
@@ -375,6 +377,18 @@ function PlayPageClient() {
     skipConfig.intro_time,
     skipConfig.outro_time,
   ]);
+
+  // 快捷快进设置（默认 1 分 30 秒）
+  const DEFAULT_QUICK_FORWARD_SECONDS = 90;
+  const [quickForwardSeconds, setQuickForwardSeconds] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_QUICK_FORWARD_SECONDS;
+    const saved = Number(localStorage.getItem('quickForwardSeconds'));
+    return Number.isFinite(saved) && saved > 0 ? saved : DEFAULT_QUICK_FORWARD_SECONDS;
+  });
+  const quickForwardSecondsRef = useRef(quickForwardSeconds);
+  useEffect(() => {
+    quickForwardSecondsRef.current = quickForwardSeconds;
+  }, [quickForwardSeconds]);
 
   // 跳过检查的时间间隔控制
   const lastSkipCheckRef = useRef(0);
@@ -1764,6 +1778,26 @@ function PlayPageClient() {
 
     artPlayerRef.current.playbackRate = 1;
     artPlayerRef.current.notice.show = '倍速：1x';
+    return true;
+  };
+
+  const formatQuickForwardDuration = (seconds: number) => {
+    if (seconds >= 60) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return remainingSeconds ? `${minutes}分${remainingSeconds}秒` : `${minutes}分钟`;
+    }
+    return `${seconds}秒`;
+  };
+
+  const seekQuickForward = () => {
+    const player = artPlayerRef.current;
+    if (!player) return false;
+
+    const duration = Number.isFinite(player.duration) ? player.duration : Infinity;
+    const nextTime = Math.min(duration, (player.currentTime || 0) + quickForwardSecondsRef.current);
+    player.currentTime = nextTime;
+    player.notice.show = `快进 ${formatQuickForwardDuration(quickForwardSecondsRef.current)}`;
     return true;
   };
 
@@ -3779,12 +3813,22 @@ function PlayPageClient() {
     if (!video || !url) return;
     const sources = Array.from(video.getElementsByTagName('source'));
     const isHlsJsActive = !!(video as any).hls;
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const isIOSWebKit =
+      /iPad|iPhone|iPod/i.test(userAgent) ||
+      (/Macintosh/i.test(userAgent) &&
+        typeof navigator !== 'undefined' &&
+        navigator.maxTouchPoints > 1);
+    const isSafari =
+      isIOSWebKit ||
+      (/Safari/i.test(userAgent) &&
+        !/Chrome|Chromium|Edg|OPR|Android/i.test(userAgent));
     const isHlsLikeSource =
       /\.m3u8?($|\?)/i.test(url) ||
       url.includes('/api/proxy-m3u8') ||
       url.includes('/api/proxy/vod/m3u8');
 
-    if (isHlsJsActive && isHlsLikeSource) {
+    if (isSafari && isHlsJsActive && isHlsLikeSource) {
       // HLS 由 hls.js 接管时，不能再给 <video> 塞原始 m3u8 source，
       // 否则 Safari 可能切回原生 HLS，和 MSE/hls.js 抢同一个播放器。
       sources.forEach((s) => s.remove());
@@ -3913,7 +3957,6 @@ function PlayPageClient() {
   const initAnime4K = async () => {
     if (!artPlayerRef.current?.video) return;
 
-    let frameRequestId: number | null = null; // 在外层声明，以便错误处理中使用
     let outputCanvas: HTMLCanvasElement | null = null; // 在外层声明，以便错误处理中清理
 
     try {
@@ -3948,29 +3991,18 @@ function PlayPageClient() {
         throw new Error('无法获取视频尺寸');
       }
 
-      // 检查视频是否正在播放
-      console.log('视频播放状态:', {
-        paused: video.paused,
-        ended: video.ended,
-        readyState: video.readyState,
-        currentTime: video.currentTime,
-      });
-
-      // 检测是否为Firefox
-      const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-      console.log('浏览器检测:', isFirefox ? 'Firefox' : 'Chrome/Edge/其他');
+      // 使用用户选择的超分倍数
+      const scale = anime4kScaleRef.current;
 
       // 创建输出canvas（显示给用户的）
       outputCanvas = document.createElement('canvas');
       const container = artPlayerRef.current.template.$video.parentElement;
 
-      // 使用用户选择的超分倍数
-      const scale = anime4kScaleRef.current;
-      outputCanvas.width = Math.floor(video.videoWidth * scale);  // 确保是整数
+      outputCanvas.width = Math.floor(video.videoWidth * scale); // 确保是整数
       outputCanvas.height = Math.floor(video.videoHeight * scale);
 
       // 验证outputCanvas尺寸
-      console.log('outputCanvas尺寸:', outputCanvas.width, 'x', outputCanvas.height);
+      console.log('输出Canvas尺寸:', outputCanvas.width, 'x', outputCanvas.height);
       if (!outputCanvas.width || !outputCanvas.height ||
         !isFinite(outputCanvas.width) || !isFinite(outputCanvas.height)) {
         throw new Error(`outputCanvas尺寸无效: ${outputCanvas.width}x${outputCanvas.height}, scale: ${scale}`);
@@ -3987,77 +4019,16 @@ function PlayPageClient() {
       // 确保canvas背景透明，避免Firefox中的渲染问题
       outputCanvas.style.backgroundColor = 'transparent';
 
-      // Firefox兼容性处理：创建中间canvas
-      let sourceCanvas: HTMLCanvasElement | null = null;
-      let sourceCtx: CanvasRenderingContext2D | null = null;
-
-      if (isFirefox) {
-        // Firefox的WebGPU不支持直接使用HTMLVideoElement
-        // 使用标准HTMLCanvasElement（更好的兼容性）
-        sourceCanvas = document.createElement('canvas');
-
-        // 获取视频尺寸并记录
-        const videoW = video.videoWidth;
-        const videoH = video.videoHeight;
-        console.log('Firefox：准备创建canvas - 视频尺寸:', videoW, 'x', videoH);
-
-        // 设置canvas尺寸
-        const canvasW = Math.floor(videoW);
-        const canvasH = Math.floor(videoH);
-        console.log('Firefox：计算后的canvas尺寸:', canvasW, 'x', canvasH);
-
-        sourceCanvas.width = canvasW;
-        sourceCanvas.height = canvasH;
-
-        // 立即验证赋值结果
-        console.log('Firefox：Canvas创建后立即检查:');
-        console.log('  - sourceCanvas.width:', sourceCanvas.width);
-        console.log('  - sourceCanvas.height:', sourceCanvas.height);
-        console.log('  - 赋值是否成功:', sourceCanvas.width === canvasW && sourceCanvas.height === canvasH);
-
-        // 验证sourceCanvas尺寸
-        if (!sourceCanvas.width || !sourceCanvas.height ||
-          !isFinite(sourceCanvas.width) || !isFinite(sourceCanvas.height)) {
-          throw new Error(`sourceCanvas尺寸无效: ${sourceCanvas.width}x${sourceCanvas.height}`);
-        }
-
-        if (sourceCanvas.width !== canvasW || sourceCanvas.height !== canvasH) {
-          throw new Error(`sourceCanvas尺寸赋值异常: 期望 ${canvasW}x${canvasH}, 实际 ${sourceCanvas.width}x${sourceCanvas.height}`);
-        }
-
-        sourceCtx = sourceCanvas.getContext('2d', {
-          willReadFrequently: true,
-          alpha: false  // 禁用alpha通道，提高性能
-        });
-
-        if (!sourceCtx) {
-          throw new Error('无法创建2D上下文');
-        }
-
-        // 先绘制一帧到canvas，确保有内容
-        if (video.readyState >= video.HAVE_CURRENT_DATA) {
-          sourceCtx.drawImage(video, 0, 0, sourceCanvas.width, sourceCanvas.height);
-          console.log('Firefox：已绘制初始帧到sourceCanvas');
-        }
-
-        console.log('Firefox检测：使用HTMLCanvasElement中转方案');
-      }
-
-      // 在outputCanvas上监听点击事件，触发播放器的暂停/播放切换
-      const handleCanvasClick = () => {
+      outputCanvas.addEventListener('click', () => {
         if (artPlayerRef.current) {
           artPlayerRef.current.toggle();
         }
-      };
-      outputCanvas.addEventListener('click', handleCanvasClick);
-
-      // 在outputCanvas上监听双击事件，触发全屏切换
-      const handleCanvasDblClick = () => {
+      });
+      outputCanvas.addEventListener('dblclick', () => {
         if (artPlayerRef.current) {
           artPlayerRef.current.fullscreen = !artPlayerRef.current.fullscreen;
         }
-      };
-      outputCanvas.addEventListener('dblclick', handleCanvasDblClick);
+      });
 
       // 隐藏原始video元素（使用opacity而不是display:none以保持视频解码）
       // Firefox在display:none时可能会停止视频解码，导致黑屏
@@ -4069,20 +4040,8 @@ function PlayPageClient() {
       // 插入outputCanvas到容器
       container.insertBefore(outputCanvas, video);
 
-      // Firefox兼容性：创建视频帧捕获循环
-      if (isFirefox && sourceCtx && sourceCanvas) {
-        const captureVideoFrame = () => {
-          if (sourceCtx && sourceCanvas && video.readyState >= video.HAVE_CURRENT_DATA) {
-            sourceCtx.drawImage(video, 0, 0, sourceCanvas.width, sourceCanvas.height);
-          }
-          frameRequestId = requestAnimationFrame(captureVideoFrame);
-        };
-        captureVideoFrame();
-        console.log('Firefox：视频帧捕获循环已启动');
-      }
-
       // 动态导入 anime4k-webgpu 及对应的模式
-      const { render: anime4kRender, ModeA, ModeB, ModeC, ModeAA, ModeBB, ModeCA } = await import('anime4k-webgpu');
+      const { ModeA, ModeB, ModeC, ModeAA, ModeBB, ModeCA } = await import('anime4k-webgpu');
 
       let ModeClass: any;
       const modeName = anime4kModeRef.current;
@@ -4110,66 +4069,23 @@ function PlayPageClient() {
           ModeClass = ModeA;
       }
 
-      // 使用anime4k-webgpu的render函数
-      // Firefox使用sourceCanvas，其他浏览器直接使用video
-      const renderConfig: any = {
-        video: isFirefox ? sourceCanvas : video, // Firefox使用canvas中转，其他浏览器直接使用video
-        canvas: outputCanvas,
-        pipelineBuilder: (device: GPUDevice, inputTexture: GPUTexture) => {
-          if (!outputCanvas) {
-            throw new Error('outputCanvas is null in pipelineBuilder');
-          }
-          const mode = new ModeClass({
-            device,
-            inputTexture,
-            nativeDimensions: {
-              width: Math.floor(video.videoWidth),  // 确保是整数
-              height: Math.floor(video.videoHeight),
-            },
-            targetDimensions: {
-              width: Math.floor(outputCanvas.width),  // 确保是整数
-              height: Math.floor(outputCanvas.height),
-            },
-          });
-          return [mode];
-        },
-      };
-
+      // 使用自管理的 WebGPU 渲染器。内部自动处理各浏览器的帧源差异：
+      // 直接从 <video> 拷贝（Chrome/Edge），或退回 createImageBitmap 中转（Firefox）。
       console.log('开始初始化Anime4K渲染器...');
-      console.log('输入源:', isFirefox ? 'HTMLCanvasElement (Firefox兼容)' : 'video (原生)');
       console.log('视频尺寸:', video.videoWidth, 'x', video.videoHeight);
       console.log('输出Canvas尺寸:', outputCanvas.width, 'x', outputCanvas.height);
-      console.log('nativeDimensions:', Math.floor(video.videoWidth), 'x', Math.floor(video.videoHeight));
-      console.log('targetDimensions:', Math.floor(outputCanvas.width), 'x', Math.floor(outputCanvas.height));
 
-      // Firefox调试：检查sourceCanvas状态
-      if (isFirefox && sourceCanvas) {
-        console.log('sourceCanvas详细信息:');
-        console.log('  - width:', sourceCanvas.width, 'height:', sourceCanvas.height);
-        console.log('  - clientWidth:', sourceCanvas.clientWidth, 'clientHeight:', sourceCanvas.clientHeight);
-        console.log('  - offsetWidth:', sourceCanvas.offsetWidth, 'offsetHeight:', sourceCanvas.offsetHeight);
-
-        // 尝试读取一个像素，确认canvas有内容
-        if (sourceCtx) {
-          try {
-            const imageData = sourceCtx.getImageData(0, 0, 1, 1);
-            console.log('  - 像素数据可读:', imageData.data.length > 0);
-          } catch (err) {
-            console.error('  - 无法读取像素数据:', err);
-          }
-        }
-      }
-
-      const controller = await anime4kRender(renderConfig);
+      const controller = await createAnime4KRenderer({
+        video,
+        canvas: outputCanvas,
+        scale,
+        pipelineClass: ModeClass,
+      });
       console.log('Anime4K渲染器初始化成功');
 
       anime4kRef.current = {
         controller,
         canvas: outputCanvas,
-        sourceCanvas: isFirefox ? sourceCanvas : null,
-        frameRequestId: isFirefox ? frameRequestId : null,
-        handleCanvasClick,
-        handleCanvasDblClick,
       };
       syncAnime4KCanvasFlip();
 
@@ -4181,11 +4097,6 @@ function PlayPageClient() {
       console.error('初始化Anime4K失败:', err);
       if (artPlayerRef.current) {
         artPlayerRef.current.notice.show = '超分启用失败：' + (err instanceof Error ? err.message : '未知错误');
-      }
-
-      // 停止帧捕获循环
-      if (frameRequestId) {
-        cancelAnimationFrame(frameRequestId);
       }
 
       // 移除outputCanvas（如果已创建）
@@ -4207,47 +4118,12 @@ function PlayPageClient() {
   const cleanupAnime4K = async () => {
     if (anime4kRef.current) {
       try {
-        // 停止帧捕获循环（仅Firefox）
-        if (anime4kRef.current.frameRequestId) {
-          cancelAnimationFrame(anime4kRef.current.frameRequestId);
-          console.log('Firefox：帧捕获循环已停止');
-        }
-
-        // 停止渲染循环
+        // 停止渲染循环并释放 WebGPU 资源
         anime4kRef.current.controller?.stop?.();
-
-        // 移除canvas事件监听器
-        if (anime4kRef.current.canvas) {
-          if (anime4kRef.current.handleCanvasClick) {
-            anime4kRef.current.canvas.removeEventListener('click', anime4kRef.current.handleCanvasClick);
-          }
-          if (anime4kRef.current.handleCanvasDblClick) {
-            anime4kRef.current.canvas.removeEventListener('dblclick', anime4kRef.current.handleCanvasDblClick);
-          }
-        }
 
         // 移除canvas
         if (anime4kRef.current.canvas && anime4kRef.current.canvas.parentNode) {
           anime4kRef.current.canvas.parentNode.removeChild(anime4kRef.current.canvas);
-        }
-
-        // 清理sourceCanvas（仅Firefox）
-        if (anime4kRef.current.sourceCanvas) {
-          if (anime4kRef.current.sourceCanvas instanceof OffscreenCanvas) {
-            // OffscreenCanvas的清理
-            const ctx = anime4kRef.current.sourceCanvas.getContext('2d');
-            if (ctx) {
-              ctx.clearRect(0, 0, anime4kRef.current.sourceCanvas.width, anime4kRef.current.sourceCanvas.height);
-            }
-            console.log('Firefox：OffscreenCanvas已清理');
-          } else {
-            // HTMLCanvasElement的清理
-            const ctx = anime4kRef.current.sourceCanvas.getContext('2d');
-            if (ctx) {
-              ctx.clearRect(0, 0, anime4kRef.current.sourceCanvas.width, anime4kRef.current.sourceCanvas.height);
-            }
-            console.log('Firefox：HTMLCanvasElement已清理');
-          }
         }
 
         anime4kRef.current = null;
@@ -6482,6 +6358,13 @@ function PlayPageClient() {
       }
     }
 
+    // P = 使用当前配置快捷快进
+    if (!e.altKey && e.key.toLowerCase() === 'p') {
+      if (seekQuickForward()) {
+        e.preventDefault();
+      }
+    }
+
     // 左箭头 = 快退
     if (!e.altKey && e.key === 'ArrowLeft') {
       if (artPlayerRef.current && artPlayerRef.current.currentTime > 5) {
@@ -7562,6 +7445,86 @@ function PlayPageClient() {
               },
             },
             {
+              name: '快捷快进配置',
+              html: '快捷快进配置',
+              icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 5v14" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/><path d="m16 17 5-5-5-5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg>',
+              tooltip: `${formatQuickForwardDuration(quickForwardSecondsRef.current)}`,
+              onClick: async function () {
+                const player = artPlayerRef.current;
+                if (player?.fullscreen) {
+                  player.fullscreen = false;
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
+                const existingDialog = document.querySelector('.quick-forward-settings-dialog');
+                existingDialog?.remove();
+
+                const container = document.createElement('div');
+                container.className = 'quick-forward-settings-dialog';
+                container.style.cssText = `
+                  position: fixed;
+                  inset: 0;
+                  z-index: 10000;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  padding: 16px;
+                  background: rgba(0, 0, 0, 0.6);
+                  backdrop-filter: blur(3px);
+                `;
+                container.innerHTML = `
+                  <div role="dialog" aria-modal="true" style="width: min(360px, 100%); background: #1f2937; color: #fff; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 20px; box-shadow: 0 16px 48px rgba(0,0,0,.45);">
+                    <div style="font-size: 17px; font-weight: 600; margin-bottom: 8px;">快捷快进设置</div>
+                    <div style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin-bottom: 16px;">设置点击底部按钮或按 P 键时向前跳转的时间。</div>
+                    <label for="quick-forward-input" style="display: block; color: #d1d5db; font-size: 13px; margin-bottom: 6px;">快进时长（秒）</label>
+                    <input id="quick-forward-input" type="number" min="1" step="1" value="${quickForwardSecondsRef.current}" style="box-sizing: border-box; width: 100%; height: 40px; padding: 0 10px; border: 1px solid #4b5563; border-radius: 6px; background: #111827; color: #fff; font-size: 14px; outline: none;" />
+                    <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;">
+                      <button type="button" data-action="cancel" style="height: 36px; padding: 0 14px; border: 0; border-radius: 6px; background: #374151; color: #fff; cursor: pointer;">取消</button>
+                      <button type="button" data-action="confirm" style="height: 36px; padding: 0 14px; border: 0; border-radius: 6px; background: #0d9488; color: #fff; cursor: pointer;">保存</button>
+                    </div>
+                  </div>
+                `;
+                document.body.appendChild(container);
+
+                const input = container.querySelector('#quick-forward-input') as HTMLInputElement;
+                const cancelButton = container.querySelector('[data-action="cancel"]');
+                const confirmButton = container.querySelector('[data-action="confirm"]');
+                const cleanup = () => container.remove();
+                const save = () => {
+                  const nextSeconds = Number(input.value);
+                  if (!Number.isFinite(nextSeconds) || nextSeconds <= 0) {
+                    input.focus();
+                    if (artPlayerRef.current) {
+                      artPlayerRef.current.notice.show = '请输入大于 0 的有效秒数';
+                    }
+                    return;
+                  }
+
+                  const normalizedSeconds = Math.max(1, Math.round(nextSeconds));
+                  setQuickForwardSeconds(normalizedSeconds);
+                  quickForwardSecondsRef.current = normalizedSeconds;
+                  localStorage.setItem('quickForwardSeconds', String(normalizedSeconds));
+                  if (artPlayerRef.current) {
+                    artPlayerRef.current.notice.show = `快捷快进已设置为${formatQuickForwardDuration(normalizedSeconds)}`;
+                  }
+                  cleanup();
+                };
+
+                cancelButton?.addEventListener('click', cleanup);
+                confirmButton?.addEventListener('click', save);
+                container.addEventListener('click', (event) => {
+                  if (event.target === container) cleanup();
+                });
+                input.addEventListener('keydown', (event) => {
+                  if (event.key === 'Enter') save();
+                  if (event.key === 'Escape') cleanup();
+                });
+                input.focus();
+                input.select();
+                return '打开设置';
+              },
+            },
+            {
               name: '跳过配置',
               html: '跳过配置',
               icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="12" r="2" fill="#ffffff"/><path d="M9 12L15 12" stroke="#ffffff" stroke-width="2"/><circle cx="19" cy="12" r="2" fill="#ffffff"/></svg>',
@@ -7729,6 +7692,30 @@ function PlayPageClient() {
           ],
           // 控制栏配置
           controls: [
+            {
+              position: 'left',
+              index: 40,
+              html: `<i class="art-icon flex quick-forward-control"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m16 17 5-5-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></i>`,
+              tooltip: '快捷快进',
+              mounted: ($el: HTMLElement) => {
+                $el.classList.add('quick-forward-control-wrapper');
+                if (!document.getElementById('quick-forward-control-style')) {
+                  const style = document.createElement('style');
+                  style.id = 'quick-forward-control-style';
+                  style.textContent = `
+                    @media (max-width: 767px) and (orientation: portrait) {
+                      .quick-forward-control-wrapper {
+                        display: none !important;
+                      }
+                    }
+                  `;
+                  document.head.appendChild(style);
+                }
+              },
+              click: function () {
+                seekQuickForward();
+              },
+            },
             {
               position: 'left',
               index: 13,

@@ -11,6 +11,25 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "224.2.0",
+    date: "2026-08-03",
+    added: [
+    "音乐增加均衡器配置",
+    "新增快捷快进功能",
+    "搜索新增高级面板",
+    "搜索新增只搜私人影库"
+    ],
+    changed: [
+    "anime4k超分使用自管理的 WebGPU 渲染器兼容firefox",
+    "优化openlist集数识别规则",
+    "source移除更改为仅对ios Safari生效",
+    "影视搜索、聚合开关视图切换移动到高级面板"
+    ],
+    fixed: [
+    "修复移动端点击videocard失效问题"
+    ]
+  },
+  {
     version: "224.1.1",
     date: "2026-07-31",
     added: [

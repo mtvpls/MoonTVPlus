@@ -4,6 +4,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { SlidersHorizontal } from 'lucide-react';
 import AddToPlaylistModal from '@/components/AddToPlaylistModal';
 import Toast, { ToastProps } from '@/components/Toast';
 import LyricsPiPWindow from '@/components/LyricsPiPWindow';
@@ -19,6 +20,36 @@ const SPECTRUM_EDGE_TRIM = 8;
 const SPECTRUM_REFERENCE_VOLUME = 10;
 const SPECTRUM_MIN_VOLUME = 5;
 const SPECTRUM_MAX_REFERENCE_VOLUME = 15;
+const EQ_BANDS = [
+  { label: '31', frequency: 31 }, { label: '62', frequency: 62 },
+  { label: '125', frequency: 125 }, { label: '250', frequency: 250 },
+  { label: '500', frequency: 500 }, { label: '1K', frequency: 1000 },
+  { label: '2K', frequency: 2000 }, { label: '4K', frequency: 4000 },
+  { label: '8K', frequency: 8000 }, { label: '16K', frequency: 16000 },
+] as const;
+const DEFAULT_EQ_GAINS = EQ_BANDS.map(() => 0);
+const EQ_PRESETS = {
+  Flat: DEFAULT_EQ_GAINS,
+  流行: [4, 3, -1, -2, 1, 2, 3, 2, 4, 3], 摇滚: [5, 4, 2, 1, -1, -2, 2, 3, 4, 5],
+  古典: [4, 3, 1, 1, 0, 1, -1, -2, -3, -4], 人声: [-3, -2, -1, 1, 3, 4, 3, 2, -1, -2],
+  电子: [5, 4, 1, -2, -2, 0, 3, 4, 4, 3], 重低音: [7, 6, 4, 3, 1, 0, 0, 0, 0, 0],
+} as const;
+const REVERB_PRESETS = {
+  none: { label: '关闭', source: null, main: 1, send: 0 },
+  telephone: { label: '电话', source: 'filter-telephone.wav', main: 0, send: 3 },
+  church: { label: '教堂', source: 's2_r4_bd.wav', main: 1.8, send: 0.9 },
+  hall: { label: '大厅', source: 'bright-hall.wav', main: 0.8, send: 2.4 },
+  cinema: { label: '电影院', source: 'cinema-diningroom.wav', main: 0.6, send: 2.3 },
+  dining: { label: '餐厅', source: 'dining-living-true-stereo.wav', main: 0.6, send: 1.8 },
+  living: { label: '卫生间', source: 'living-bedroom-leveled.wav', main: 1.6, send: 2.1 },
+  spreader: { label: '室内', source: 'spreader50-65ms.wav', main: 1, send: 2.5 },
+  stereo: { label: '立体声', source: 'cardiod-35-10-spread.wav', main: 1.8, send: 0.6 },
+  matrix1: { label: '矩阵混响 (1)', source: 'matrix-reverb1.wav', main: 1.5, send: 0.9 },
+  matrix2: { label: '矩阵混响 (2)', source: 'matrix-reverb2.wav', main: 1.3, send: 1 },
+  cardiod: { label: '心形扩散', source: 'cardiod-35-10-spread.wav', main: 1.8, send: 0.6 },
+  magnetic: { label: '磁性立体声', source: 'tim-omni-35-10-magnetic.wav', main: 1, send: 0.2 },
+  spring: { label: '反馈弹簧', source: 'feedback-spring.wav', main: 1.8, send: 0.8 },
+} as const;
 
 interface PlayRecord {
   platform: MusicSource;
@@ -245,6 +276,19 @@ export default function MusicClient({ children: _children }: { children?: React.
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [playlistIndex, setPlaylistIndex] = useState(-1); // 当前在播放列表中的索引
   const [showQualityMenu, setShowQualityMenu] = useState(false); // 音质选择菜单
+  const [showAudioEffectsMenu, setShowAudioEffectsMenu] = useState(false);
+  const [equalizerEnabled, setEqualizerEnabled] = useState(false);
+  const [eqGains, setEqGains] = useState<number[]>(DEFAULT_EQ_GAINS);
+  const [loudnessEnabled, setLoudnessEnabled] = useState(false);
+  const [reverbEnabled, setReverbEnabled] = useState(false);
+  const [reverbMix, setReverbMix] = useState(12);
+  const [reverbPreset, setReverbPreset] = useState<keyof typeof REVERB_PRESETS>('none');
+  const [reverbMainGain, setReverbMainGain] = useState(100);
+  const [eqPreset, setEqPreset] = useState('Flat');
+  const [pitchRate, setPitchRate] = useState(1);
+  const [surroundEnabled, setSurroundEnabled] = useState(false);
+  const [surroundSpeed, setSurroundSpeed] = useState(25);
+  const [surroundDistance, setSurroundDistance] = useState(5);
   const [showSleepTimerMenu, setShowSleepTimerMenu] = useState(false); // 睡眠定时菜单
   const [sleepTimerEndAt, setSleepTimerEndAt] = useState<number | null>(null); // 睡眠定时结束时间
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState(0); // 睡眠定时剩余秒数
@@ -291,6 +335,41 @@ export default function MusicClient({ children: _children }: { children?: React.
     () => Array.from({ length: SPECTRUM_BIN_COUNT }, () => SPECTRUM_IDLE_LEVEL)
   );
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = JSON.parse(localStorage.getItem('musicEqGains') || 'null');
+      if (Array.isArray(saved) && saved.length === EQ_BANDS.length) setEqGains(saved.map(value => Math.max(-12, Math.min(12, Number(value) || 0))));
+      setEqualizerEnabled(localStorage.getItem('musicEqEnabled') === '1');
+      setLoudnessEnabled(localStorage.getItem('musicLoudnessEnabled') === '1');
+      setReverbEnabled(localStorage.getItem('musicReverbEnabled') === '1');
+      setReverbPreset((localStorage.getItem('musicReverbPreset') as keyof typeof REVERB_PRESETS) || 'none');
+      setReverbMainGain(Math.max(0, Math.min(150, Number(localStorage.getItem('musicReverbMainGain')) || 100)));
+      setReverbMix(Math.max(0, Math.min(40, Number(localStorage.getItem('musicReverbMix')) || 12)));
+      setEqPreset(localStorage.getItem('musicEqPreset') || 'Flat');
+      setPitchRate(Math.max(0.5, Math.min(1.5, Number(localStorage.getItem('musicPitchRate')) || 1)));
+      setSurroundEnabled(localStorage.getItem('musicSurroundEnabled') === '1');
+      setSurroundSpeed(Math.max(5, Math.min(60, Number(localStorage.getItem('musicSurroundSpeed')) || 25)));
+      setSurroundDistance(Math.max(1, Math.min(10, Number(localStorage.getItem('musicSurroundDistance')) || 5)));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('musicEqGains', JSON.stringify(eqGains));
+    localStorage.setItem('musicEqEnabled', equalizerEnabled ? '1' : '0');
+    localStorage.setItem('musicLoudnessEnabled', loudnessEnabled ? '1' : '0');
+    localStorage.setItem('musicReverbEnabled', reverbEnabled ? '1' : '0');
+    localStorage.setItem('musicReverbMix', String(reverbMix));
+    localStorage.setItem('musicReverbPreset', reverbPreset);
+    localStorage.setItem('musicReverbMainGain', String(reverbMainGain));
+    localStorage.setItem('musicEqPreset', eqPreset);
+    localStorage.setItem('musicPitchRate', String(pitchRate));
+    localStorage.setItem('musicSurroundEnabled', surroundEnabled ? '1' : '0');
+    localStorage.setItem('musicSurroundSpeed', String(surroundSpeed));
+    localStorage.setItem('musicSurroundDistance', String(surroundDistance));
+  }, [eqGains, equalizerEnabled, loudnessEnabled, reverbEnabled, reverbMix, reverbPreset, reverbMainGain, eqPreset, pitchRate, surroundEnabled, surroundSpeed, surroundDistance]);
+
   const audioRef = useRef<HTMLAudioElement>(null);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const sleepHoursPickerRef = useRef<HTMLDivElement>(null);
@@ -302,6 +381,14 @@ export default function MusicClient({ children: _children }: { children?: React.
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const spectrumDataRef = useRef<Uint8Array | null>(null);
+  const eqFiltersRef = useRef<BiquadFilterNode[]>([]);
+  const loudnessGainRef = useRef<GainNode | null>(null);
+  const compressorRef = useRef<DynamicsCompressorNode | null>(null);
+  const convolverRef = useRef<ConvolverNode | null>(null);
+  const dryGainRef = useRef<GainNode | null>(null);
+  const wetGainRef = useRef<GainNode | null>(null);
+  const pannerRef = useRef<PannerNode | null>(null);
+  const pannerTimerRef = useRef<number | null>(null);
   const spectrumFrameRef = useRef<number | null>(null);
   const currentTimeRef = useRef(0);
   const volumeRef = useRef(volume);
@@ -1305,6 +1392,68 @@ export default function MusicClient({ children: _children }: { children?: React.
 
   // 音频事件监听
   useEffect(() => {
+    eqFiltersRef.current.forEach((filter, index) => { filter.gain.value = equalizerEnabled ? (eqGains[index] || 0) : 0; });
+    if (compressorRef.current) {
+      compressorRef.current.threshold.value = loudnessEnabled ? -24 : 0;
+      compressorRef.current.knee.value = loudnessEnabled ? 12 : 0;
+      compressorRef.current.ratio.value = loudnessEnabled ? 2 : 1;
+    }
+    if (loudnessGainRef.current) loudnessGainRef.current.gain.value = loudnessEnabled ? 1.04 : 1;
+    if (dryGainRef.current) dryGainRef.current.gain.value = reverbEnabled ? reverbMainGain / 100 : 1;
+    if (wetGainRef.current) wetGainRef.current.gain.value = reverbEnabled ? reverbMix / 100 : 0;
+    const audio = audioRef.current as (HTMLAudioElement & { preservesPitch?: boolean }) | null;
+    if (audio) {
+      audio.playbackRate = pitchRate;
+      audio.preservesPitch = false;
+    }
+    if (pannerRef.current && !surroundEnabled) {
+      pannerRef.current.positionX.value = 0;
+      pannerRef.current.positionY.value = 0;
+      pannerRef.current.positionZ.value = 0;
+    }
+  }, [eqGains, equalizerEnabled, loudnessEnabled, reverbEnabled, reverbMix, reverbMainGain, pitchRate, surroundEnabled]);
+
+  useEffect(() => {
+    const convolver = convolverRef.current;
+    const context = audioContextRef.current;
+    const preset = REVERB_PRESETS[reverbPreset];
+    if (!convolver || !context || !preset || !preset.source || !reverbEnabled) {
+      if (convolver) convolver.buffer = null;
+      return;
+    }
+    let cancelled = false;
+    fetch(`/music/effects/${preset.source}`)
+      .then(response => response.arrayBuffer())
+      .then(data => context.decodeAudioData(data))
+      .then(buffer => {
+        if (!cancelled && convolver) convolver.buffer = buffer;
+      })
+      .catch(error => console.warn('加载环境混响音效失败:', error));
+    return () => { cancelled = true; };
+  }, [reverbPreset, reverbEnabled]);
+
+  useEffect(() => {
+    if (pannerTimerRef.current !== null) window.clearInterval(pannerTimerRef.current);
+    if (!surroundEnabled || !pannerRef.current) return;
+    let angle = 0;
+    const update = () => {
+      const panner = pannerRef.current;
+      if (!panner) return;
+      angle = (angle + 360 / (surroundSpeed * 10)) % 360;
+      const radians = angle * Math.PI / 180;
+      panner.positionX.value = Math.sin(radians) * surroundDistance;
+      panner.positionY.value = 0;
+      panner.positionZ.value = Math.cos(radians) * surroundDistance;
+    };
+    update();
+    pannerTimerRef.current = window.setInterval(update, 100);
+    return () => {
+      if (pannerTimerRef.current !== null) window.clearInterval(pannerTimerRef.current);
+      pannerTimerRef.current = null;
+    };
+  }, [surroundEnabled, surroundSpeed, surroundDistance]);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -1608,6 +1757,18 @@ export default function MusicClient({ children: _children }: { children?: React.
     return getSourceDisplayLabel(currentSource, false);
   };
 
+  const resetAudioEffects = () => {
+    setEqGains([...DEFAULT_EQ_GAINS]); setEqPreset('Flat'); setEqualizerEnabled(false);
+    setLoudnessEnabled(false); setReverbEnabled(false); setReverbMix(12); setReverbPreset('none'); setReverbMainGain(100);
+    setPitchRate(1); setSurroundEnabled(false); setSurroundSpeed(25); setSurroundDistance(5);
+  };
+
+  const applyEqPreset = (name: string) => {
+    const preset = EQ_PRESETS[name as keyof typeof EQ_PRESETS];
+    if (!preset) return;
+    setEqPreset(name); setEqGains([...preset]); setEqualizerEnabled(name !== 'Flat');
+  };
+
   const formatTime = (seconds: number) => {
     if (isNaN(seconds) || seconds === 0) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -1752,13 +1913,30 @@ export default function MusicClient({ children: _children }: { children?: React.
         }
 
         if (!analyserRef.current) {
-          const analyser = audioContextRef.current.createAnalyser();
-          analyser.fftSize = 512;
-          analyser.smoothingTimeConstant = 0.8;
-          mediaSourceRef.current.connect(analyser);
-          analyser.connect(audioContextRef.current.destination);
-          analyserRef.current = analyser;
-          spectrumDataRef.current = new Uint8Array(analyser.frequencyBinCount);
+          const context = audioContextRef.current;
+          const eqFilters = EQ_BANDS.map((band) => {
+            const filter = context.createBiquadFilter();
+            filter.type = 'peaking'; filter.frequency.value = band.frequency; filter.Q.value = 1.4; filter.gain.value = 0;
+            return filter;
+          });
+          eqFilters.forEach((filter, index) => index === 0 ? mediaSourceRef.current?.connect(filter) : eqFilters[index - 1].connect(filter));
+          const lastEq = eqFilters[eqFilters.length - 1];
+          const dryGain = context.createGain(); const wetGain = context.createGain();
+          const convolver = context.createConvolver();
+          const impulse = context.createBuffer(2, Math.floor(context.sampleRate * 1.6), context.sampleRate);
+          for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
+            const data = impulse.getChannelData(channel);
+            for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2.2);
+          }
+          convolver.buffer = impulse; lastEq.connect(dryGain); lastEq.connect(convolver); convolver.connect(wetGain);
+          const mixer = context.createGain(); dryGain.connect(mixer); wetGain.connect(mixer);
+          const compressor = context.createDynamicsCompressor(); compressor.threshold.value = 0; compressor.knee.value = 0; compressor.ratio.value = 1; compressor.attack.value = 0.003; compressor.release.value = 0.25; mixer.connect(compressor);
+          const loudnessGain = context.createGain(); compressor.connect(loudnessGain);
+          const panner = context.createPanner();
+          panner.panningModel = 'HRTF'; panner.distanceModel = 'inverse'; panner.refDistance = 1; panner.maxDistance = 20; panner.rolloffFactor = 0.5;
+          panner.positionX.value = 0; panner.positionY.value = 0; panner.positionZ.value = 0;
+          const analyser = context.createAnalyser(); analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.8; loudnessGain.connect(panner); panner.connect(analyser); analyser.connect(context.destination);
+          eqFiltersRef.current = eqFilters; convolverRef.current = convolver; dryGainRef.current = dryGain; wetGainRef.current = wetGain; compressorRef.current = compressor; loudnessGainRef.current = loudnessGain; pannerRef.current = panner; analyserRef.current = analyser; spectrumDataRef.current = new Uint8Array(analyser.frequencyBinCount);
         }
 
         if (audioContextRef.current.state === 'suspended') {
@@ -1842,6 +2020,8 @@ export default function MusicClient({ children: _children }: { children?: React.
         window.cancelAnimationFrame(spectrumFrameRef.current);
       }
       analyserRef.current?.disconnect();
+      eqFiltersRef.current.forEach(filter => filter.disconnect());
+      convolverRef.current?.disconnect(); dryGainRef.current?.disconnect(); wetGainRef.current?.disconnect(); compressorRef.current?.disconnect(); loudnessGainRef.current?.disconnect(); pannerRef.current?.disconnect();
       mediaSourceRef.current?.disconnect();
       audioContextRef.current?.close().catch(() => undefined);
     };
@@ -2567,6 +2747,7 @@ export default function MusicClient({ children: _children }: { children?: React.
                     </div>
                   </div>
                 </div>
+                <button onClick={(e) => { e.stopPropagation(); setShowAudioEffectsMenu(true); }} className={`transition-colors ${equalizerEnabled || loudnessEnabled || reverbEnabled || pitchRate !== 1 || surroundEnabled ? 'text-green-400' : 'text-zinc-500 hover:text-white'}`} title="均衡器和音效" aria-label="均衡器和音效"><SlidersHorizontal className="h-4 w-4 md:h-5 md:w-5" /></button>
                 {/* PiP 歌词按钮 */}
                 <button
                   onClick={toggleSpectrum}
@@ -2935,6 +3116,25 @@ export default function MusicClient({ children: _children }: { children?: React.
                 关闭定时
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showAudioEffectsMenu && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setShowAudioEffectsMenu(false)}>
+          <div className="relative w-full max-w-5xl max-h-[90vh] bg-zinc-900 rounded-2xl border border-white/10 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-white/10 flex items-center justify-between"><div><h3 className="text-lg font-bold text-white">均衡器与音效调节</h3></div><button onClick={() => setShowAudioEffectsMenu(false)} className="w-8 h-8 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10">✕</button></div>
+            <div className="p-5 overflow-y-auto max-h-[calc(90vh-80px)]"><div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8">
+              <section><div className="flex items-center justify-between mb-4"><div><h4 className="text-sm font-bold text-white">10 段均衡器</h4></div><label className="flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={equalizerEnabled} onChange={(e) => setEqualizerEnabled(e.target.checked)} className="h-4 w-4 accent-green-500" />启用 EQ</label></div>
+                <div className="rounded-xl border border-white/5 p-4 overflow-x-auto overscroll-x-contain"><div className="min-w-[760px] grid grid-cols-10 gap-3 items-end h-56 sm:h-64">{EQ_BANDS.map((band, index) => (<div key={band.frequency} className="h-full min-w-0 flex flex-col items-center gap-2"><span className="text-[10px] font-mono text-zinc-500">{(eqGains[index] || 0) > 0 ? '+' : ''}{(eqGains[index] || 0).toFixed(1)}</span><div className="flex-1 w-full min-h-0 flex items-center justify-center"><input type="range" min="-12" max="12" step="0.5" value={eqGains[index] || 0} onChange={(e) => { setEqPreset('自定义'); const value = Number(e.target.value); setEqGains(current => current.map((gain, i) => i === index ? value : gain)); }} disabled={!equalizerEnabled} className="w-40 sm:w-52 h-5 -rotate-90 accent-green-500 [direction:rtl] disabled:opacity-40" /></div><span className="text-[10px] font-mono text-zinc-400">{band.label}</span></div>))}</div></div>
+                <div className="mt-5"><div className="flex items-center justify-between mb-3"><h4 className="text-sm font-bold text-white">预设</h4><button onClick={() => applyEqPreset('Flat')} className="text-xs text-green-400 hover:text-green-300">Flat 重置</button></div><div className="flex flex-wrap gap-2">{Object.keys(EQ_PRESETS).map(name => (<button key={name} onClick={() => applyEqPreset(name)} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${eqPreset === name ? 'bg-green-500/20 text-green-300 border border-green-500/50' : 'bg-white/5 text-zinc-300 border border-white/10 hover:bg-white/10'}`}>{name}</button>))}</div></div>
+              </section>
+              <aside className="space-y-5"><section className="rounded-xl border border-white/10 bg-white/[0.03] p-4"><div className="flex items-center justify-between"><div><h4 className="text-sm font-bold text-white">响度增强</h4><p className="text-xs text-zinc-500 mt-1">轻微压缩，增强人声和细节</p></div><input type="checkbox" checked={loudnessEnabled} onChange={(e) => setLoudnessEnabled(e.target.checked)} className="h-4 w-4 accent-green-500" /></div></section>
+                <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4"><div className="flex items-center justify-between mb-3"><div><h4 className="text-sm font-bold text-white">环境混响音效</h4><p className="text-xs text-zinc-500 mt-1">模拟不同空间的回声效果</p></div><input type="checkbox" checked={reverbEnabled} onChange={(e) => setReverbEnabled(e.target.checked)} className="h-4 w-4 accent-green-500" /></div><div className="flex flex-wrap gap-2">{Object.entries(REVERB_PRESETS).map(([id, preset]) => (<button key={id} onClick={() => { const selected = id as keyof typeof REVERB_PRESETS; const selectedPreset = REVERB_PRESETS[selected]; setReverbPreset(selected); setReverbEnabled(selected !== 'none'); setReverbMainGain(Math.round(selectedPreset.main * 100)); setReverbMix(Math.min(100, Math.round(selectedPreset.send * 30))); }} className={`rounded-lg border px-2.5 py-1 text-xs ${reverbPreset === id ? 'border-green-500/50 bg-green-500/20 text-green-300' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}`}>{preset.label}</button>))}</div><label className="mt-3 block text-xs text-zinc-400">原始音量 {reverbMainGain}%<input type="range" min="0" max="150" value={reverbMainGain} onChange={(e) => setReverbMainGain(Number(e.target.value))} disabled={!reverbEnabled} className="mt-2 w-full accent-green-500 disabled:opacity-40" /></label><label className="mt-3 block text-xs text-zinc-400">环境音效 {reverbMix}%<input type="range" min="0" max="100" value={reverbMix} onChange={(e) => setReverbMix(Number(e.target.value))} disabled={!reverbEnabled} className="mt-2 w-full accent-green-500 disabled:opacity-40" /></label></section>
+                <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4"><div className="flex items-center justify-between mb-3"><div><h4 className="text-sm font-bold text-white">音调升降调节</h4><p className="text-xs text-zinc-500 mt-1">当前 {pitchRate.toFixed(2)}x</p></div><button onClick={() => setPitchRate(1)} className="text-xs text-green-400">重置</button></div><input type="range" min="0.5" max="1.5" step="0.01" value={pitchRate} onChange={(e) => setPitchRate(Number(e.target.value))} className="w-full accent-green-500" /><div className="mt-2 flex justify-between text-xs text-zinc-500"><span>低</span><span>原速</span><span>高</span></div></section>
+                <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4"><div className="flex items-center justify-between mb-3"><div><h4 className="text-sm font-bold text-white">3D 立体环绕</h4><p className="text-xs text-zinc-500 mt-1">需使用耳机，模拟声源环绕移动</p></div><input type="checkbox" checked={surroundEnabled} onChange={(e) => setSurroundEnabled(e.target.checked)} className="h-4 w-4 accent-green-500" /></div><label className="block text-xs text-zinc-400">旋转速度 {surroundSpeed}<input type="range" min="5" max="60" value={surroundSpeed} onChange={(e) => setSurroundSpeed(Number(e.target.value))} disabled={!surroundEnabled} className="mt-2 w-full accent-green-500 disabled:opacity-40" /></label><label className="block mt-3 text-xs text-zinc-400">声场距离 {surroundDistance}<input type="range" min="1" max="10" value={surroundDistance} onChange={(e) => setSurroundDistance(Number(e.target.value))} disabled={!surroundEnabled} className="mt-2 w-full accent-green-500 disabled:opacity-40" /></label></section>
+                <button onClick={() => setShowAudioEffectsMenu(false)} className="w-full rounded-xl bg-green-500 p-3 text-sm font-medium text-black hover:bg-green-400">完成</button>
+              </aside></div></div>
           </div>
         </div>
       )}
