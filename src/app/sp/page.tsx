@@ -66,16 +66,19 @@ export default async function SpecialPage() {
                 className='inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-400'
               >
                 <Search className='h-4 w-4' />
-                前往 /r18
+                前往里世界
               </Link>
             ) : (
-              <Link
-                href='/search'
-                className='inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20'
+              <button
+                type='button'
+                disabled
+                aria-disabled='true'
+                title='该功能未开启，请联系管理员在后台开启'
+                className='inline-flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-200 px-4 py-3 text-sm font-medium text-gray-400 opacity-60 dark:bg-white/10 dark:text-slate-500'
               >
                 <Search className='h-4 w-4' />
-                前往搜索
-              </Link>
+                前往里世界
+              </button>
             )}
           </div>
         </div>

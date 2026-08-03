@@ -2342,3 +2342,13 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
     </PageLayout>
   );
 }
+
+// /search 路由页面：App Router 要求 page.tsx 必须有默认导出。
+// SearchPageClient 同时被 /r18 以 searchBase='/r18' 复用。
+export default function SearchPage() {
+  return (
+    <Suspense>
+      <SearchPageClient />
+    </Suspense>
+  );
+}
