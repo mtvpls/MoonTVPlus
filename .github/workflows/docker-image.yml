@@ -1,4 +1,6 @@
-name: Build & Push Docker image
+# 上游遗留：镜像名硬编码 ghcr.io/mtvpls/moontvplus，本 fork 无推送权限，跑必失败。
+# 保留仅为减少与上游的 diff，不要手动触发。
+name: 【上游·不可用】Docker 镜像构建 → mtvpls/moontvplus
 
 on:
   workflow_dispatch:

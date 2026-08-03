@@ -1,4 +1,6 @@
-name: Build & Push Docker image
+# 本仓库实际在用的构建：镜像名按分支动态生成（github.repository_owner），
+# 非 main/dev 分支统一推到 <owner>/moontvplus-dev2。手动触发专用。
+name: 【本仓库】Docker 镜像构建 → moontvplus-dev2
 
 on:
   workflow_dispatch:
@@ -42,16 +44,19 @@ jobs:
         uses: actions/checkout@v4
 
       # 新增步骤：根据分支动态设置镜像名称
+      # owner 必须转小写：GHCR 仓库名不允许大写，否则 merge job 里手写的
+      # printf "$IMAGE_NAME@sha256:..." 会被 imagetools 拒绝
       - name: Set image name based on branch
         id: set_image_name
         run: |
+          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
           if [[ "${{ github.ref_name }}" == "main" ]]; then
-            echo "IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/moontvplus" >> $GITHUB_ENV
+            echo "IMAGE_NAME=ghcr.io/$OWNER/moontvplus" >> $GITHUB_ENV
           elif [[ "${{ github.ref_name }}" == "dev" ]]; then
-            echo "IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/moontvplus-dev2" >> $GITHUB_ENV
+            echo "IMAGE_NAME=ghcr.io/$OWNER/moontvplus-dev2" >> $GITHUB_ENV
           else
             # 为其他分支或手动触发设置一个默认值（可以根据需要调整）
-            echo "IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/moontvplus-dev2" >> $GITHUB_ENV
+            echo "IMAGE_NAME=ghcr.io/$OWNER/moontvplus-dev2" >> $GITHUB_ENV
           fi
 
       - name: Set up Docker Buildx
@@ -120,16 +125,17 @@ jobs:
           pattern: digests-*
           merge-multiple: true
 
-      # 新增步骤：在 merge 任务中也需要设置同样的镜像名称
+      # 新增步骤：在 merge 任务中也需要设置同样的镜像名称（同样必须小写）
       - name: Set image name based on branch
         id: set_image_name
         run: |
+          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
           if [[ "${{ github.ref_name }}" == "main" ]]; then
-            echo "IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/moontvplus" >> $GITHUB_ENV
+            echo "IMAGE_NAME=ghcr.io/$OWNER/moontvplus" >> $GITHUB_ENV
           elif [[ "${{ github.ref_name }}" == "dev" ]]; then
-            echo "IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/moontvplus-dev2" >> $GITHUB_ENV
+            echo "IMAGE_NAME=ghcr.io/$OWNER/moontvplus-dev2" >> $GITHUB_ENV
           else
-            echo "IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/moontvplus-dev2" >> $GITHUB_ENV
+            echo "IMAGE_NAME=ghcr.io/$OWNER/moontvplus-dev2" >> $GITHUB_ENV
           fi
 
       # 新增步骤：在 merge 任务中也需要生成同样的标签列表
