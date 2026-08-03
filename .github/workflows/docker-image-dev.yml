@@ -24,7 +24,7 @@ concurrency:
 permissions:
   contents: read # 出于安全考虑，大部分步骤只需要 read 权限
   packages: write
-  actions: write # cleanup-refresh 需要这个权限
+  # 不再需要 actions: write —— 删除运行记录的 cleanup-refresh job 已移除
 
 jobs:
   build:
@@ -169,16 +169,6 @@ jobs:
           docker buildx imagetools create -t $FORMATTED_TAGS \
             $(printf '${{ env.IMAGE_NAME }}@sha256:%s ' *)
 
-  cleanup-refresh:
-    runs-on: ubuntu-latest
-    needs:
-      - merge
-    if: always()
-    steps:
-      - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@main
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 2
+  # 已移除上游的 cleanup-refresh job（Mattraks/delete-workflow-runs，retain_days: 0）：
+  # 它带 if: always()，构建失败也会把运行记录连同日志一起删掉，导致无法排查。
+  # 如需清理历史，去 Actions 页面手动删，或改用 retain_days > 0。
