@@ -1,0 +1,85 @@
+import { Search } from 'lucide-react';
+import Link from 'next/link';
+
+import { getConfig } from '@/lib/config';
+
+export const dynamic = 'force-dynamic';
+
+/**
+ * 特殊源入口说明页（/sp）。
+ * 开关本身是站点级配置（后台「站点配置 → 开启特殊源入口」），
+ * 这里只反映当前状态并给出 /r18 入口。
+ */
+export default async function SpecialPage() {
+  const config = await getConfig();
+  const enabled = !!config.SiteConfig.EnableSpecialSources;
+
+  return (
+    <main className='min-h-screen bg-gray-50 text-gray-900 dark:bg-black dark:text-slate-100'>
+      <section className='mx-auto flex min-h-screen w-full max-w-xl items-center px-5 py-10'>
+        <div className='w-full rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-zinc-950 sm:p-8'>
+          <div className='space-y-3'>
+            <h1 className='text-2xl font-semibold tracking-tight text-gray-900 dark:text-white'>
+              特殊源
+            </h1>
+            <p className='text-sm leading-6 text-gray-600 dark:text-slate-400'>
+              特殊源只在 /r18 路径下可用，普通搜索不会出现特殊源的内容；/r18
+              路径下也不会出现普通源的内容。
+            </p>
+          </div>
+
+          <div className='mt-8 flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03]'>
+            <div>
+              <div className='text-sm text-gray-600 dark:text-slate-400'>
+                当前状态
+              </div>
+              <div className='mt-1 text-lg font-medium text-gray-900 dark:text-white'>
+                {enabled ? '已开启' : '已关闭'}
+              </div>
+            </div>
+
+            <span
+              className={`relative inline-flex h-8 w-14 items-center rounded-full p-1 ${
+                enabled ? 'bg-rose-600' : 'bg-gray-300 dark:bg-slate-700'
+              }`}
+              role='img'
+              aria-label={enabled ? '特殊源入口已开启' : '特殊源入口已关闭'}
+            >
+              <span
+                className={`h-6 w-6 rounded-full bg-white transition-transform ${
+                  enabled ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </span>
+          </div>
+
+          <p className='mt-4 text-xs leading-5 text-gray-500 dark:text-slate-500'>
+            该开关由管理员在后台「站点配置」中设置。关闭时 /r18 返回 404，特殊源
+            完全不可用。此开关对 TVBox、OrionTV、WebTV 渠道无效，这些渠道始终无法
+            使用特殊源。
+          </p>
+
+          <div className='mt-8 flex flex-col gap-3 sm:flex-row'>
+            {enabled ? (
+              <Link
+                href='/r18'
+                className='inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-400'
+              >
+                <Search className='h-4 w-4' />
+                前往 /r18
+              </Link>
+            ) : (
+              <Link
+                href='/search'
+                className='inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20'
+              >
+                <Search className='h-4 w-4' />
+                前往搜索
+              </Link>
+            )}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}

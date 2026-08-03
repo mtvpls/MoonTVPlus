@@ -17,6 +17,8 @@ export interface AdminConfig {
     DoubanImageProxyType: string;
     DoubanImageProxy: string;
     DisableYellowFilter: boolean;
+    // 是否开启 /r18 特殊源入口（关闭时 /r18 返回 404，特殊源完全不可用）
+    EnableSpecialSources?: boolean;
     FluidSearch: boolean;
     // 弹幕配置
     DanmakuSourceType?: 'builtin' | 'custom';

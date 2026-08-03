@@ -17,6 +17,7 @@
 import { getAuthInfoFromBrowserCookie, clearAuthCookie } from './auth';
 import { normalizeEpisodeFilterConfig } from './episode-filter';
 import { MangaReadRecord, MangaShelfItem } from './manga.types';
+import { filterRecordsBySpecialSourceContext } from './special-source.client';
 import { isLoginPathname, resolveLoginPath } from './tv-mode';
 import { DanmakuFilterConfig, EpisodeFilterConfig, SkipConfig } from './types';
 
@@ -759,7 +760,7 @@ export function generateStorageKey(source: string, id: string): string {
  * 非本地存储模式下使用混合缓存策略：优先返回缓存数据，后台异步同步最新数据。
  * 在服务端渲染阶段 (window === undefined) 时返回空对象，避免报错。
  */
-export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
+async function getAllPlayRecordsRaw(): Promise<Record<string, PlayRecord>> {
   // 服务器端渲染阶段直接返回空，交由客户端 useEffect 再行请求
   if (typeof window === 'undefined') {
     return {};
@@ -819,7 +820,22 @@ export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
   }
 }
 
+/**
+ * 读取当前入口可见的播放记录：普通路径不含特殊源，/r18 只含特殊源。
+ * 写路径（保存/删除/迁移）走 getAllPlayRecordsRaw，避免读-改-写抹掉另一侧的数据。
+ */
+export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
+  return filterRecordsBySpecialSourceContext(await getAllPlayRecordsRaw());
+}
+
+/** 同 getAllPlayRecords，按当前入口过滤后返回缓存快照 */
 export function getCachedPlayRecordsSnapshot(): Record<string, PlayRecord> {
+  return filterRecordsBySpecialSourceContext(
+    getCachedPlayRecordsSnapshotRaw()
+  );
+}
+
+function getCachedPlayRecordsSnapshotRaw(): Record<string, PlayRecord> {
   if (typeof window === 'undefined') {
     return {};
   }
@@ -955,7 +971,7 @@ export async function savePlayRecord(
   }
 
   try {
-    const allRecords = await getAllPlayRecords();
+    const allRecords = await getAllPlayRecordsRaw();
     allRecords[key] = record;
     localStorage.setItem(PLAY_RECORDS_KEY, JSON.stringify(allRecords));
     window.dispatchEvent(
@@ -1014,7 +1030,7 @@ export async function deletePlayRecord(
   }
 
   try {
-    const allRecords = await getAllPlayRecords();
+    const allRecords = await getAllPlayRecordsRaw();
     delete allRecords[key];
     localStorage.setItem(PLAY_RECORDS_KEY, JSON.stringify(allRecords));
     window.dispatchEvent(
@@ -1072,7 +1088,7 @@ export async function deletePlayRecords(keys: string[]): Promise<void> {
   }
 
   try {
-    const allRecords = await getAllPlayRecords();
+    const allRecords = await getAllPlayRecordsRaw();
     uniqueKeys.forEach((key) => {
       delete allRecords[key];
     });
@@ -1158,7 +1174,7 @@ export async function migratePlayRecord(
   }
 
   try {
-    const allRecords = await getAllPlayRecords();
+    const allRecords = await getAllPlayRecordsRaw();
     delete allRecords[fromKey];
     allRecords[toKey] = record;
     localStorage.setItem(PLAY_RECORDS_KEY, JSON.stringify(allRecords));
@@ -1410,10 +1426,10 @@ let lastFavoritesBackgroundFetchTime = 0;
 const MIN_BACKGROUND_FETCH_INTERVAL = 3000; // 3秒内不重复后台请求
 
 /**
- * 获取全部收藏。
+ * 获取全部收藏（未按入口过滤，仅供内部读-改-写使用）。
  * 数据库存储模式下使用混合缓存策略：优先返回缓存数据，后台异步同步最新数据。
  */
-export async function getAllFavorites(): Promise<Record<string, Favorite>> {
+async function getAllFavoritesRaw(): Promise<Record<string, Favorite>> {
   // 服务器端渲染阶段直接返回空
   if (typeof window === 'undefined') {
     return {};
@@ -1498,6 +1514,13 @@ export async function getAllFavorites(): Promise<Record<string, Favorite>> {
 }
 
 /**
+ * 获取当前入口可见的收藏：普通路径不含特殊源，/r18 只含特殊源。
+ */
+export async function getAllFavorites(): Promise<Record<string, Favorite>> {
+  return filterRecordsBySpecialSourceContext(await getAllFavoritesRaw());
+}
+
+/**
  * 保存收藏。
  * 数据库存储模式下使用乐观更新：先更新缓存，再异步同步到数据库。
  */
@@ -1546,7 +1569,7 @@ export async function saveFavorite(
   }
 
   try {
-    const allFavorites = await getAllFavorites();
+    const allFavorites = await getAllFavoritesRaw();
     allFavorites[key] = favorite;
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(allFavorites));
     window.dispatchEvent(
@@ -1605,7 +1628,7 @@ export async function deleteFavorite(
   }
 
   try {
-    const allFavorites = await getAllFavorites();
+    const allFavorites = await getAllFavoritesRaw();
     delete allFavorites[key];
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(allFavorites));
     window.dispatchEvent(
@@ -1641,13 +1664,13 @@ export async function isFavorited(
     } else {
       // 缓存为空时，调用 getAllFavorites() 来获取并缓存数据
       // 这样可以复用 getAllFavorites() 中的防重复请求机制
-      const allFavorites = await getAllFavorites();
+      const allFavorites = await getAllFavoritesRaw();
       return !!allFavorites[key];
     }
   }
 
   // localStorage 模式
-  const allFavorites = await getAllFavorites();
+  const allFavorites = await getAllFavoritesRaw();
   return !!allFavorites[key];
 }
 
@@ -2185,6 +2208,14 @@ export function subscribeToDataUpdates<T>(
   }
 
   const handleUpdate = (event: CustomEvent) => {
+    // 收藏 / 播放记录的推送同样按入口过滤，与 getAll* 出口保持一致
+    if (
+      eventType === 'playRecordsUpdated' ||
+      eventType === 'favoritesUpdated'
+    ) {
+      callback(filterRecordsBySpecialSourceContext(event.detail) as T);
+      return;
+    }
     callback(event.detail);
   };
 
