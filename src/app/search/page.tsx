@@ -38,6 +38,7 @@ import { processImageUrl } from '@/lib/utils';
 
 import AcgSearch from '@/components/AcgSearch';
 import CapsuleSwitch from '@/components/CapsuleSwitch';
+import ContinueWatching from '@/components/ContinueWatching';
 import ImageViewer from '@/components/ImageViewer';
 import PageLayout from '@/components/PageLayout';
 import PansouSearch, { CLOUD_TYPE_NAMES } from '@/components/PansouSearch';
@@ -2422,7 +2423,13 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
                 </>
               )}
             </section>
-          ) : searchHistory.length > 0 ? (
+          ) : (
+            <>
+              {/* /r18 入口下展示特殊源的继续观看（播放记录按入口隔离） */}
+              {searchBase === '/r18' && activeTab === 'video' && (
+                <ContinueWatching />
+              )}
+              {searchHistory.length > 0 && (
             // 搜索历史
             <section className='mb-12'>
               <h2 className='mb-4 text-xl font-bold text-gray-800 text-left dark:text-gray-200'>
@@ -2494,7 +2501,9 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
                 ))}
               </div>
             </section>
-          ) : null}
+              )}
+            </>
+          )}
         </div>
       </div>
 

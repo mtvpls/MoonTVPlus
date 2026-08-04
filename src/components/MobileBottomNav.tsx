@@ -2,12 +2,10 @@
 
 'use client';
 
-import { Blend, Cat, Clover, Container, Film, Flame, Globe, Home, Star, Tv, TvMinimalPlay, Users } from 'lucide-react';
+import { Blend, Cat, Clover, Container, Film, Globe, Home, Star, Tv, TvMinimalPlay, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-
-import { R18_PATH } from '@/lib/special-source.client';
 
 import { useWatchRoomContextSafe } from './WatchRoomProvider';
 
@@ -144,14 +142,7 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
       });
     }
 
-    // 特殊源专属入口，由站点配置「开启特殊源入口」控制
-    if (runtimeConfig?.ENABLE_SPECIAL_SOURCES) {
-      items.push({
-        icon: Flame,
-        label: '特殊源',
-        href: R18_PATH,
-      });
-    }
+    // 特殊源入口不在导航展示，只能手动访问 /r18
 
     setNavItems(items);
   }, [watchRoomContext?.isEnabled]);
