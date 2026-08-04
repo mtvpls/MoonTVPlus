@@ -6590,6 +6590,24 @@ const VideoSourceConfig = ({
     }>
   >([]);
 
+  // 一键批量操作的目标源：已禁用的、检测为无效的、检测为无法搜索的
+  const disabledSourceKeys = useMemo(
+    () => sources.filter((s) => s.disabled).map((s) => s.key),
+    [sources]
+  );
+  const invalidSourceKeys = useMemo(
+    () =>
+      validationResults.filter((r) => r.status === 'invalid').map((r) => r.key),
+    [validationResults]
+  );
+  const noResultSourceKeys = useMemo(
+    () =>
+      validationResults
+        .filter((r) => r.status === 'no_results')
+        .map((r) => r.key),
+    [validationResults]
+  );
+
   // dnd-kit 传感器
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -7545,6 +7563,62 @@ const VideoSourceConfig = ({
     });
   };
 
+  // 一键批量：不依赖勾选，直接对给定的 keys 走已有的 batch_enable / batch_disable
+  const handleQuickBatch = (
+    action: 'batch_enable' | 'batch_disable',
+    keys: string[],
+    actionName: string,
+    emptyMessage: string
+  ) => {
+    const closeConfirm = () =>
+      setConfirmModal({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => {},
+        onCancel: () => {},
+      });
+
+    if (keys.length === 0) {
+      showAlert({
+        type: 'warning',
+        title: `没有需要${
+          action === 'batch_enable' ? '启用' : '禁用'
+        }的视频源`,
+        message: emptyMessage,
+      });
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: '确认操作',
+      message: `确定要${actionName}吗？共 ${keys.length} 个视频源。`,
+      onConfirm: async () => {
+        try {
+          await withLoading(`batchSource_${action}`, () =>
+            callSourceApi({ action, keys })
+          );
+          showAlert({
+            type: 'success',
+            title: `${actionName}成功`,
+            message: `已处理 ${keys.length} 个视频源`,
+            timer: 2000,
+          });
+          setSelectedSources(new Set());
+        } catch (err) {
+          showAlert({
+            type: 'error',
+            title: `${actionName}失败`,
+            message: err instanceof Error ? err.message : '操作失败',
+          });
+        }
+        closeConfirm();
+      },
+      onCancel: closeConfirm,
+    });
+  };
+
   if (!config) {
     return (
       <div className='text-center text-gray-500 dark:text-gray-400'>
@@ -7669,6 +7743,86 @@ const VideoSourceConfig = ({
                     </>
                   ) : (
                     '有效性检测'
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    handleQuickBatch(
+                      'batch_enable',
+                      disabledSourceKeys,
+                      '启用全部源',
+                      '所有视频源都已处于启用状态'
+                    )
+                  }
+                  disabled={isLoading('batchSource_batch_enable')}
+                  className={`${
+                    isLoading('batchSource_batch_enable')
+                      ? buttonStyles.disabled
+                      : buttonStyles.success
+                  } flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
+                  title='把所有已禁用的视频源一键启用'
+                >
+                  <span>
+                    {isLoading('batchSource_batch_enable')
+                      ? '启用中...'
+                      : '启用全部源'}
+                  </span>
+                  {disabledSourceKeys.length > 0 && (
+                    <span className='rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold'>
+                      {disabledSourceKeys.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    handleQuickBatch(
+                      'batch_disable',
+                      invalidSourceKeys,
+                      '禁用无效源',
+                      '当前没有检测为无效的视频源，请先执行「有效性检测」'
+                    )
+                  }
+                  disabled={
+                    isValidating || isLoading('batchSource_batch_disable')
+                  }
+                  className={`${
+                    isValidating || isLoading('batchSource_batch_disable')
+                      ? buttonStyles.disabled
+                      : buttonStyles.danger
+                  } flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
+                  title='禁用有效性检测中连接失败（无效）的视频源'
+                >
+                  <span>禁用无效源</span>
+                  {invalidSourceKeys.length > 0 && (
+                    <span className='rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold'>
+                      {invalidSourceKeys.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    handleQuickBatch(
+                      'batch_disable',
+                      noResultSourceKeys,
+                      '禁用无法搜索源',
+                      '当前没有检测为无法搜索的视频源，请先执行「有效性检测」'
+                    )
+                  }
+                  disabled={
+                    isValidating || isLoading('batchSource_batch_disable')
+                  }
+                  className={`${
+                    isValidating || isLoading('batchSource_batch_disable')
+                      ? buttonStyles.disabled
+                      : buttonStyles.warning
+                  } flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
+                  title='禁用有效性检测中能连通但搜不到结果的视频源'
+                >
+                  <span>禁用无法搜索源</span>
+                  {noResultSourceKeys.length > 0 && (
+                    <span className='rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold'>
+                      {noResultSourceKeys.length}
+                    </span>
                   )}
                 </button>
                 <button
