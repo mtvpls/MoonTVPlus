@@ -1,6 +1,4 @@
-# 上游遗留：镜像名硬编码 ghcr.io/mtvpls/moontvplus，本 fork 无推送权限，跑必失败。
-# 保留仅为减少与上游的 diff，不要手动触发。
-name: 【上游·不可用】Docker 镜像构建 → mtvpls/moontvplus
+name: Build & Push Docker image
 
 on:
   workflow_dispatch:
@@ -22,12 +20,10 @@ concurrency:
 permissions:
   contents: write
   packages: write
-  # 不再需要 actions: write —— 删除运行记录的 cleanup-refresh job 已移除
+  actions: write
 
 jobs:
   build:
-    # 镜像名硬编码为上游命名空间，fork 里推送必然 permission_denied，直接跳过
-    if: github.repository == 'mtvpls/MoonTVPlus'
     strategy:
       matrix:
         include:
@@ -94,7 +90,6 @@ jobs:
           retention-days: 1
 
   merge:
-    if: github.repository == 'mtvpls/MoonTVPlus'
     runs-on: ubuntu-latest
     needs:
       - build
@@ -126,6 +121,16 @@ jobs:
           docker buildx imagetools create -t ghcr.io/mtvpls/moontvplus:${{ github.event.inputs.tag || 'latest' }} \
             $(printf 'ghcr.io/mtvpls/moontvplus@sha256:%s ' *)
 
-  # 已移除上游的 cleanup-refresh job（Mattraks/delete-workflow-runs，retain_days: 0）：
-  # 它的删除范围是整个仓库（repository: ${{ github.repository }}），不限本工作流，
-  # 且带 if: always()，会把本仓库正常构建的运行记录一并删掉。
+  cleanup-refresh:
+    runs-on: ubuntu-latest
+    needs:
+      - merge
+    if: always()
+    steps:
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 2
