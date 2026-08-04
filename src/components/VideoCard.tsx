@@ -1046,10 +1046,6 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
                   onLoadingComplete={() => {
                     setIsLoading(true);
                   }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowImageViewer(true);
-                  }}
                   onError={(e) => {
                     const img = e.currentTarget as HTMLImageElement;
                     const doubanFallbackPoster =
@@ -1094,8 +1090,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
                       WebkitUserSelect: 'none',
                       userSelect: 'none',
                       WebkitTouchCallout: 'none',
-                      pointerEvents: 'auto', // 改为auto以响应点击事件
-                      cursor: 'pointer', // 添加指针样式
+                      pointerEvents: 'none', // 海报点击交给卡片外层处理，确保点击播放
                     } as React.CSSProperties
                   }
                   onContextMenu={(e) => {
@@ -1162,8 +1157,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
             ) : (
               config.showPlayButton && (
                 <div
-                  data-button='true'
-                  className='absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 ease-in-out delay-75 group-hover:opacity-100 group-hover:scale-100'
+                  className='pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 ease-in-out delay-75 group-hover:opacity-100 group-hover:scale-100'
                   style={
                     {
                       WebkitUserSelect: 'none',

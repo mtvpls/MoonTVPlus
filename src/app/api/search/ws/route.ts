@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
   const includeSpecialSources = searchParams.get('special') === '1';
+  const privateOnly = searchParams.get('privateOnly') === '1';
 
   if (!query) {
     return new Response(
@@ -40,7 +41,9 @@ export async function GET(request: NextRequest) {
   }
 
   const config = await getConfig();
-  const apiSites = await getAvailableApiSites(authInfo.username, includeSpecialSources);
+  const apiSites = privateOnly
+    ? []
+    : await getAvailableApiSites(authInfo.username, includeSpecialSources);
   const [canAccessOpenList, canAccessEmby] = await Promise.all([
     hasFeaturePermission(authInfo.username, 'private_library'),
     hasFeaturePermission(authInfo.username, 'emby'),
@@ -75,7 +78,7 @@ export async function GET(request: NextRequest) {
     config.EmbyConfig.Sources.length > 0 &&
     config.EmbyConfig.Sources.some(s => s.enabled && s.ServerURL)
   );
-  const enabledScripts = await listEnabledSourceScripts();
+  const enabledScripts = privateOnly ? [] : await listEnabledSourceScripts();
 
   // 共享状态
   let streamClosed = false;
@@ -114,11 +117,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      const totalSourceCount = sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount + enabledScripts.length;
+
       // 发送开始事件
       const startEvent = `data: ${JSON.stringify({
         type: 'start',
         query,
-        totalSources: sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount + enabledScripts.length,
+        totalSources: totalSourceCount,
         timestamp: Date.now()
       })}\n\n`;
 
@@ -129,6 +134,30 @@ export async function GET(request: NextRequest) {
       // 记录已完成的源数量
       let completedSources = 0;
       const allResults: any[] = [];
+
+      const maybeComplete = () => {
+        if (completedSources !== totalSourceCount || streamClosed) return;
+        const completeEvent = `data: ${JSON.stringify({
+          type: 'complete',
+          totalResults: allResults.length,
+          completedSources,
+          timestamp: Date.now()
+        })}\n\n`;
+
+        if (safeEnqueue(encoder.encode(completeEvent))) {
+          streamClosed = true;
+          try {
+            controller.close();
+          } catch (error) {
+            console.warn('Failed to close controller:', error);
+          }
+        }
+      };
+
+      if (totalSourceCount === 0) {
+        maybeComplete();
+        return;
+      }
 
       // 搜索 Emby（如果配置了）- 异步带超时，支持多源
       if (hasEmby) {
@@ -192,6 +221,7 @@ export async function GET(request: NextRequest) {
                     streamClosed = true;
                   }
                 }
+                maybeComplete();
 
                 return results;
               } catch (error) {
@@ -211,6 +241,7 @@ export async function GET(request: NextRequest) {
                   })}\n\n`;
                   safeEnqueue(encoder.encode(sourceEvent));
                 }
+                maybeComplete();
                 return [];
               }
             });
@@ -232,6 +263,7 @@ export async function GET(request: NextRequest) {
                 })}\n\n`;
                 safeEnqueue(encoder.encode(sourceEvent));
               }
+              maybeComplete();
             }
           }
         })();
@@ -310,6 +342,7 @@ export async function GET(request: NextRequest) {
                 allResults.push(...safeResults);
               }
             }
+            maybeComplete();
           })
           .catch((error) => {
             console.error('[Search WS] 搜索 OpenList 超时:', error);
@@ -324,6 +357,7 @@ export async function GET(request: NextRequest) {
               })}\n\n`;
               safeEnqueue(encoder.encode(sourceEvent));
             }
+            maybeComplete();
           });
       }
 
@@ -402,7 +436,7 @@ export async function GET(request: NextRequest) {
         }
 
         // 检查是否所有源都已完成
-        if (completedSources === sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount + enabledScripts.length) {
+        if (completedSources === totalSourceCount) {
           if (!streamClosed) {
             // 发送最终完成事件
             const completeEvent = `data: ${JSON.stringify({
@@ -414,6 +448,7 @@ export async function GET(request: NextRequest) {
 
             if (safeEnqueue(encoder.encode(completeEvent))) {
               // 只有在成功发送完成事件后才关闭流
+              streamClosed = true;
               try {
                 controller.close();
               } catch (error) {
@@ -514,7 +549,7 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        if (completedSources === sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount + enabledScripts.length) {
+        if (completedSources === totalSourceCount) {
           if (!streamClosed) {
             const completeEvent = `data: ${JSON.stringify({
               type: 'complete',
@@ -524,6 +559,7 @@ export async function GET(request: NextRequest) {
             })}\n\n`;
 
             if (safeEnqueue(encoder.encode(completeEvent))) {
+              streamClosed = true;
               try {
                 controller.close();
               } catch (error) {

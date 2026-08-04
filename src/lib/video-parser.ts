@@ -33,6 +33,8 @@ export function parseVideoFileName(fileName: string): ParsedVideoInfo {
     { pattern: /OVA\s*(\d+(?:\.\d+)?)/i, isOVA: true },
     // S01E01, s01e01, S01E1234, S01E01.5 (支持1-4位数字和小数) - 最具体
     { pattern: /[Ss](\d+)[Ee](\d{1,4}(?:\.\d+)?)/, extractSeason: true },
+    // S04 - 02, S04-02, S04 02 (带空格/横线分隔的季+集) - 具体
+    { pattern: /[Ss](\d{1,2})\s*[-–—]\s*(\d{1,4}(?:\.\d+)?)(?!\d)/, extractSeason: true },
     // [01], (01), [01.5], (01.5) (支持小数，但要排除中文括号内容) - 很具体
     { pattern: /[[(](\d+(?:\.\d+)?)[)\]]/ },
     // E01, E1, e01, e1, E01.5 (支持小数)
@@ -41,6 +43,8 @@ export function parseVideoFileName(fileName: string): ParsedVideoInfo {
     { pattern: /第(\d+(?:\.\d+)?)[集话]/ },
     // _01_, -01-, _01.5_, -01.5- (支持小数)
     { pattern: /[_-](\d+(?:\.\d+)?)[_-]/ },
+    // - 02 [, - 01 [..  (横线/空格分隔，数字后是空格或左括号) 如 "S04 - 02 [WebRip"
+    { pattern: /[-\s](\d+(?:\.\d+)?)[\s\[]/ },
     // 01.mp4, 001.mp4, 01.5.mp4 (纯数字开头，支持小数) - 最不具体
     { pattern: /^(\d+(?:\.\d+)?)[^\d.]/ },
   ];

@@ -127,10 +127,20 @@ function SearchPageClient() {
   const [isFromCache, setIsFromCache] = useState(false);
   // 精确搜索开关
   const [exactSearch, setExactSearch] = useState(true);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [privateLibraryOnly, setPrivateLibraryOnly] = useState(false);
+  const [privateLibraryOnlyReady, setPrivateLibraryOnlyReady] = useState(false);
+  const privateLibraryOnlyLoadedRef = useRef(false);
+  const advancedButtonRefs = useRef<HTMLButtonElement[]>([]);
+  const advancedDropdownRefs = useRef<HTMLDivElement[]>([]);
 
   // 生成缓存键
   const getCacheKey = (query: string) => {
-    const suffix = isSpecialSourcesEnabledOnDevice() ? '_special' : '';
+    const suffixParts = [
+      isSpecialSourcesEnabledOnDevice() ? 'special' : '',
+      privateLibraryOnly ? 'private' : '',
+    ].filter(Boolean);
+    const suffix = suffixParts.length > 0 ? `_${suffixParts.join('_')}` : '';
     return `search_cache_${query.trim()}${suffix}`;
   };
 
@@ -812,6 +822,35 @@ function SearchPageClient() {
     }
   }, [resultDisplayMode]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && privateLibraryOnlyLoadedRef.current) {
+      localStorage.setItem('searchPrivateLibraryOnly', String(privateLibraryOnly));
+    }
+  }, [privateLibraryOnly]);
+
+  useEffect(() => {
+    if (!advancedOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const clickedButton = advancedButtonRefs.current.some((ref) =>
+        ref?.contains(target)
+      );
+      const clickedDropdown = advancedDropdownRefs.current.some((ref) =>
+        ref?.contains(target)
+      );
+
+      if (!clickedButton && !clickedDropdown) {
+        setAdvancedOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [advancedOpen]);
+
   const getSearchResultUrl = (params: {
     title: string;
     year?: string;
@@ -1064,6 +1103,15 @@ function SearchPageClient() {
       if (savedExactSearch !== null) {
         setExactSearch(savedExactSearch === 'true');
       }
+
+      const savedPrivateLibraryOnly = localStorage.getItem(
+        'searchPrivateLibraryOnly'
+      );
+      if (savedPrivateLibraryOnly !== null) {
+        setPrivateLibraryOnly(savedPrivateLibraryOnly === 'true');
+      }
+      privateLibraryOnlyLoadedRef.current = true;
+      setPrivateLibraryOnlyReady(true);
     }
 
     // 监听搜索历史更新事件
@@ -1145,8 +1193,8 @@ function SearchPageClient() {
   ]);
 
   useEffect(() => {
-    // 等待转换器初始化完成
-    if (!converterReady) {
+    // 等待转换器和私人影库搜索设置初始化完成
+    if (!converterReady || !privateLibraryOnlyReady) {
       return;
     }
 
@@ -1292,9 +1340,10 @@ function SearchPageClient() {
 
       if (currentFluidSearch) {
         // 流式搜索：打开新的流式连接
-        const es = new EventSource(
-          appendSpecialSourceParam(`/api/search/ws?q=${encodeURIComponent(trimmed)}`)
-        );
+        const searchUrl = `/api/search/ws?q=${encodeURIComponent(trimmed)}${
+          privateLibraryOnly ? '&privateOnly=1' : ''
+        }`;
+        const es = new EventSource(appendSpecialSourceParam(searchUrl));
         eventSourceRef.current = es;
 
         es.onmessage = (event) => {
@@ -1399,9 +1448,10 @@ function SearchPageClient() {
         };
       } else {
         // 传统搜索：使用普通接口
-        fetch(
-          appendSpecialSourceParam(`/api/search?q=${encodeURIComponent(trimmed)}`)
-        )
+        const searchUrl = `/api/search?q=${encodeURIComponent(trimmed)}${
+          privateLibraryOnly ? '&privateOnly=1' : ''
+        }`;
+        fetch(appendSpecialSourceParam(searchUrl))
           .then((response) => response.json())
           .then((data) => {
             if (currentQueryRef.current !== trimmed) return;
@@ -1434,7 +1484,13 @@ function SearchPageClient() {
       setShowResults(false);
       setShowSuggestions(false);
     }
-  }, [searchParams, forceRefresh, converterReady]);
+  }, [
+    searchParams,
+    forceRefresh,
+    converterReady,
+    privateLibraryOnlyReady,
+    privateLibraryOnly,
+  ]);
 
   useEffect(() => {
     if (!featureFlagsReady) return;
@@ -1832,6 +1888,77 @@ function SearchPageClient() {
               <AcgSearch keyword={searchQuery} controlsOnly />
             </div>
           )}
+
+          {activeTab === 'video' && !showResults && (
+            <div className='mx-auto mt-4 flex max-w-2xl justify-end'>
+              <div className='relative'>
+                <button
+                  ref={(el) => {
+                    if (el) advancedButtonRefs.current[0] = el;
+                  }}
+                  type='button'
+                  onClick={() => setAdvancedOpen((prev) => !prev)}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                    advancedOpen
+                      ? 'bg-green-50 text-green-600 dark:bg-gray-700/70 dark:text-green-400'
+                      : 'text-gray-600 hover:bg-green-50 hover:text-green-600 dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-green-400'
+                  }`}
+                  aria-expanded={advancedOpen}
+                >
+                  <span>高级</span>
+                  <ChevronUp
+                    className={`h-4 w-4 transition-transform ${
+                      advancedOpen ? '' : 'rotate-180'
+                    }`}
+                  />
+                </button>
+                {advancedOpen && (
+                  <div
+                    ref={(el) => {
+                      if (el) advancedDropdownRefs.current[0] = el;
+                    }}
+                    className='absolute right-0 z-[70] mt-2 w-56 rounded-xl border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-900'
+                  >
+                    <label className='flex cursor-pointer select-none items-center justify-between gap-3 rounded-lg px-1 py-2'>
+                      <span className='text-sm text-gray-700 dark:text-gray-300'>
+                        聚合
+                      </span>
+                      <div className='relative'>
+                        <input
+                          type='checkbox'
+                          className='peer sr-only'
+                          checked={viewMode === 'agg'}
+                          onChange={() =>
+                            setViewMode(viewMode === 'agg' ? 'all' : 'agg')
+                          }
+                        />
+                        <div className='h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 dark:bg-gray-600'></div>
+                        <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
+                      </div>
+                    </label>
+                    <label className='flex cursor-pointer select-none items-center justify-between gap-3 rounded-lg px-1 py-2'>
+                      <span className='text-sm text-gray-700 dark:text-gray-300'>
+                        只搜私人影库
+                      </span>
+                      <div className='relative'>
+                        <input
+                          type='checkbox'
+                          className='peer sr-only'
+                          checked={privateLibraryOnly}
+                          onChange={(e) =>
+                            setPrivateLibraryOnly(e.target.checked)
+                          }
+                        />
+                        <div className='h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 dark:bg-gray-600'></div>
+                        <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
 
         {pansouCloudFilterOpen &&
@@ -1884,7 +2011,11 @@ function SearchPageClient() {
         {/* 搜索结果或搜索历史 */}
         <div
           className={`max-w-[95%] mx-auto overflow-visible ${
-            activeTab === 'pansou' ? 'mt-4' : 'mt-12'
+            activeTab === 'video' && !showResults
+              ? 'mt-2'
+              : activeTab === 'pansou'
+              ? 'mt-4'
+              : 'mt-12'
           }`}
         >
           {showResults ? (
@@ -1895,58 +2026,58 @@ function SearchPageClient() {
                   {/* 标题 */}
                   <div className='mb-4 flex items-start justify-between gap-4'>
                     <div className='min-w-0'>
-                      <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-                        搜索结果
-                        {isFromCache ? (
-                          <span className='ml-2 rounded-md bg-green-50 px-2 py-0.5 text-xs font-medium text-green-600 dark:bg-green-900/30 dark:text-green-400'>
-                            缓存
-                          </span>
-                        ) : (
-                          <>
-                            {totalSources > 0 && useFluidSearch && (
-                              <span className='ml-2 text-sm font-normal text-gray-500 dark:text-gray-400'>
-                                源 {completedSources}/{totalSources}
-                              </span>
-                            )}
-                            {isLoading && useFluidSearch && (
-                              <span className='ml-2 inline-block align-middle'>
-                                <span className='inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-green-500'></span>
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </h2>
-                      <div className='mt-2 flex flex-wrap items-center gap-2 text-xs'>
-                        <span className='inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-200'>
-                          {resultCountMeta.modeLabel}{' '}
-                          {resultCountMeta.visibleCount.toLocaleString()}{' '}
-                          {resultCountMeta.unit}
+                      <h2 className='flex flex-wrap items-start gap-x-3 gap-y-1 text-xl font-bold text-gray-800 dark:text-gray-200'>
+                        <span className='inline-flex items-center gap-2'>
+                          搜索结果
+                          {isFromCache && (
+                            <span className='rounded-md bg-green-50 px-2 py-0.5 text-xs font-medium text-green-600 dark:bg-green-900/30 dark:text-green-400'>
+                              缓存
+                            </span>
+                          )}
                         </span>
-                        {resultCountMeta.isFiltered && (
-                          <span className='inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 font-medium text-gray-500 ring-1 ring-gray-200 dark:bg-gray-900/70 dark:text-gray-400 dark:ring-gray-700'>
-                            筛选前 {resultCountMeta.totalCount.toLocaleString()}{' '}
+                        <span className='flex flex-col text-xs font-medium leading-5 text-gray-500 dark:text-gray-400'>
+                          <span>
+                            {resultCountMeta.modeLabel}{' '}
+                            {resultCountMeta.visibleCount.toLocaleString()}{' '}
                             {resultCountMeta.unit}
+                            {resultCountMeta.isFiltered && (
+                              <span className='ml-1 text-gray-400 dark:text-gray-500'>
+                                / 筛选前{' '}
+                                {resultCountMeta.totalCount.toLocaleString()}{' '}
+                                {resultCountMeta.unit}
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </div>
+                          {!isFromCache && totalSources > 0 && useFluidSearch && (
+                            <span className='inline-flex items-center gap-1'>
+                              源 {completedSources}/{totalSources}
+                              {isLoading && (
+                                <span className='inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-green-500'></span>
+                              )}
+                            </span>
+                          )}
+                        </span>
+                      </h2>
                     </div>
-                    {searchQuery && (
-                      <button
-                        onClick={() => {
-                          setForceRefresh(true);
-                        }}
-                        disabled={isLoading}
-                        className='flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-green-50 hover:text-green-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-green-400'
-                        aria-label='强制刷新搜索结果'
-                      >
-                        <RefreshCw
-                          className={`h-4 w-4 ${
-                            isLoading ? 'animate-spin' : ''
-                          }`}
-                        />
-                        <span>刷新</span>
-                      </button>
-                    )}
+                    <div className='flex shrink-0 items-center gap-2'>
+                      {searchQuery && (
+                        <button
+                          onClick={() => {
+                            setForceRefresh(true);
+                          }}
+                          disabled={isLoading}
+                          className='flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-green-50 hover:text-green-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-green-400'
+                          aria-label='强制刷新搜索结果'
+                        >
+                          <RefreshCw
+                            className={`h-4 w-4 ${
+                              isLoading ? 'animate-spin' : ''
+                            }`}
+                          />
+                          <span>刷新</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className='mb-4 flex items-center gap-3'>
                     <div className='min-w-0 flex-1'>
@@ -1964,54 +2095,103 @@ function SearchPageClient() {
                         />
                       )}
                     </div>
-                    <div className='flex shrink-0 items-center justify-end self-center'>
-                      <label className='flex shrink-0 cursor-pointer select-none items-center gap-2'>
-                        <span className='text-xs text-gray-700 dark:text-gray-300 sm:text-sm'>
-                          聚合
-                        </span>
-                        <div className='relative'>
-                          <input
-                            type='checkbox'
-                            className='peer sr-only'
-                            checked={viewMode === 'agg'}
-                            onChange={() =>
-                              setViewMode(viewMode === 'agg' ? 'all' : 'agg')
-                            }
-                          />
-                          <div className='h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 dark:bg-gray-600'></div>
-                          <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
+                    <div className='relative flex shrink-0 items-center justify-end self-center'>
+                      <button
+                        ref={(el) => {
+                          if (el) advancedButtonRefs.current[1] = el;
+                        }}
+                        type='button'
+                        onClick={() => setAdvancedOpen((prev) => !prev)}
+                        className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                          advancedOpen
+                            ? 'bg-green-50 text-green-600 dark:bg-gray-700/70 dark:text-green-400'
+                            : 'text-gray-600 hover:bg-green-50 hover:text-green-600 dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-green-400'
+                        }`}
+                        aria-expanded={advancedOpen}
+                      >
+                        <span>高级</span>
+                        <ChevronUp
+                          className={`h-4 w-4 transition-transform ${
+                            advancedOpen ? '' : 'rotate-180'
+                          }`}
+                        />
+                      </button>
+                      {advancedOpen && (
+                        <div
+                          ref={(el) => {
+                            if (el) advancedDropdownRefs.current[1] = el;
+                          }}
+                          className='absolute right-0 top-full z-[70] mt-2 w-56 rounded-xl border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-900'
+                        >
+                          <label className='flex cursor-pointer select-none items-center justify-between gap-3 rounded-lg px-1 py-2'>
+                            <span className='text-sm text-gray-700 dark:text-gray-300'>
+                              聚合
+                            </span>
+                            <div className='relative'>
+                              <input
+                                type='checkbox'
+                                className='peer sr-only'
+                                checked={viewMode === 'agg'}
+                                onChange={() =>
+                                  setViewMode(viewMode === 'agg' ? 'all' : 'agg')
+                                }
+                              />
+                              <div className='h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 dark:bg-gray-600'></div>
+                              <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
+                            </div>
+                          </label>
+                          <label className='flex cursor-pointer select-none items-center justify-between gap-3 rounded-lg px-1 py-2'>
+                            <span className='text-sm text-gray-700 dark:text-gray-300'>
+                              只搜私人影库
+                            </span>
+                            <div className='relative'>
+                              <input
+                                type='checkbox'
+                                className='peer sr-only'
+                                checked={privateLibraryOnly}
+                                onChange={(e) =>
+                                  setPrivateLibraryOnly(e.target.checked)
+                                }
+                              />
+                              <div className='h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 dark:bg-gray-600'></div>
+                              <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
+                            </div>
+                          </label>
+                          <div className='mt-2 border-t border-gray-200 pt-2 dark:border-gray-700'>
+                            <span className='px-1 text-sm text-gray-700 dark:text-gray-300'>
+                              显示方式
+                            </span>
+                            <div className='mt-2 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800'>
+                              <button
+                                type='button'
+                                onClick={() => setResultDisplayMode('card')}
+                                className={`inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                                  resultDisplayMode === 'card'
+                                    ? 'bg-green-500 text-white'
+                                    : 'text-gray-600 hover:bg-white dark:text-gray-300 dark:hover:bg-gray-700'
+                                }`}
+                                aria-label='切换为卡片视图'
+                              >
+                                <Grid2x2 className='h-4 w-4' />
+                                <span>卡片</span>
+                              </button>
+                              <button
+                                type='button'
+                                onClick={() => setResultDisplayMode('list')}
+                                className={`inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                                  resultDisplayMode === 'list'
+                                    ? 'bg-green-500 text-white'
+                                    : 'text-gray-600 hover:bg-white dark:text-gray-300 dark:hover:bg-gray-700'
+                                }`}
+                                aria-label='切换为列表视图'
+                              >
+                                <List className='h-4 w-4' />
+                                <span>列表</span>
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </label>
-                    </div>
-                  </div>
-                  <div className='mb-8 flex justify-center'>
-                    <div className='inline-flex items-center rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-gray-700 dark:bg-gray-900'>
-                      <button
-                        type='button'
-                        onClick={() => setResultDisplayMode('card')}
-                        className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                          resultDisplayMode === 'card'
-                            ? 'bg-green-500 text-white'
-                            : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
-                        }`}
-                        aria-label='切换为卡片视图'
-                      >
-                        <Grid2x2 className='h-4 w-4' />
-                        <span>卡片</span>
-                      </button>
-                      <button
-                        type='button'
-                        onClick={() => setResultDisplayMode('list')}
-                        className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                          resultDisplayMode === 'list'
-                            ? 'bg-green-500 text-white'
-                            : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
-                        }`}
-                        aria-label='切换为列表视图'
-                      >
-                        <List className='h-4 w-4' />
-                        <span>列表</span>
-                      </button>
+                      )}
                     </div>
                   </div>
                   {searchResults.length === 0 ? (
