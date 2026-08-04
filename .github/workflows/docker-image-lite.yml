@@ -24,6 +24,8 @@ permissions:
 
 jobs:
   build:
+    # 镜像名硬编码为上游命名空间，fork 里推送必然 permission_denied，直接跳过
+    if: github.repository == 'mtvpls/MoonTVPlus'
     strategy:
       matrix:
         include:
@@ -85,6 +87,7 @@ jobs:
           retention-days: 1
 
   merge:
+    if: github.repository == 'mtvpls/MoonTVPlus'
     runs-on: ubuntu-latest
     needs:
       - build
