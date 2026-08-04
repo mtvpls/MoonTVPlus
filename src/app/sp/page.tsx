@@ -3,12 +3,14 @@ import Link from 'next/link';
 
 import { getConfig } from '@/lib/config';
 
+import SpecialSourceToggle from './SpecialSourceToggle';
+
 export const dynamic = 'force-dynamic';
 
 /**
  * 特殊源入口说明页（/sp）。
- * 开关本身是站点级配置（后台「站点配置 → 开启特殊源入口」），
- * 这里只反映当前状态并给出 /r18 入口。
+ * 开关是站点级配置（等同后台「站点配置 → 开启特殊源入口」），
+ * 管理员可以直接在这一页切换，普通用户只看到状态。
  */
 export default async function SpecialPage() {
   const config = await getConfig();
@@ -38,25 +40,13 @@ export default async function SpecialPage() {
               </div>
             </div>
 
-            <span
-              className={`relative inline-flex h-8 w-14 items-center rounded-full p-1 ${
-                enabled ? 'bg-rose-600' : 'bg-gray-300 dark:bg-slate-700'
-              }`}
-              role='img'
-              aria-label={enabled ? '特殊源入口已开启' : '特殊源入口已关闭'}
-            >
-              <span
-                className={`h-6 w-6 rounded-full bg-white transition-transform ${
-                  enabled ? 'translate-x-6' : 'translate-x-0'
-                }`}
-              />
-            </span>
+            <SpecialSourceToggle initialEnabled={enabled} />
           </div>
 
           <p className='mt-4 text-xs leading-5 text-gray-500 dark:text-slate-500'>
-            该开关由管理员在后台「站点配置」中设置。关闭时 /r18 返回 404，特殊源
-            完全不可用。此开关对 TVBox、OrionTV、WebTV 渠道无效，这些渠道始终无法
-            使用特殊源。
+            该开关仅管理员可切换（等同后台「站点配置 → 开启特殊源入口」）。关闭时
+            /r18 返回 404，特殊源完全不可用。此开关对 TVBox、OrionTV、WebTV
+            渠道无效，这些渠道始终无法使用特殊源。
           </p>
 
           <div className='mt-8 flex flex-col gap-3 sm:flex-row'>
