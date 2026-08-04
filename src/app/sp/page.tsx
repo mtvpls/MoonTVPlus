@@ -1,7 +1,9 @@
 import { Search } from 'lucide-react';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 
 import { getConfig } from '@/lib/config';
+import { SPECIAL_SOURCE_COOKIE } from '@/lib/special-source.client';
 
 import SpecialSourceToggle from './SpecialSourceToggle';
 
@@ -9,12 +11,11 @@ export const dynamic = 'force-dynamic';
 
 /**
  * 特殊源入口说明页（/sp）。
- * 开关是站点级配置（等同后台「站点配置 → 开启特殊源入口」），
- * 管理员可以直接在这一页切换，普通用户只看到状态。
+ * 开关是本机开关（cookie），任何用户都能自己打开，只对自己这台设备生效。
  */
 export default async function SpecialPage() {
   const config = await getConfig();
-  const enabled = !!config.SiteConfig.EnableSpecialSources;
+  const enabled = cookies().get(SPECIAL_SOURCE_COOKIE)?.value === '1';
   const specialCount = (config.SpecialSourceApis || []).length;
 
   return (
@@ -34,7 +35,7 @@ export default async function SpecialPage() {
           <div className='mt-8 flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03]'>
             <div>
               <div className='text-sm text-gray-600 dark:text-slate-400'>
-                当前状态
+                本机状态
               </div>
               <div className='mt-1 text-lg font-medium text-gray-900 dark:text-white'>
                 {enabled ? '已开启' : '已关闭'}
@@ -57,8 +58,9 @@ export default async function SpecialPage() {
           )}
 
           <p className='mt-4 text-xs leading-5 text-gray-500 dark:text-slate-500'>
-            该开关仅管理员可切换（等同后台「站点配置 → 开启特殊源入口」）。关闭时
-            /r18 返回 404，特殊源完全不可用。此开关对 TVBox、OrionTV、WebTV
+            这是本机开关（存在 cookie 里），谁打开谁能用，只影响当前设备与浏览器，
+            不改动站点配置。关闭后 /r18 返回 404，特殊源的收藏与播放记录也不会出现在
+            普通入口——记录仍在，重新打开即可看到。此开关对 TVBox、OrionTV、WebTV
             渠道无效，这些渠道始终无法使用特殊源。
           </p>
 
@@ -76,7 +78,7 @@ export default async function SpecialPage() {
                 type='button'
                 disabled
                 aria-disabled='true'
-                title='该功能未开启，请联系管理员在后台开启'
+                title='请先打开上方开关'
                 className='inline-flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-200 px-4 py-3 text-sm font-medium text-gray-400 opacity-60 dark:bg-white/10 dark:text-slate-500'
               >
                 <Search className='h-4 w-4' />

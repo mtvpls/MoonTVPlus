@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
       DoubanImageProxyType,
       DoubanImageProxy,
       DisableYellowFilter,
-      EnableSpecialSources,
       FluidSearch,
       DanmakuSourceType,
       DanmakuApiBase,
@@ -101,7 +100,6 @@ export async function POST(request: NextRequest) {
       DoubanImageProxyType: string;
       DoubanImageProxy: string;
       DisableYellowFilter: boolean;
-      EnableSpecialSources?: boolean;
       FluidSearch: boolean;
       DanmakuSourceType?: 'builtin' | 'custom';
       DanmakuApiBase: string;
@@ -171,8 +169,6 @@ export async function POST(request: NextRequest) {
       typeof DoubanImageProxyType !== 'string' ||
       typeof DoubanImageProxy !== 'string' ||
       typeof DisableYellowFilter !== 'boolean' ||
-      (EnableSpecialSources !== undefined &&
-        typeof EnableSpecialSources !== 'boolean') ||
       typeof FluidSearch !== 'boolean' ||
       (DanmakuSourceType !== undefined &&
         DanmakuSourceType !== 'builtin' &&
@@ -281,7 +277,6 @@ export async function POST(request: NextRequest) {
       DoubanImageProxyType,
       DoubanImageProxy: normalizeApiBaseUrl(DoubanImageProxy),
       DisableYellowFilter,
-      EnableSpecialSources,
       FluidSearch,
       DanmakuSourceType,
       DanmakuApiBase: normalizeApiBaseUrl(DanmakuApiBase),

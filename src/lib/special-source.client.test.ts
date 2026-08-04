@@ -7,6 +7,9 @@ import {
   appendSpecialSourceParam,
   filterRecordsBySpecialSourceContext,
   isSpecialSourceContext,
+  isSpecialSourceEnabledOnDevice,
+  setSpecialSourceEnabledOnDevice,
+  SPECIAL_SOURCE_COOKIE,
 } from './special-source.client';
 
 type WindowWithRuntimeConfig = Window & {
@@ -55,6 +58,34 @@ describe('特殊源上下文判定', () => {
     expect(appendSpecialSourceParam('/play?id=1&special=1')).toBe(
       '/play?id=1&special=1'
     );
+  });
+});
+
+describe('本机特殊源开关（cookie）', () => {
+  beforeEach(() => setSpecialSourceEnabledOnDevice(false));
+
+  it('默认关闭；打开写入 cookie，关闭后清掉', () => {
+    expect(isSpecialSourceEnabledOnDevice()).toBe(false);
+
+    setSpecialSourceEnabledOnDevice(true);
+    // /r18 的服务端渲染靠这个 cookie 判定，名字和值都不能变
+    expect(document.cookie).toContain(`${SPECIAL_SOURCE_COOKIE}=1`);
+    expect(isSpecialSourceEnabledOnDevice()).toBe(true);
+
+    setSpecialSourceEnabledOnDevice(false);
+    expect(isSpecialSourceEnabledOnDevice()).toBe(false);
+  });
+
+  it('和其它 cookie 共存时也能认出来', () => {
+    document.cookie = 'auth=whatever; path=/';
+    setSpecialSourceEnabledOnDevice(true);
+    expect(isSpecialSourceEnabledOnDevice()).toBe(true);
+  });
+
+  it('开关与入口上下文互不影响：开着开关，普通路径仍是普通入口', () => {
+    setSpecialSourceEnabledOnDevice(true);
+    gotoPath('/search?q=abc');
+    expect(isSpecialSourceContext()).toBe(false);
   });
 });
 

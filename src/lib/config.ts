@@ -1201,10 +1201,6 @@ export async function getAvailableApiSites(
   specialOnly = false
 ): Promise<ApiSite[]> {
   const config = await getConfig();
-  // 总开关关闭时 /r18 入口没有任何可用源（直接请求 special=1 也拿不到）
-  if (specialOnly && !config.SiteConfig.EnableSpecialSources) {
-    return [];
-  }
   const specialSourceSet = new Set(config.SpecialSourceApis || []);
   // 双向隔离：普通入口只给普通源，/r18 入口只给特殊源
   const filterSpecialSources = <T extends { key: string }>(sites: T[]): T[] =>
