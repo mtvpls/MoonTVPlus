@@ -7631,10 +7631,10 @@ const VideoSourceConfig = ({
     <div className='space-y-6'>
       {/* 添加视频源表单 */}
       <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
-        <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+        <h4 className='shrink-0 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-300'>
           视频源列表
         </h4>
-        <div className='flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2'>
+        <div className='flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2'>
           {/* 批量操作按钮 - 移动端显示在下一行，PC端显示在左侧 */}
           {selectedSources.size > 0 && (
             <>
@@ -7688,9 +7688,9 @@ const VideoSourceConfig = ({
               <div className='hidden sm:block w-px h-6 bg-gray-300 dark:bg-gray-600 order-2'></div>
             </>
           )}
-          <div className='flex w-full flex-col gap-2 order-1 sm:order-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2'>
-            <div className='w-full overflow-x-auto sm:w-auto'>
-              <div className='ml-auto flex w-max items-center gap-2 whitespace-nowrap'>
+          <div className='flex w-full min-w-0 flex-col gap-2 order-1 sm:order-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2'>
+            <div className='w-full min-w-0 sm:w-auto'>
+              <div className='flex flex-wrap items-center justify-end gap-2'>
                 <button
                   onClick={openSpecialSourcesModal}
                   className={`${buttonStyles.secondary} flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
@@ -7727,8 +7727,8 @@ const VideoSourceConfig = ({
                 </button>
               </div>
             </div>
-            <div className='w-full overflow-x-auto sm:w-auto'>
-              <div className='ml-auto flex w-max items-center gap-2 whitespace-nowrap'>
+            <div className='w-full min-w-0 sm:w-auto'>
+              <div className='flex flex-wrap items-center justify-end gap-2'>
                 <button
                   onClick={() => setShowValidationModal(true)}
                   disabled={isValidating}
