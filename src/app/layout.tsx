@@ -137,9 +137,10 @@ export default async function RootLayout({
     process.env.LEGADO_ENABLED === 'true';
   let musicProxyEnabled = true;
   let advancedRecommendationEnabled = false;
-  let enableSpecialSources = false;
-  // ponytail: localstorage 模式不注入，此时特殊源入口本身也是关闭的
-  let specialSourceApis = [] as string[];
+  // 特殊源名单：供客户端按入口隔离收藏与播放记录。
+  // 入口开关是本机 cookie，与存储模式无关，所以 localstorage 模式也要注入；
+  // getConfig() 有模块级缓存，generateMetadata 里已经调过一次，这里不产生额外读取。
+  const specialSourceApis = (await getConfig()).SpecialSourceApis || [];
   let userFeatureAccess =
     storageType === 'localstorage'
       ? await getUserFeatureAccess(process.env.USERNAME || 'localstorage-owner')
@@ -213,9 +214,6 @@ export default async function RootLayout({
     aiEnableComments = config.AIConfig?.EnableAIComments || false;
     aiDefaultMessageNoVideo = config.AIConfig?.DefaultMessageNoVideo || '';
     aiDefaultMessageWithVideo = config.AIConfig?.DefaultMessageWithVideo || '';
-    // 特殊源（/r18）入口配置，供客户端隔离收藏与播放记录
-    enableSpecialSources = config.SiteConfig.EnableSpecialSources || false;
-    specialSourceApis = config.SpecialSourceApis || [];
     // 求片功能配置
     enableMovieRequest = config.SiteConfig.EnableMovieRequest ?? true;
     // 网络直播功能配置
@@ -343,7 +341,6 @@ export default async function RootLayout({
     NETDISK_TRANSFER_ENABLED: userFeatureAccess.netdisk_transfer,
     NETDISK_TEMP_PLAY_ENABLED: userFeatureAccess.netdisk_temp_play,
     FESTIVE_EFFECT_ENABLED: process.env.FESTIVE_EFFECT_ENABLED === 'true',
-    ENABLE_SPECIAL_SOURCES: enableSpecialSources,
     SPECIAL_SOURCE_APIS: specialSourceApis,
   };
 

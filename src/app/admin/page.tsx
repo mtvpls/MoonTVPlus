@@ -366,7 +366,6 @@ interface SiteConfig {
   DoubanImageProxyType: string;
   DoubanImageProxy: string;
   DisableYellowFilter: boolean;
-  EnableSpecialSources?: boolean;
   FluidSearch: boolean;
   DanmakuSourceType?: 'builtin' | 'custom';
   DanmakuApiBase: string;
@@ -10692,7 +10691,6 @@ const SiteConfigComponent = ({
     DoubanImageProxyType: 'cmliussss-cdn-tencent',
     DoubanImageProxy: '',
     DisableYellowFilter: false,
-    EnableSpecialSources: false,
     FluidSearch: true,
     DanmakuSourceType: 'builtin',
     DanmakuApiBase: 'https://mtvpls-danmu.netlify.app/87654321',
@@ -10815,7 +10813,6 @@ const SiteConfigComponent = ({
           config.SiteConfig.DoubanImageProxyType || 'cmliussss-cdn-tencent',
         DoubanImageProxy: config.SiteConfig.DoubanImageProxy || '',
         DisableYellowFilter: config.SiteConfig.DisableYellowFilter || false,
-        EnableSpecialSources: config.SiteConfig.EnableSpecialSources || false,
         FluidSearch: config.SiteConfig.FluidSearch || true,
         DanmakuSourceType: config.SiteConfig.DanmakuSourceType || 'custom',
         DanmakuApiBase:
@@ -11340,43 +11337,6 @@ const SiteConfigComponent = ({
         </div>
         <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
           禁用黄色内容的过滤功能，允许显示所有内容。
-        </p>
-      </div>
-
-      {/* 特殊源入口 */}
-      <div>
-        <div className='flex items-center justify-between'>
-          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-            开启特殊源入口（/r18）
-          </label>
-          <button
-            type='button'
-            onClick={() =>
-              setSiteSettings((prev) => ({
-                ...prev,
-                EnableSpecialSources: !prev.EnableSpecialSources,
-              }))
-            }
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
-              siteSettings.EnableSpecialSources
-                ? buttonStyles.toggleOn
-                : buttonStyles.toggleOff
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full ${
-                buttonStyles.toggleThumb
-              } transition-transform ${
-                siteSettings.EnableSpecialSources
-                  ? buttonStyles.toggleThumbOn
-                  : buttonStyles.toggleThumbOff
-              }`}
-            />
-          </button>
-        </div>
-        <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-          关闭时 /r18 返回 404，特殊源完全不可用。特殊源只在 /r18
-          下可搜索，普通路径始终屏蔽；/r18 也不会出现普通源。
         </p>
       </div>
 

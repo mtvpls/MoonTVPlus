@@ -1,8 +1,33 @@
 export const R18_PATH = '/r18';
 
 /**
+ * 特殊源入口开关的 cookie 名。
+ * 用 cookie 而不是 localStorage：/r18 是服务端渲染的，只有 cookie 服务端读得到，
+ * 否则未开开关的人直接敲 /r18 照样能进。
+ */
+export const SPECIAL_SOURCE_COOKIE = 'special_source';
+
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+/** 本机是否开启了特殊源入口（按设备生效，人人可自行切换） */
+export function isSpecialSourceEnabledOnDevice(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.cookie
+    .split(';')
+    .some((item) => item.trim() === `${SPECIAL_SOURCE_COOKIE}=1`);
+}
+
+export function setSpecialSourceEnabledOnDevice(enabled: boolean) {
+  if (typeof document === 'undefined') return;
+  // path=/ 是必须的：/r18 的服务端渲染要读到这个 cookie
+  document.cookie = enabled
+    ? `${SPECIAL_SOURCE_COOKIE}=1; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`
+    : `${SPECIAL_SOURCE_COOKIE}=; path=/; max-age=0; samesite=lax`;
+}
+
+/**
  * 是否处于特殊源（/r18）上下文。
- * 判定依据是当前路径，而非设备开关：/r18 下只出特殊源，其余路径只出普通源。
+ * 判定依据是当前路径，与开关无关：/r18 下只出特殊源，其余路径只出普通源。
  * 从 /r18 跳出去的页面（如 /play）靠 special=1 查询参数延续上下文。
  */
 export function isSpecialSourceContext(): boolean {
