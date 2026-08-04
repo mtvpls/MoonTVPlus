@@ -3,7 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { setSpecialSourceEnabledOnDevice } from '@/lib/special-source.client';
+import {
+  isSpecialSourceEnabledOnDevice,
+  setSpecialSourceEnabledOnDevice,
+} from '@/lib/special-source.client';
 
 /**
  * /sp 页面的特殊源入口开关。
@@ -17,9 +20,9 @@ export default function SpecialSourceToggle({
   const router = useRouter();
   const [enabled, setEnabled] = useState(initialEnabled);
 
-  // 页面是 force-dynamic，服务端读到的 cookie 才是真相
+  // cookie 才是真相：服务端渲染的那份可能来自路由缓存里的旧快照
   useEffect(() => {
-    setEnabled(initialEnabled);
+    setEnabled(isSpecialSourceEnabledOnDevice());
   }, [initialEnabled]);
 
   const handleToggle = () => {
