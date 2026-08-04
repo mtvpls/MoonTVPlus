@@ -76,6 +76,24 @@ export const API_CONFIG = {
 let cachedConfig: AdminConfig;
 let configInitPromise: Promise<AdminConfig> | null = null;
 
+// 从配置文件文本里读 special_source_apis（兼容驼峰写法）
+function readSpecialSourceApisFromFile(configFile?: string): string[] {
+  if (!configFile) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(configFile) as ConfigFileStruct;
+    const list = Array.isArray(parsed.special_source_apis)
+      ? parsed.special_source_apis
+      : Array.isArray(parsed.specialSourceApis)
+      ? parsed.specialSourceApis
+      : [];
+    return list.filter((key): key is string => typeof key === 'string');
+  } catch (e) {
+    return [];
+  }
+}
+
 // 从配置文件补充管理员配置
 export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   let fileConfig: ConfigFileStruct;
@@ -736,6 +754,14 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   });
 
   const validSourceKeys = new Set(adminConfig.SourceConfig.map((source) => source.key));
+  // 配置文件是采集源的权威来源，special_source_apis 同理：名单为空时从 ConfigFile 补齐。
+  // 老库升级上来时库里没有这个字段，只靠后台「配置文件」保存那一次才会写入，
+  // 漏了就变成"一个特殊源都没标记"——隔离对普通入口直接静默失效。
+  if (adminConfig.SpecialSourceApis.length === 0) {
+    adminConfig.SpecialSourceApis = readSpecialSourceApisFromFile(
+      adminConfig.ConfigFile
+    );
+  }
   adminConfig.SpecialSourceApis = Array.from(
     new Set((adminConfig.SpecialSourceApis || []).filter((key) => validSourceKeys.has(key)))
   );

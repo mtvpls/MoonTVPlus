@@ -15,6 +15,7 @@ export const dynamic = 'force-dynamic';
 export default async function SpecialPage() {
   const config = await getConfig();
   const enabled = !!config.SiteConfig.EnableSpecialSources;
+  const specialCount = (config.SpecialSourceApis || []).length;
 
   return (
     <main className='min-h-screen bg-gray-50 text-gray-900 dark:bg-black dark:text-slate-100'>
@@ -38,10 +39,22 @@ export default async function SpecialPage() {
               <div className='mt-1 text-lg font-medium text-gray-900 dark:text-white'>
                 {enabled ? '已开启' : '已关闭'}
               </div>
+              <div className='mt-1 text-xs text-gray-500 dark:text-slate-500'>
+                已标记特殊源 {specialCount} 个
+              </div>
             </div>
 
             <SpecialSourceToggle initialEnabled={enabled} />
           </div>
+
+          {specialCount === 0 && (
+            <p className='mt-4 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'>
+              没有任何采集源被标记为特殊源，此时普通搜索不会屏蔽任何源。请在后台
+              「视频源管理 → 特殊源设置」勾选，或在配置文件里补上
+              <code className='mx-1'>special_source_apis</code>
+              后重新保存配置文件。
+            </p>
+          )}
 
           <p className='mt-4 text-xs leading-5 text-gray-500 dark:text-slate-500'>
             该开关仅管理员可切换（等同后台「站点配置 → 开启特殊源入口」）。关闭时
