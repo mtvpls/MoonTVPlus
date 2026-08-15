@@ -3,8 +3,12 @@ import { cookies } from 'next/headers';
 import Link from 'next/link';
 
 import { getConfig } from '@/lib/config';
-import { SPECIAL_SOURCE_COOKIE } from '@/lib/special-source.client';
+import {
+  SPECIAL_SOURCE_COOKIE,
+  SPECIAL_SOURCE_PATH_COOKIE,
+} from '@/lib/special-source.client';
 
+import SpecialSourcePathForm from './SpecialSourcePathForm';
 import SpecialSourceToggle from './SpecialSourceToggle';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +20,8 @@ export const dynamic = 'force-dynamic';
 export default async function SpecialPage() {
   const config = await getConfig();
   const enabled = cookies().get(SPECIAL_SOURCE_COOKIE)?.value === '1';
+  const customPath = cookies().get(SPECIAL_SOURCE_PATH_COOKIE)?.value || '';
+  const entryPath = customPath || '/r18';
   const specialCount = (config.SpecialSourceApis || []).length;
 
   return (
@@ -64,10 +70,12 @@ export default async function SpecialPage() {
             渠道无效，这些渠道始终无法使用特殊源。
           </p>
 
+          <SpecialSourcePathForm initialPath={customPath} />
+
           <div className='mt-8 flex flex-col gap-3 sm:flex-row'>
             {enabled ? (
               <Link
-                href='/r18'
+                href={entryPath}
                 className='inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-400'
               >
                 <Search className='h-4 w-4' />

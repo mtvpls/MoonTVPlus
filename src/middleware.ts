@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAccessTokenInvalidated } from '@/lib/access-token-invalidation';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { TOKEN_CONFIG } from '@/lib/refresh-token';
+import { SPECIAL_SOURCE_PATH_COOKIE } from '@/lib/special-source.client';
 import { isTVModeEnabled, resolveLoginPath } from '@/lib/tv-mode';
 
 export async function middleware(request: NextRequest) {
@@ -17,6 +18,17 @@ export async function middleware(request: NextRequest) {
   // 跳过不需要认证的路径
   if (shouldSkipAuth(pathname)) {
     return NextResponse.next();
+  }
+
+  // 自定义特殊源入口：本机 cookie 指定的路径重定向到真正的入口 /r18
+  // （仍受 /sp 开关与登录鉴权约束，未开开关时 /r18 照样 404）。
+  // ponytail: 用重定向而非 rewrite，落地后地址栏会显示成 /r18；若要隐藏 /r18，
+  // 得改成 rewrite 并让 isSpecialSourceContext 认这个自定义路径，成本大得多。
+  const customSpecialPath = request.cookies.get(SPECIAL_SOURCE_PATH_COOKIE)?.value;
+  if (customSpecialPath && pathname === customSpecialPath) {
+    const target = request.nextUrl.clone();
+    target.pathname = '/r18';
+    return NextResponse.redirect(target);
   }
 
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
