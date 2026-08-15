@@ -164,7 +164,7 @@ const PLAY_SHORTCUT_GROUPS = [
     title: '播放控制',
     items: [
       { keys: ['空格'], description: '播放 / 暂停' },
-      { keys: ['←', '→'], description: '快退 / 快进 10 秒' },
+      { keys: ['←', '→'], description: '快退 / 快进' },
       { keys: ['P'], description: '快捷快进' },
       { keys: ['↑', '↓'], description: '音量增加 / 减少' },
       { keys: ['F'], description: '切换全屏' },
@@ -6365,21 +6365,33 @@ function PlayPageClient() {
       }
     }
 
-    // 左箭头 = 快退
+    // 左箭头 = 快退（时长同「快捷快进配置」，替换原来固定的 10 秒）
     if (!e.altKey && e.key === 'ArrowLeft') {
       if (artPlayerRef.current && artPlayerRef.current.currentTime > 5) {
-        artPlayerRef.current.currentTime -= 10;
+        artPlayerRef.current.currentTime = Math.max(
+          0,
+          artPlayerRef.current.currentTime - quickForwardSecondsRef.current
+        );
+        artPlayerRef.current.notice.show = `快退 ${formatQuickForwardDuration(
+          quickForwardSecondsRef.current
+        )}`;
         e.preventDefault();
       }
     }
 
-    // 右箭头 = 快进
+    // 右箭头 = 快进（时长同「快捷快进配置」，替换原来固定的 10 秒）
     if (!e.altKey && e.key === 'ArrowRight') {
       if (
         artPlayerRef.current &&
         artPlayerRef.current.currentTime < artPlayerRef.current.duration - 5
       ) {
-        artPlayerRef.current.currentTime += 10;
+        artPlayerRef.current.currentTime = Math.min(
+          artPlayerRef.current.duration,
+          artPlayerRef.current.currentTime + quickForwardSecondsRef.current
+        );
+        artPlayerRef.current.notice.show = `快进 ${formatQuickForwardDuration(
+          quickForwardSecondsRef.current
+        )}`;
         e.preventDefault();
       }
     }
@@ -7445,8 +7457,8 @@ function PlayPageClient() {
               },
             },
             {
-              name: '快捷快进配置',
-              html: '快捷快进配置',
+              name: '快进/倒退时间',
+              html: '快进/倒退时间',
               icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 5v14" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/><path d="m16 17 5-5-5-5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg>',
               tooltip: `${formatQuickForwardDuration(quickForwardSecondsRef.current)}`,
               onClick: async function () {
@@ -7474,9 +7486,9 @@ function PlayPageClient() {
                 `;
                 container.innerHTML = `
                   <div role="dialog" aria-modal="true" style="width: min(360px, 100%); background: #1f2937; color: #fff; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 20px; box-shadow: 0 16px 48px rgba(0,0,0,.45);">
-                    <div style="font-size: 17px; font-weight: 600; margin-bottom: 8px;">快捷快进设置</div>
-                    <div style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin-bottom: 16px;">设置点击底部按钮或按 P 键时向前跳转的时间。</div>
-                    <label for="quick-forward-input" style="display: block; color: #d1d5db; font-size: 13px; margin-bottom: 6px;">快进时长（秒）</label>
+                    <div style="font-size: 17px; font-weight: 600; margin-bottom: 8px;">快进/倒退时间</div>
+                    <div style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin-bottom: 16px;">设置按 P 键或左右方向键快进 / 快退的时间。</div>
+                    <label for="quick-forward-input" style="display: block; color: #d1d5db; font-size: 13px; margin-bottom: 6px;">时长（秒）</label>
                     <input id="quick-forward-input" type="number" min="1" step="1" value="${quickForwardSecondsRef.current}" style="box-sizing: border-box; width: 100%; height: 40px; padding: 0 10px; border: 1px solid #4b5563; border-radius: 6px; background: #111827; color: #fff; font-size: 14px; outline: none;" />
                     <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;">
                       <button type="button" data-action="cancel" style="height: 36px; padding: 0 14px; border: 0; border-radius: 6px; background: #374151; color: #fff; cursor: pointer;">取消</button>
@@ -7505,7 +7517,7 @@ function PlayPageClient() {
                   quickForwardSecondsRef.current = normalizedSeconds;
                   localStorage.setItem('quickForwardSeconds', String(normalizedSeconds));
                   if (artPlayerRef.current) {
-                    artPlayerRef.current.notice.show = `快捷快进已设置为${formatQuickForwardDuration(normalizedSeconds)}`;
+                    artPlayerRef.current.notice.show = `快进/倒退时间已设为${formatQuickForwardDuration(normalizedSeconds)}`;
                   }
                   cleanup();
                 };
@@ -7692,30 +7704,6 @@ function PlayPageClient() {
           ],
           // 控制栏配置
           controls: [
-            {
-              position: 'left',
-              index: 40,
-              html: `<i class="art-icon flex quick-forward-control"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m16 17 5-5-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></i>`,
-              tooltip: '快捷快进',
-              mounted: ($el: HTMLElement) => {
-                $el.classList.add('quick-forward-control-wrapper');
-                if (!document.getElementById('quick-forward-control-style')) {
-                  const style = document.createElement('style');
-                  style.id = 'quick-forward-control-style';
-                  style.textContent = `
-                    @media (max-width: 767px) and (orientation: portrait) {
-                      .quick-forward-control-wrapper {
-                        display: none !important;
-                      }
-                    }
-                  `;
-                  document.head.appendChild(style);
-                }
-              },
-              click: function () {
-                seekQuickForward();
-              },
-            },
             {
               position: 'left',
               index: 13,
