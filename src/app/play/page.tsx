@@ -378,8 +378,8 @@ function PlayPageClient() {
     skipConfig.outro_time,
   ]);
 
-  // 快捷快进设置（默认 1 分 30 秒）
-  const DEFAULT_QUICK_FORWARD_SECONDS = 90;
+  // 快进/倒退时间（默认 10 秒）
+  const DEFAULT_QUICK_FORWARD_SECONDS = 10;
   const [quickForwardSeconds, setQuickForwardSeconds] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_QUICK_FORWARD_SECONDS;
     const saved = Number(localStorage.getItem('quickForwardSeconds'));
