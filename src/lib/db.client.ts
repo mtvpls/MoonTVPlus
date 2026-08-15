@@ -17,7 +17,10 @@
 import { getAuthInfoFromBrowserCookie, clearAuthCookie } from './auth';
 import { normalizeEpisodeFilterConfig } from './episode-filter';
 import { MangaReadRecord, MangaShelfItem } from './manga.types';
-import { filterRecordsBySpecialSourceContext } from './special-source.client';
+import {
+  filterRecordsBySpecialSourceContext,
+  isSpecialSourceContext,
+} from './special-source.client';
 import { isLoginPathname, resolveLoginPath } from './tv-mode';
 import { DanmakuFilterConfig, EpisodeFilterConfig, SkipConfig } from './types';
 
@@ -104,6 +107,8 @@ const DEFAULT_MAX_MANGA_HISTORY_RECORDS = 100;
 const DEFAULT_MAX_MANGA_HISTORY_THRESHOLD =
   DEFAULT_MAX_MANGA_HISTORY_RECORDS + 10;
 const SEARCH_HISTORY_KEY = 'moontv_search_history';
+// 特殊源（/r18）搜索历史只存本机，用独立 key 与普通历史隔离
+const SEARCH_HISTORY_SPECIAL_KEY = 'moontv_search_history_special';
 const MUSIC_PLAY_RECORDS_KEY = 'moontv_music_play_records';
 
 // 缓存相关常量
@@ -1193,6 +1198,38 @@ export async function migratePlayRecord(
 /* ---------------- 搜索历史相关 API ---------------- */
 
 /**
+ * 特殊源（/r18）上下文的搜索历史：只存本机 localStorage，不同步服务端、不进导出/迁移。
+ * 搜索关键词本身不带源信息，无法在读出口用 filterRecordsBySpecialSourceContext 过滤，
+ * 因此改在写入时按入口分流：/r18 只写本机特殊源桶，普通入口维持原有行为，双向互不可见。
+ * 与「特殊源入口是本机 cookie、只影响这台设备」的口径一致。
+ */
+function getSpecialSearchHistoryLocal(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(SEARCH_HISTORY_SPECIAL_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw) as string[];
+    return Array.isArray(arr) ? Array.from(new Set(arr)) : [];
+  } catch (err) {
+    console.error('读取特殊源搜索历史失败:', err);
+    return [];
+  }
+}
+
+/** 写入本机特殊源搜索历史，并广播更新事件（供搜索页监听刷新） */
+function setSpecialSearchHistoryLocal(history: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SEARCH_HISTORY_SPECIAL_KEY, JSON.stringify(history));
+  } catch (err) {
+    console.error('保存特殊源搜索历史失败:', err);
+  }
+  window.dispatchEvent(
+    new CustomEvent('searchHistoryUpdated', { detail: history })
+  );
+}
+
+/**
  * 获取搜索历史。
  * 数据库存储模式下使用混合缓存策略：优先返回缓存数据，后台异步同步最新数据。
  */
@@ -1200,6 +1237,11 @@ export async function getSearchHistory(): Promise<string[]> {
   // 服务器端渲染阶段直接返回空
   if (typeof window === 'undefined') {
     return [];
+  }
+
+  // 特殊源（/r18）上下文：只读本机特殊源历史，与普通入口双向隔离
+  if (isSpecialSourceContext()) {
+    return getSpecialSearchHistoryLocal();
   }
 
   // 数据库存储模式：使用混合缓存策略（包括 redis 和 upstash）
@@ -1269,6 +1311,17 @@ export async function addSearchHistory(keyword: string): Promise<void> {
   const trimmed = keyword.trim();
   if (!trimmed) return;
 
+  // 特殊源（/r18）上下文：只写本机特殊源历史，不落服务端
+  if (isSpecialSourceContext()) {
+    const history = getSpecialSearchHistoryLocal();
+    const newHistory = [trimmed, ...history.filter((k) => k !== trimmed)];
+    if (newHistory.length > SEARCH_HISTORY_LIMIT) {
+      newHistory.length = SEARCH_HISTORY_LIMIT;
+    }
+    setSpecialSearchHistoryLocal(newHistory);
+    return;
+  }
+
   // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
     // 立即更新缓存
@@ -1329,6 +1382,12 @@ export async function addSearchHistory(keyword: string): Promise<void> {
  * 数据库存储模式下使用乐观更新：先更新缓存，再异步同步到数据库。
  */
 export async function clearSearchHistory(): Promise<void> {
+  // 特殊源（/r18）上下文：只清本机特殊源历史
+  if (isSpecialSourceContext()) {
+    setSpecialSearchHistoryLocal([]);
+    return;
+  }
+
   // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
     // 立即更新缓存
@@ -1369,6 +1428,13 @@ export async function clearSearchHistory(): Promise<void> {
 export async function deleteSearchHistory(keyword: string): Promise<void> {
   const trimmed = keyword.trim();
   if (!trimmed) return;
+
+  // 特殊源（/r18）上下文：只删本机特殊源历史
+  if (isSpecialSourceContext()) {
+    const history = getSpecialSearchHistoryLocal();
+    setSpecialSearchHistoryLocal(history.filter((k) => k !== trimmed));
+    return;
+  }
 
   // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
@@ -2214,6 +2280,12 @@ export function subscribeToDataUpdates<T>(
       eventType === 'favoritesUpdated'
     ) {
       callback(filterRecordsBySpecialSourceContext(event.detail) as T);
+      return;
+    }
+    // 搜索历史按入口隔离：/r18 上下文只认本机特殊源历史，
+    // 忽略服务端普通历史的后台推送（避免切到 /r18 时普通词闪现）
+    if (eventType === 'searchHistoryUpdated' && isSpecialSourceContext()) {
+      callback(getSpecialSearchHistoryLocal() as T);
       return;
     }
     callback(event.detail);
