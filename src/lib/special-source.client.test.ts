@@ -6,14 +6,11 @@
 import {
   appendSpecialSourceParam,
   filterRecordsBySpecialSourceContext,
-  getSpecialSourcePathOnDevice,
   isSpecialSourceContext,
   isSpecialSourceEnabledOnDevice,
-  normalizeSpecialSourcePath,
   setSpecialSourceEnabledOnDevice,
-  setSpecialSourcePathOnDevice,
   SPECIAL_SOURCE_COOKIE,
-  SPECIAL_SOURCE_PATH_COOKIE,
+  SPECIAL_SOURCE_PATH,
 } from './special-source.client';
 
 type WindowWithRuntimeConfig = Window & {
@@ -36,11 +33,14 @@ const RECORDS = {
 describe('特殊源上下文判定', () => {
   beforeEach(() => setSpecialSourceApis(['r18src']));
 
-  it('/r18 及其子路径算特殊源上下文', () => {
+  it('/under 及其子路径算特殊源上下文', () => {
+    expect(SPECIAL_SOURCE_PATH).toBe('/under');
+    gotoPath('/under');
+    expect(isSpecialSourceContext()).toBe(true);
+    gotoPath('/under/whatever');
+    expect(isSpecialSourceContext()).toBe(true);
     gotoPath('/r18');
-    expect(isSpecialSourceContext()).toBe(true);
-    gotoPath('/r18/whatever');
-    expect(isSpecialSourceContext()).toBe(true);
+    expect(isSpecialSourceContext()).toBe(false);
   });
 
   it('普通路径不算，带 special=1 的跳转页算', () => {
@@ -55,7 +55,7 @@ describe('特殊源上下文判定', () => {
     expect(appendSpecialSourceParam('/play?source=a&id=1')).toBe(
       '/play?source=a&id=1'
     );
-    gotoPath('/r18');
+    gotoPath('/under');
     expect(appendSpecialSourceParam('/play?source=a&id=1')).toBe(
       '/play?source=a&id=1&special=1'
     );
@@ -72,7 +72,7 @@ describe('本机特殊源开关（cookie）', () => {
     expect(isSpecialSourceEnabledOnDevice()).toBe(false);
 
     setSpecialSourceEnabledOnDevice(true);
-    // /r18 的服务端渲染靠这个 cookie 判定，名字和值都不能变
+    // /under 的服务端渲染靠这个 cookie 判定，名字和值都不能变
     expect(document.cookie).toContain(`${SPECIAL_SOURCE_COOKIE}=1`);
     expect(isSpecialSourceEnabledOnDevice()).toBe(true);
 
@@ -103,47 +103,18 @@ describe('收藏 / 播放记录按入口隔离', () => {
     ]);
   });
 
-  it('/r18 只出特殊源的记录', () => {
-    gotoPath('/r18');
+  it('/under 只出特殊源的记录', () => {
+    gotoPath('/under');
     expect(Object.keys(filterRecordsBySpecialSourceContext(RECORDS))).toEqual([
       'r18src+1',
     ]);
   });
 
-  it('没有配置特殊源时，普通入口全给、/r18 为空', () => {
+  it('没有配置特殊源时，普通入口全给、/under 为空', () => {
     setSpecialSourceApis([]);
     gotoPath('/');
     expect(filterRecordsBySpecialSourceContext(RECORDS)).toEqual(RECORDS);
-    gotoPath('/r18');
+    gotoPath('/under');
     expect(filterRecordsBySpecialSourceContext(RECORDS)).toEqual({});
-  });
-});
-
-describe('自定义特殊源入口路径', () => {
-  it('规范化：补前导斜杠、去尾斜杠、去 query', () => {
-    expect(normalizeSpecialSourcePath('anime')).toBe('/anime');
-    expect(normalizeSpecialSourcePath('/anime/')).toBe('/anime');
-    expect(normalizeSpecialSourcePath('  /anime?x=1 ')).toBe('/anime');
-  });
-
-  it('拒绝空串、非法字符、以及撞上真实路由的路径', () => {
-    expect(normalizeSpecialSourcePath('')).toBeNull();
-    expect(normalizeSpecialSourcePath('/')).toBeNull();
-    expect(normalizeSpecialSourcePath('/a b')).toBeNull();
-    expect(normalizeSpecialSourcePath('/中文')).toBeNull();
-    // 撞上现有顶层路由（按首段）一律拒绝，避免顶掉真实页面
-    expect(normalizeSpecialSourcePath('/search')).toBeNull();
-    expect(normalizeSpecialSourcePath('/admin')).toBeNull();
-    expect(normalizeSpecialSourcePath('/r18')).toBeNull();
-    expect(normalizeSpecialSourcePath('/tv/foo')).toBeNull();
-  });
-
-  it('cookie 读写不编码，可与 middleware 直接比对 pathname', () => {
-    setSpecialSourcePathOnDevice('/anime');
-    expect(document.cookie).toContain(`${SPECIAL_SOURCE_PATH_COOKIE}=/anime`);
-    expect(getSpecialSourcePathOnDevice()).toBe('/anime');
-
-    setSpecialSourcePathOnDevice('');
-    expect(getSpecialSourcePathOnDevice()).toBe('');
   });
 });
