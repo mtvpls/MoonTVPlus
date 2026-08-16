@@ -5,10 +5,9 @@ import Link from 'next/link';
 import { getConfig } from '@/lib/config';
 import {
   SPECIAL_SOURCE_COOKIE,
-  SPECIAL_SOURCE_PATH_COOKIE,
+  SPECIAL_SOURCE_PATH,
 } from '@/lib/special-source.client';
 
-import SpecialSourcePathForm from './SpecialSourcePathForm';
 import SpecialSourceToggle from './SpecialSourceToggle';
 
 export const dynamic = 'force-dynamic';
@@ -20,8 +19,6 @@ export const dynamic = 'force-dynamic';
 export default async function SpecialPage() {
   const config = await getConfig();
   const enabled = cookies().get(SPECIAL_SOURCE_COOKIE)?.value === '1';
-  const customPath = cookies().get(SPECIAL_SOURCE_PATH_COOKIE)?.value || '';
-  const entryPath = customPath || '/r18';
   const specialCount = (config.SpecialSourceApis || []).length;
 
   return (
@@ -33,8 +30,8 @@ export default async function SpecialPage() {
               特殊源
             </h1>
             <p className='text-sm leading-6 text-gray-600 dark:text-slate-400'>
-              特殊源只在 /r18 路径下可用，普通搜索不会出现特殊源的内容；/r18
-              路径下也不会出现普通源的内容。
+              特殊源只在 {SPECIAL_SOURCE_PATH} 路径下可用，普通搜索不会出现特殊源的内容；
+              {SPECIAL_SOURCE_PATH} 路径下也不会出现普通源的内容。
             </p>
           </div>
 
@@ -65,17 +62,15 @@ export default async function SpecialPage() {
 
           <p className='mt-4 text-xs leading-5 text-gray-500 dark:text-slate-500'>
             这是本机开关（存在 cookie 里），谁打开谁能用，只影响当前设备与浏览器，
-            不改动站点配置。关闭后 /r18 返回 404，特殊源的收藏与播放记录也不会出现在
+            不改动站点配置。关闭后 {SPECIAL_SOURCE_PATH} 返回 404，特殊源的收藏与播放记录也不会出现在
             普通入口——记录仍在，重新打开即可看到。此开关对 TVBox、OrionTV、WebTV
             渠道无效，这些渠道始终无法使用特殊源。
           </p>
 
-          <SpecialSourcePathForm initialPath={customPath} />
-
           <div className='mt-8 flex flex-col gap-3 sm:flex-row'>
             {enabled ? (
               <Link
-                href={entryPath}
+                href={SPECIAL_SOURCE_PATH}
                 className='inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-400'
               >
                 <Search className='h-4 w-4' />

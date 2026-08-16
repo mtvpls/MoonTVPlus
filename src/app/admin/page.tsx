@@ -7969,7 +7969,7 @@ const VideoSourceConfig = ({
                     特殊源设置
                   </h3>
                   <p className='mt-1 text-sm text-gray-600 dark:text-gray-400'>
-                    选中的视频源对普通搜索完全隐藏，只在 /r18 入口可用；/r18 也不会出现普通源。开关状态见 /sp。
+                    选中的视频源对普通搜索完全隐藏，只在 /under 入口可用；/under 也不会出现普通源。开关状态见 /sp。
                   </p>
                 </div>
                 <button

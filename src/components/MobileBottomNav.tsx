@@ -142,7 +142,7 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
       });
     }
 
-    // 特殊源入口不在导航展示，只能手动访问 /r18
+    // 特殊源入口不在导航展示，只能手动访问 /under
 
     setNavItems(items);
   }, [watchRoomContext?.isEnabled]);

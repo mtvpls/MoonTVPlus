@@ -107,7 +107,7 @@ const DEFAULT_MAX_MANGA_HISTORY_RECORDS = 100;
 const DEFAULT_MAX_MANGA_HISTORY_THRESHOLD =
   DEFAULT_MAX_MANGA_HISTORY_RECORDS + 10;
 const SEARCH_HISTORY_KEY = 'moontv_search_history';
-// 特殊源（/r18）搜索历史只存本机，用独立 key 与普通历史隔离
+// 特殊源（/under）搜索历史只存本机，用独立 key 与普通历史隔离
 const SEARCH_HISTORY_SPECIAL_KEY = 'moontv_search_history_special';
 const MUSIC_PLAY_RECORDS_KEY = 'moontv_music_play_records';
 
@@ -826,7 +826,7 @@ async function getAllPlayRecordsRaw(): Promise<Record<string, PlayRecord>> {
 }
 
 /**
- * 读取当前入口可见的播放记录：普通路径不含特殊源，/r18 只含特殊源。
+ * 读取当前入口可见的播放记录：普通路径不含特殊源，/under 只含特殊源。
  * 写路径（保存/删除/迁移）走 getAllPlayRecordsRaw，避免读-改-写抹掉另一侧的数据。
  */
 export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
@@ -1198,9 +1198,9 @@ export async function migratePlayRecord(
 /* ---------------- 搜索历史相关 API ---------------- */
 
 /**
- * 特殊源（/r18）上下文的搜索历史：只存本机 localStorage，不同步服务端、不进导出/迁移。
+ * 特殊源（/under）上下文的搜索历史：只存本机 localStorage，不同步服务端、不进导出/迁移。
  * 搜索关键词本身不带源信息，无法在读出口用 filterRecordsBySpecialSourceContext 过滤，
- * 因此改在写入时按入口分流：/r18 只写本机特殊源桶，普通入口维持原有行为，双向互不可见。
+ * 因此改在写入时按入口分流：/under 只写本机特殊源桶，普通入口维持原有行为，双向互不可见。
  * 与「特殊源入口是本机 cookie、只影响这台设备」的口径一致。
  */
 function getSpecialSearchHistoryLocal(): string[] {
@@ -1239,7 +1239,7 @@ export async function getSearchHistory(): Promise<string[]> {
     return [];
   }
 
-  // 特殊源（/r18）上下文：只读本机特殊源历史，与普通入口双向隔离
+  // 特殊源（/under）上下文：只读本机特殊源历史，与普通入口双向隔离
   if (isSpecialSourceContext()) {
     return getSpecialSearchHistoryLocal();
   }
@@ -1311,7 +1311,7 @@ export async function addSearchHistory(keyword: string): Promise<void> {
   const trimmed = keyword.trim();
   if (!trimmed) return;
 
-  // 特殊源（/r18）上下文：只写本机特殊源历史，不落服务端
+  // 特殊源（/under）上下文：只写本机特殊源历史，不落服务端
   if (isSpecialSourceContext()) {
     const history = getSpecialSearchHistoryLocal();
     const newHistory = [trimmed, ...history.filter((k) => k !== trimmed)];
@@ -1382,7 +1382,7 @@ export async function addSearchHistory(keyword: string): Promise<void> {
  * 数据库存储模式下使用乐观更新：先更新缓存，再异步同步到数据库。
  */
 export async function clearSearchHistory(): Promise<void> {
-  // 特殊源（/r18）上下文：只清本机特殊源历史
+  // 特殊源（/under）上下文：只清本机特殊源历史
   if (isSpecialSourceContext()) {
     setSpecialSearchHistoryLocal([]);
     return;
@@ -1429,7 +1429,7 @@ export async function deleteSearchHistory(keyword: string): Promise<void> {
   const trimmed = keyword.trim();
   if (!trimmed) return;
 
-  // 特殊源（/r18）上下文：只删本机特殊源历史
+  // 特殊源（/under）上下文：只删本机特殊源历史
   if (isSpecialSourceContext()) {
     const history = getSpecialSearchHistoryLocal();
     setSpecialSearchHistoryLocal(history.filter((k) => k !== trimmed));
@@ -1580,7 +1580,7 @@ async function getAllFavoritesRaw(): Promise<Record<string, Favorite>> {
 }
 
 /**
- * 获取当前入口可见的收藏：普通路径不含特殊源，/r18 只含特殊源。
+ * 获取当前入口可见的收藏：普通路径不含特殊源，/under 只含特殊源。
  */
 export async function getAllFavorites(): Promise<Record<string, Favorite>> {
   return filterRecordsBySpecialSourceContext(await getAllFavoritesRaw());
@@ -2282,8 +2282,8 @@ export function subscribeToDataUpdates<T>(
       callback(filterRecordsBySpecialSourceContext(event.detail) as T);
       return;
     }
-    // 搜索历史按入口隔离：/r18 上下文只认本机特殊源历史，
-    // 忽略服务端普通历史的后台推送（避免切到 /r18 时普通词闪现）
+    // 搜索历史按入口隔离：/under 上下文只认本机特殊源历史，
+    // 忽略服务端普通历史的后台推送（避免切到 /under 时普通词闪现）
     if (eventType === 'searchHistoryUpdated' && isSpecialSourceContext()) {
       callback(getSpecialSearchHistoryLocal() as T);
       return;

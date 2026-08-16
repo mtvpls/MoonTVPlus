@@ -59,6 +59,15 @@ import {
 } from '@/lib/episode-progress';
 import { isNetdiskSource, normalizeNetdiskSource } from '@/lib/netdisk/source';
 import {
+  calculateSeekTime,
+  DEFAULT_QUICK_FORWARD_SECONDS,
+  DEFAULT_SEEK_STEP_SECONDS,
+  loadStoredSeconds,
+  normalizeStoredSeconds,
+  QUICK_FORWARD_STORAGE_KEY,
+  SEEK_STEP_STORAGE_KEY,
+} from '@/lib/player-seek-settings';
+import {
   getRecommendationCache,
   recommendationCacheKeys,
   setRecommendationCache,
@@ -164,7 +173,7 @@ const PLAY_SHORTCUT_GROUPS = [
     title: '播放控制',
     items: [
       { keys: ['空格'], description: '播放 / 暂停' },
-      { keys: ['←', '→'], description: '快退 / 快进' },
+      { keys: ['←', '→'], description: '快退 / 快进（快进/倒退时间）' },
       { keys: ['P'], description: '快捷快进' },
       { keys: ['↑', '↓'], description: '音量增加 / 减少' },
       { keys: ['F'], description: '切换全屏' },
@@ -378,17 +387,26 @@ function PlayPageClient() {
     skipConfig.outro_time,
   ]);
 
-  // 快进/倒退时间（默认 10 秒）
-  const DEFAULT_QUICK_FORWARD_SECONDS = 10;
-  const [quickForwardSeconds, setQuickForwardSeconds] = useState(() => {
-    if (typeof window === 'undefined') return DEFAULT_QUICK_FORWARD_SECONDS;
-    const saved = Number(localStorage.getItem('quickForwardSeconds'));
-    return Number.isFinite(saved) && saved > 0 ? saved : DEFAULT_QUICK_FORWARD_SECONDS;
-  });
+  // 快捷快进（P 键和控制栏按钮，默认 90 秒）
+  const [quickForwardSeconds, setQuickForwardSeconds] = useState(() =>
+    loadStoredSeconds(
+      QUICK_FORWARD_STORAGE_KEY,
+      DEFAULT_QUICK_FORWARD_SECONDS
+    )
+  );
   const quickForwardSecondsRef = useRef(quickForwardSeconds);
   useEffect(() => {
     quickForwardSecondsRef.current = quickForwardSeconds;
   }, [quickForwardSeconds]);
+
+  // 左右方向键快进/倒退（默认 10 秒）
+  const [seekStepSeconds, setSeekStepSeconds] = useState(() =>
+    loadStoredSeconds(SEEK_STEP_STORAGE_KEY, DEFAULT_SEEK_STEP_SECONDS)
+  );
+  const seekStepSecondsRef = useRef(seekStepSeconds);
+  useEffect(() => {
+    seekStepSecondsRef.current = seekStepSeconds;
+  }, [seekStepSeconds]);
 
   // 跳过检查的时间间隔控制
   const lastSkipCheckRef = useRef(0);
@@ -6365,32 +6383,33 @@ function PlayPageClient() {
       }
     }
 
-    // 左箭头 = 快退（时长同「快捷快进配置」，替换原来固定的 10 秒）
+    // 左箭头 = 按「快进/倒退时间」快退
     if (!e.altKey && e.key === 'ArrowLeft') {
-      if (artPlayerRef.current && artPlayerRef.current.currentTime > 5) {
-        artPlayerRef.current.currentTime = Math.max(
-          0,
-          artPlayerRef.current.currentTime - quickForwardSecondsRef.current
+      if (artPlayerRef.current) {
+        artPlayerRef.current.currentTime = calculateSeekTime(
+          artPlayerRef.current.currentTime,
+          artPlayerRef.current.duration,
+          -1,
+          seekStepSecondsRef.current
         );
         artPlayerRef.current.notice.show = `快退 ${formatQuickForwardDuration(
-          quickForwardSecondsRef.current
+          seekStepSecondsRef.current
         )}`;
         e.preventDefault();
       }
     }
 
-    // 右箭头 = 快进（时长同「快捷快进配置」，替换原来固定的 10 秒）
+    // 右箭头 = 按「快进/倒退时间」快进
     if (!e.altKey && e.key === 'ArrowRight') {
-      if (
-        artPlayerRef.current &&
-        artPlayerRef.current.currentTime < artPlayerRef.current.duration - 5
-      ) {
-        artPlayerRef.current.currentTime = Math.min(
+      if (artPlayerRef.current) {
+        artPlayerRef.current.currentTime = calculateSeekTime(
+          artPlayerRef.current.currentTime,
           artPlayerRef.current.duration,
-          artPlayerRef.current.currentTime + quickForwardSecondsRef.current
+          1,
+          seekStepSecondsRef.current
         );
         artPlayerRef.current.notice.show = `快进 ${formatQuickForwardDuration(
-          quickForwardSecondsRef.current
+          seekStepSecondsRef.current
         )}`;
         e.preventDefault();
       }
@@ -7457,8 +7476,8 @@ function PlayPageClient() {
               },
             },
             {
-              name: '快进/倒退时间',
-              html: '快进/倒退时间',
+              name: '快捷快进配置',
+              html: '快捷快进配置',
               icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 5v14" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/><path d="m16 17 5-5-5-5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg>',
               tooltip: `${formatQuickForwardDuration(quickForwardSecondsRef.current)}`,
               onClick: async function () {
@@ -7486,9 +7505,9 @@ function PlayPageClient() {
                 `;
                 container.innerHTML = `
                   <div role="dialog" aria-modal="true" style="width: min(360px, 100%); background: #1f2937; color: #fff; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 20px; box-shadow: 0 16px 48px rgba(0,0,0,.45);">
-                    <div style="font-size: 17px; font-weight: 600; margin-bottom: 8px;">快进/倒退时间</div>
-                    <div style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin-bottom: 16px;">设置按 P 键或左右方向键快进 / 快退的时间。</div>
-                    <label for="quick-forward-input" style="display: block; color: #d1d5db; font-size: 13px; margin-bottom: 6px;">时长（秒）</label>
+                    <div style="font-size: 17px; font-weight: 600; margin-bottom: 8px;">快捷快进设置</div>
+                    <div style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin-bottom: 16px;">设置点击底部按钮或按 P 键时向前跳转的时间。</div>
+                    <label for="quick-forward-input" style="display: block; color: #d1d5db; font-size: 13px; margin-bottom: 6px;">快进时长（秒）</label>
                     <input id="quick-forward-input" type="number" min="1" step="1" value="${quickForwardSecondsRef.current}" style="box-sizing: border-box; width: 100%; height: 40px; padding: 0 10px; border: 1px solid #4b5563; border-radius: 6px; background: #111827; color: #fff; font-size: 14px; outline: none;" />
                     <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;">
                       <button type="button" data-action="cancel" style="height: 36px; padding: 0 14px; border: 0; border-radius: 6px; background: #374151; color: #fff; cursor: pointer;">取消</button>
@@ -7503,8 +7522,8 @@ function PlayPageClient() {
                 const confirmButton = container.querySelector('[data-action="confirm"]');
                 const cleanup = () => container.remove();
                 const save = () => {
-                  const nextSeconds = Number(input.value);
-                  if (!Number.isFinite(nextSeconds) || nextSeconds <= 0) {
+                  const normalizedSeconds = normalizeStoredSeconds(Number(input.value));
+                  if (normalizedSeconds === null) {
                     input.focus();
                     if (artPlayerRef.current) {
                       artPlayerRef.current.notice.show = '请输入大于 0 的有效秒数';
@@ -7512,10 +7531,88 @@ function PlayPageClient() {
                     return;
                   }
 
-                  const normalizedSeconds = Math.max(1, Math.round(nextSeconds));
                   setQuickForwardSeconds(normalizedSeconds);
                   quickForwardSecondsRef.current = normalizedSeconds;
-                  localStorage.setItem('quickForwardSeconds', String(normalizedSeconds));
+                  localStorage.setItem(QUICK_FORWARD_STORAGE_KEY, String(normalizedSeconds));
+                  if (artPlayerRef.current) {
+                    artPlayerRef.current.notice.show = `快捷快进已设置为${formatQuickForwardDuration(normalizedSeconds)}`;
+                  }
+                  cleanup();
+                };
+
+                cancelButton?.addEventListener('click', cleanup);
+                confirmButton?.addEventListener('click', save);
+                container.addEventListener('click', (event) => {
+                  if (event.target === container) cleanup();
+                });
+                input.addEventListener('keydown', (event) => {
+                  if (event.key === 'Enter') save();
+                  if (event.key === 'Escape') cleanup();
+                });
+                input.focus();
+                input.select();
+                return '打开设置';
+              },
+            },
+            {
+              name: '快进/倒退时间',
+              html: '快进/倒退时间',
+              icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m4 12 6-6v12l-6-6Z" fill="#ffffff"/><path d="m20 12-6-6v12l6-6Z" fill="#ffffff"/></svg>',
+              tooltip: `${formatQuickForwardDuration(seekStepSecondsRef.current)}`,
+              onClick: async function () {
+                const player = artPlayerRef.current;
+                if (player?.fullscreen) {
+                  player.fullscreen = false;
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
+                const existingDialog = document.querySelector('.seek-step-settings-dialog');
+                existingDialog?.remove();
+
+                const container = document.createElement('div');
+                container.className = 'seek-step-settings-dialog';
+                container.style.cssText = `
+                  position: fixed;
+                  inset: 0;
+                  z-index: 10000;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  padding: 16px;
+                  background: rgba(0, 0, 0, 0.6);
+                  backdrop-filter: blur(3px);
+                `;
+                container.innerHTML = `
+                  <div role="dialog" aria-modal="true" style="width: min(360px, 100%); background: #1f2937; color: #fff; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 20px; box-shadow: 0 16px 48px rgba(0,0,0,.45);">
+                    <div style="font-size: 17px; font-weight: 600; margin-bottom: 8px;">快进/倒退时间</div>
+                    <div style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin-bottom: 16px;">设置左右方向键快进 / 快退的时间。</div>
+                    <label for="seek-step-input" style="display: block; color: #d1d5db; font-size: 13px; margin-bottom: 6px;">时长（秒）</label>
+                    <input id="seek-step-input" type="number" min="1" step="1" value="${seekStepSecondsRef.current}" style="box-sizing: border-box; width: 100%; height: 40px; padding: 0 10px; border: 1px solid #4b5563; border-radius: 6px; background: #111827; color: #fff; font-size: 14px; outline: none;" />
+                    <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;">
+                      <button type="button" data-action="cancel" style="height: 36px; padding: 0 14px; border: 0; border-radius: 6px; background: #374151; color: #fff; cursor: pointer;">取消</button>
+                      <button type="button" data-action="confirm" style="height: 36px; padding: 0 14px; border: 0; border-radius: 6px; background: #0d9488; color: #fff; cursor: pointer;">保存</button>
+                    </div>
+                  </div>
+                `;
+                document.body.appendChild(container);
+
+                const input = container.querySelector('#seek-step-input') as HTMLInputElement;
+                const cancelButton = container.querySelector('[data-action="cancel"]');
+                const confirmButton = container.querySelector('[data-action="confirm"]');
+                const cleanup = () => container.remove();
+                const save = () => {
+                  const normalizedSeconds = normalizeStoredSeconds(Number(input.value));
+                  if (normalizedSeconds === null) {
+                    input.focus();
+                    if (artPlayerRef.current) {
+                      artPlayerRef.current.notice.show = '请输入大于 0 的有效秒数';
+                    }
+                    return;
+                  }
+
+                  setSeekStepSeconds(normalizedSeconds);
+                  seekStepSecondsRef.current = normalizedSeconds;
+                  localStorage.setItem(SEEK_STEP_STORAGE_KEY, String(normalizedSeconds));
                   if (artPlayerRef.current) {
                     artPlayerRef.current.notice.show = `快进/倒退时间已设为${formatQuickForwardDuration(normalizedSeconds)}`;
                   }
@@ -7704,6 +7801,30 @@ function PlayPageClient() {
           ],
           // 控制栏配置
           controls: [
+            {
+              position: 'left',
+              index: 40,
+              html: `<i class="art-icon flex quick-forward-control"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m16 17 5-5-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></i>`,
+              tooltip: '快捷快进',
+              mounted: ($el: HTMLElement) => {
+                $el.classList.add('quick-forward-control-wrapper');
+                if (!document.getElementById('quick-forward-control-style')) {
+                  const style = document.createElement('style');
+                  style.id = 'quick-forward-control-style';
+                  style.textContent = `
+                    @media (max-width: 767px) and (orientation: portrait) {
+                      .quick-forward-control-wrapper {
+                        display: none !important;
+                      }
+                    }
+                  `;
+                  document.head.appendChild(style);
+                }
+              },
+              click: function () {
+                seekQuickForward();
+              },
+            },
             {
               position: 'left',
               index: 13,
