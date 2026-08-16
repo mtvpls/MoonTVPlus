@@ -33,7 +33,11 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { SearchResult } from '@/lib/types';
-import { appendSpecialSourceParam, isSpecialSourceContext } from '@/lib/special-source.client';
+import {
+  appendSpecialSourceParam,
+  isSpecialSourceContext,
+  SPECIAL_SOURCE_PATH,
+} from '@/lib/special-source.client';
 import { processImageUrl } from '@/lib/utils';
 
 import AcgSearch from '@/components/AcgSearch';
@@ -2425,8 +2429,8 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
             </section>
           ) : (
             <>
-              {/* /r18 入口下展示特殊源的继续观看（播放记录按入口隔离） */}
-              {searchBase === '/r18' && activeTab === 'video' && (
+              {/* /under 入口下展示特殊源的继续观看（播放记录按入口隔离） */}
+              {searchBase === SPECIAL_SOURCE_PATH && activeTab === 'video' && (
                 <ContinueWatching />
               )}
               {searchHistory.length > 0 && (
@@ -2533,7 +2537,7 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
 }
 
 // /search 路由页面：App Router 要求 page.tsx 必须有默认导出。
-// SearchPageClient 同时被 /r18 以 searchBase='/r18' 复用。
+// SearchPageClient 同时被 /under 以 searchBase='/under' 复用。
 export default function SearchPage() {
   return (
     <Suspense>

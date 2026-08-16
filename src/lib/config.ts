@@ -1202,7 +1202,7 @@ export async function getAvailableApiSites(
 ): Promise<ApiSite[]> {
   const config = await getConfig();
   const specialSourceSet = new Set(config.SpecialSourceApis || []);
-  // 双向隔离：普通入口只给普通源，/r18 入口只给特殊源
+  // 双向隔离：普通入口只给普通源，/under 入口只给特殊源
   const filterSpecialSources = <T extends { key: string }>(sites: T[]): T[] =>
     sites.filter((site) => specialSourceSet.has(site.key) === specialOnly);
   const allApiSites = filterSpecialSources(

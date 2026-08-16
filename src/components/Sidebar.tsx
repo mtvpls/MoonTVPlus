@@ -14,7 +14,7 @@ import {
   useState,
 } from 'react';
 
-import { R18_PATH } from '@/lib/special-source.client';
+import { SPECIAL_SOURCE_PATH } from '@/lib/special-source.client';
 
 import { useSite } from './SiteProvider';
 import { useWatchRoomContextSafe } from './WatchRoomProvider';
@@ -127,8 +127,11 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
     isCollapsed,
   };
 
-  // /r18 下的「搜索」留在特殊源入口，避免一点就跳回普通搜索
-  const searchHref = pathname.startsWith(R18_PATH) ? R18_PATH : '/search';
+  // /under 下的「搜索」留在特殊源入口，避免一点就跳回普通搜索
+  const isUnderPath =
+    pathname === SPECIAL_SOURCE_PATH ||
+    pathname.startsWith(`${SPECIAL_SOURCE_PATH}/`);
+  const searchHref = isUnderPath ? SPECIAL_SOURCE_PATH : '/search';
 
   const [menuItems, setMenuItems] = useState([
     {
@@ -238,7 +241,7 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
       });
     }
 
-    // 特殊源入口不在导航展示，只能手动访问 /r18
+    // 特殊源入口不在导航展示，只能手动访问 /under
 
     setMenuItems(items);
   }, [watchRoomContext?.isEnabled]);
