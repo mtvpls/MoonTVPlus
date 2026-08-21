@@ -96,6 +96,16 @@ interface UserCacheStore {
 
 // ---- 常量 ----
 const PLAY_RECORDS_KEY = 'moontv_play_records';
+export const SAVE_LIVE_PLAY_RECORDS_KEY = 'saveLivePlayRecords';
+
+/** 是否允许保存直播播放记录（默认关闭）。 */
+export function isLivePlayRecordSavingEnabled(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    localStorage.getItem(SAVE_LIVE_PLAY_RECORDS_KEY) === 'true'
+  );
+}
+
 const FAVORITES_KEY = 'moontv_favorites';
 const MANGA_SHELF_KEY = 'moontv_manga_shelf';
 const MANGA_HISTORY_KEY = 'moontv_manga_history';

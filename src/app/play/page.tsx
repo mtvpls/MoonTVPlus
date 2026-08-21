@@ -126,6 +126,7 @@ interface SearchCachePayload {
 
 type CustomSubtitleEngine = 'native' | 'jassub';
 type PlaybackSourceBadge = 'local' | 'offline' | null;
+type HarmonyHlsPlaybackMode = 'hlsjs' | 'native';
 
 interface CustomSubtitleState {
   name: string;
@@ -155,10 +156,17 @@ interface JassubSubtitleInstance {
 }
 
 const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+const HARMONY_HLS_PLAYBACK_MODE_KEY = 'harmony_hls_playback_mode';
 const JASSUB_ASSET_BASE = '/assets/jassub';
 const JASSUB_CJK_FONT_FAMILY = 'noto sans cjk sc';
 const JASSUB_CJK_FONT_URL = `${JASSUB_ASSET_BASE}/NotoSansCJK-Regular.ttc`;
 const ADVANCED_SUBTITLE_FORMATS = new Set(['ass', 'ssa']);
+
+const isHlsPlaybackUrl = (url: string) =>
+  /\.m3u8?(?:$|[/?#])/i.test(url) ||
+  url.includes('/api/proxy-m3u8') ||
+  url.includes('/api/proxy/vod/m3u8');
+
 const PLAY_SHORTCUT_GROUPS = [
   {
     title: '播放控制',
@@ -406,7 +414,7 @@ function PlayPageClient() {
     blockAdEnabledRef.current = blockAdEnabled;
   }, [blockAdEnabled]);
 
-  // 外部播放器去广告开关（独立状态，默认 false）
+  // 工具栏去广告开关：用于外部播放器及鸿蒙原生 HLS，默认 false
   const [externalPlayerAdBlock, setExternalPlayerAdBlock] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const v = localStorage.getItem('external_player_adblock');
@@ -1039,7 +1047,7 @@ function PlayPageClient() {
           }
 
           // 应用弹幕数量限制
-          const maxCount = typeof window !== 'undefined' ? parseInt(localStorage.getItem('danmakuMaxCount') || '0', 10) : 0;
+          const maxCount = typeof window !== 'undefined' ? parseInt(localStorage.getItem('danmakuMaxCount') || '5000', 10) : 0;
           let calculatedOriginalCount = 0;
           if (maxCount > 0 && danmakuData.length > maxCount) {
             const originalCount = danmakuData.length;
@@ -1580,6 +1588,33 @@ function PlayPageClient() {
   const [videoUrl, setVideoUrl] = useState('');
   const [playbackSourceBadge, setPlaybackSourceBadge] = useState<PlaybackSourceBadge>(null);
 
+  // 鸿蒙浏览器使用原生 HLS 时，video.currentSrc 会保留真实 m3u8，便于浏览器投屏。
+  const [isHarmonyOS] = useState(
+    () =>
+      typeof navigator !== 'undefined' &&
+      /OpenHarmony/i.test(navigator.userAgent)
+  );
+  const [harmonyHlsPlaybackMode, setHarmonyHlsPlaybackMode] =
+    useState<HarmonyHlsPlaybackMode>(() => {
+      if (
+        typeof navigator === 'undefined' ||
+        !/OpenHarmony/i.test(navigator.userAgent)
+      ) {
+        return 'hlsjs';
+      }
+
+      try {
+        const savedMode = localStorage.getItem(HARMONY_HLS_PLAYBACK_MODE_KEY);
+        return savedMode === 'native' ? 'native' : 'hlsjs';
+      } catch {
+        return 'hlsjs';
+      }
+    });
+  const nativeHlsAdBlockEnabled =
+    isHarmonyOS &&
+    harmonyHlsPlaybackMode === 'native' &&
+    externalPlayerAdBlock;
+
   // 视频清晰度列表
   const [videoQualities, setVideoQualities] = useState<Array<{ name: string, url: string }>>([]);
 
@@ -1816,6 +1851,8 @@ function PlayPageClient() {
 
   // 用于记录是否需要在播放器 ready 后跳转到指定进度
   const resumeTimeRef = useRef<number | null>(null);
+  // 切换鸿蒙 HLS 内核时，同时恢复切换前的播放/暂停状态。
+  const resumePlayingAfterHlsModeSwitchRef = useRef<boolean | null>(null);
   // 播放记录跳转按钮状态
   const playRecordJumpDismissedRef = useRef(false); // 记录用户是否已经关闭过跳转按钮
   const playRecordJumpLayerRef = useRef<any>(null); // 保存跳转按钮层的引用
@@ -1985,6 +2022,9 @@ function PlayPageClient() {
 
   const artPlayerRef = useRef<any>(null);
   const artRef = useRef<HTMLDivElement | null>(null);
+  const activeHarmonyHlsPlaybackModeRef =
+    useRef<HarmonyHlsPlaybackMode | null>(null);
+  const activeNativeHlsAdBlockRef = useRef<boolean | null>(null);
   const syncAnime4KCanvasFlip = (flip?: string) => {
     const canvas = anime4kRef.current?.canvas as HTMLCanvasElement | undefined;
     if (!canvas) return;
@@ -3833,12 +3873,19 @@ function PlayPageClient() {
       // 否则 Safari 可能切回原生 HLS，和 MSE/hls.js 抢同一个播放器。
       sources.forEach((s) => s.remove());
     } else {
-      const existed = sources.some((s) => s.src === url);
-      if (!existed) {
+      const existedSource = sources.find((s) => s.src === url);
+      if (existedSource) {
+        if (isHlsLikeSource) {
+          existedSource.type = 'application/vnd.apple.mpegurl';
+        }
+      } else {
         // 移除旧的 source，保持唯一
         sources.forEach((s) => s.remove());
         const sourceEl = document.createElement('source');
         sourceEl.src = url;
+        if (isHlsLikeSource) {
+          sourceEl.type = 'application/vnd.apple.mpegurl';
+        }
         video.appendChild(sourceEl);
       }
     }
@@ -3859,6 +3906,92 @@ function PlayPageClient() {
 
     // openlist/emby/xiaoya/netdisk：CORS 模式加载，需配套「moontvplus 扩展」注入 ACAO 后 Anime4K 才能读帧
     applyVideoCrossOrigin(video, currentSourceRef.current);
+  };
+
+  const prepareHarmonyHlsReinit = () => {
+    const player = artPlayerRef.current;
+    if (player) {
+      const currentTime = Number(player.currentTime) || 0;
+      resumeTimeRef.current = currentTime > 0 ? currentTime : null;
+      resumePlayingAfterHlsModeSwitchRef.current = !player.paused;
+    }
+
+    setVideoError(null);
+    setCorsFailedUrl(null);
+    setVideoLoadingStage('sourceChanging');
+    setIsVideoLoading(true);
+    setPlayerReady(false);
+  };
+
+  const buildNativeHlsPlaybackUrl = (url: string) => {
+    if (!url || typeof window === 'undefined') return url;
+
+    try {
+      const isAbsoluteUrl = /^https?:\/\//i.test(url);
+      const parsedUrl = new URL(url, window.location.origin);
+
+      // 已经走服务端去广告代理时，只切换过滤参数，避免重复嵌套代理。
+      if (parsedUrl.pathname === '/api/proxy-m3u8') {
+        if (nativeHlsAdBlockEnabled) {
+          parsedUrl.searchParams.delete('adblock');
+        } else {
+          parsedUrl.searchParams.set('adblock', 'false');
+        }
+        return isAbsoluteUrl
+          ? parsedUrl.toString()
+          : `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+      }
+
+      if (!nativeHlsAdBlockEnabled) return url;
+
+      let originalUrl = url;
+      let proxySegments = false;
+
+      // 保留视频源原有的全量代理能力，同时改由 proxy-m3u8 执行去广告。
+      if (parsedUrl.pathname === '/api/proxy/vod/m3u8') {
+        originalUrl = parsedUrl.searchParams.get('url') || '';
+        proxySegments = true;
+      } else if (parsedUrl.pathname === '/api/proxy/m3u8') {
+        originalUrl = parsedUrl.searchParams.get('url') || '';
+      }
+
+      if (!/^https?:\/\//i.test(originalUrl)) return url;
+
+      const params = new URLSearchParams({
+        url: originalUrl,
+        source: currentSourceRef.current,
+      });
+      if (proxyToken) params.set('token', proxyToken);
+      if (proxySegments) params.set('proxySegments', 'true');
+      return `/api/proxy-m3u8?${params.toString()}`;
+    } catch (error) {
+      console.warn('[Harmony HLS] 构建原生去广告地址失败:', error);
+      return url;
+    }
+  };
+
+  const switchHarmonyHlsPlaybackMode = (mode: HarmonyHlsPlaybackMode) => {
+    if (mode === harmonyHlsPlaybackMode) return;
+
+    prepareHarmonyHlsReinit();
+
+    try {
+      localStorage.setItem(HARMONY_HLS_PLAYBACK_MODE_KEY, mode);
+    } catch {
+      // 隐私模式等场景可能禁用 localStorage，但不应阻止本次切换。
+    }
+    setHarmonyHlsPlaybackMode(mode);
+  };
+
+  const toggleToolbarAdBlock = () => {
+    if (
+      isHarmonyOS &&
+      harmonyHlsPlaybackMode === 'native' &&
+      isHlsPlaybackUrl(videoUrl)
+    ) {
+      prepareHarmonyHlsReinit();
+    }
+    setExternalPlayerAdBlock(!externalPlayerAdBlock);
   };
 
   // Wake Lock 相关函数
@@ -5697,7 +5830,7 @@ function PlayPageClient() {
       }
 
       // 应用弹幕数量限制
-      const maxCount = typeof window !== 'undefined' ? parseInt(localStorage.getItem('danmakuMaxCount') || '0', 10) : 0;
+      const maxCount = typeof window !== 'undefined' ? parseInt(localStorage.getItem('danmakuMaxCount') || '5000', 10) : 0;
       let calculatedOriginalCount = 0;
       if (maxCount > 0 && danmakuData.length > maxCount) {
         const originalCount = danmakuData.length;
@@ -5917,7 +6050,7 @@ function PlayPageClient() {
       }
 
       // 应用弹幕数量限制
-      const maxCount = typeof window !== 'undefined' ? parseInt(localStorage.getItem('danmakuMaxCount') || '0', 10) : 0;
+      const maxCount = typeof window !== 'undefined' ? parseInt(localStorage.getItem('danmakuMaxCount') || '5000', 10) : 0;
       if (maxCount > 0 && danmakuData.length > maxCount) {
         const originalCount = danmakuData.length;
         const step = danmakuData.length / maxCount;
@@ -6172,7 +6305,7 @@ function PlayPageClient() {
         }
 
         // 应用弹幕数量限制
-        const maxCount = typeof window !== 'undefined' ? parseInt(localStorage.getItem('danmakuMaxCount') || '0', 10) : 0;
+        const maxCount = typeof window !== 'undefined' ? parseInt(localStorage.getItem('danmakuMaxCount') || '5000', 10) : 0;
         let calculatedOriginalCount = 0;
         if (maxCount > 0 && danmakuData.length > maxCount) {
           const originalCount = danmakuData.length;
@@ -6742,8 +6875,14 @@ function PlayPageClient() {
       return undefined;
     };
 
+    const needsHarmonyHlsModeReinit =
+      isHarmonyOS &&
+      (activeHarmonyHlsPlaybackModeRef.current !== harmonyHlsPlaybackMode ||
+        (harmonyHlsPlaybackMode === 'native' &&
+          activeNativeHlsAdBlockRef.current !== nativeHlsAdBlockEnabled));
+
     // 非WebKit浏览器且播放器已存在，使用switch方法切换
-    if (!isWebkit && artPlayerRef.current) {
+    if (!isWebkit && artPlayerRef.current && !needsHarmonyHlsModeReinit) {
       // 显式设置类型，确保代理 URL 能被 HLS.js 正确处理
       const videoType = getVideoType(videoUrl);
       if (videoType) {
@@ -6762,9 +6901,13 @@ function PlayPageClient() {
       artPlayerRef.current.title = `${videoTitle} - ${playerEpisodeLabel}`;
       artPlayerRef.current.poster = videoCover;
       if (artPlayerRef.current?.video) {
+        const exposedVideoUrl =
+          isHarmonyOS && harmonyHlsPlaybackMode === 'native'
+            ? buildNativeHlsPlaybackUrl(videoUrl)
+            : videoUrl;
         ensureVideoSource(
           artPlayerRef.current.video as HTMLVideoElement,
-          videoUrl
+          exposedVideoUrl
         );
       }
       return;
@@ -7006,6 +7149,21 @@ function PlayPageClient() {
           // HLS 支持配置
           customType: {
             m3u8: function (video: HTMLVideoElement, url: string) {
+              if (isHarmonyOS && harmonyHlsPlaybackMode === 'native') {
+                if (video.hls) {
+                  video.hls.destroy();
+                  delete video.hls;
+                }
+
+                // 不 attach MediaSource，直接把 m3u8 交给 ArkWeb/浏览器原生播放器。
+                // currentSrc 会保留实际播放地址，供浏览器内置投屏功能读取。
+                const nativePlaybackUrl = buildNativeHlsPlaybackUrl(url);
+                video.src = nativePlaybackUrl;
+                ensureVideoSource(video, nativePlaybackUrl);
+                video.load();
+                return;
+              }
+
               if (!Hls) {
                 console.error('HLS.js 未加载');
                 return;
@@ -7105,9 +7263,12 @@ function PlayPageClient() {
                 kickStartHlsPlayback();
               });
 
+              // 先暴露真实 m3u8 source，供浏览器的投屏/外部播放器在
+              // hls.js 将 video.currentSrc 切换为 blob: URL 前完成识别。
+              video.hls = hls;
+              ensureVideoSource(video, url);
               hls.loadSource(url);
               hls.attachMedia(video);
-              video.hls = hls;
 
               if (isWebkit) {
                 schedulePlayerTimeout(() => {
@@ -7125,8 +7286,6 @@ function PlayPageClient() {
                   }
                 }, 3000);
               }
-
-              ensureVideoSource(video, url);
 
               // 额外确保 iOS 内联播放属性（防止全屏时使用系统播放器）
               video.setAttribute('playsinline', 'true');
@@ -8976,6 +9135,17 @@ function PlayPageClient() {
           }
           resumeTimeRef.current = null;
 
+          const shouldResumePlaying =
+            resumePlayingAfterHlsModeSwitchRef.current;
+          resumePlayingAfterHlsModeSwitchRef.current = null;
+          if (shouldResumePlaying === false) {
+            artPlayerRef.current.pause();
+          } else if (shouldResumePlaying === true) {
+            Promise.resolve(artPlayerRef.current.play()).catch((error) => {
+              console.warn('[Harmony HLS] 恢复播放失败:', error);
+            });
+          }
+
           schedulePlayerTimeout(() => {
             if (!artPlayerRef.current) {
               return;
@@ -9452,10 +9622,19 @@ function PlayPageClient() {
           }
         });
 
+        activeHarmonyHlsPlaybackModeRef.current = isHarmonyOS
+          ? harmonyHlsPlaybackMode
+          : 'hlsjs';
+        activeNativeHlsAdBlockRef.current = nativeHlsAdBlockEnabled;
+
         if (artPlayerRef.current?.video) {
+          const exposedVideoUrl =
+            isHarmonyOS && harmonyHlsPlaybackMode === 'native'
+              ? buildNativeHlsPlaybackUrl(videoUrl)
+              : videoUrl;
           ensureVideoSource(
             artPlayerRef.current.video as HTMLVideoElement,
-            videoUrl
+            exposedVideoUrl
           );
         }
       } catch (err) {
@@ -9466,7 +9645,13 @@ function PlayPageClient() {
 
     // 调用异步初始化函数
     initPlayer();
-  }, [videoUrl, loading, blockAdEnabled]);
+  }, [
+    videoUrl,
+    loading,
+    blockAdEnabled,
+    harmonyHlsPlaybackMode,
+    nativeHlsAdBlockEnabled,
+  ]);
 
   // 当组件卸载时清理定时器、Wake Lock 和播放器资源
   useEffect(() => {
@@ -10205,6 +10390,35 @@ function PlayPageClient() {
                           </span>
                         </button>
 
+                        {/* PC Client 打开 */}
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            const currentPath = (window.location.pathname + window.location.search).replace(/^\//, '');
+                            window.open(`moontvpluspc://${currentPath}`, '_blank');
+                          }}
+                          className='group relative flex items-center justify-center gap-1 w-8 h-8 lg:w-auto lg:h-auto lg:px-2 lg:py-1.5 bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-xs font-medium rounded-md transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer overflow-hidden border border-emerald-600 dark:border-emerald-700 flex-shrink-0'
+                          title='PC Client打开'
+                        >
+                          <svg
+                            className='w-4 h-4 flex-shrink-0 text-white'
+                            fill='none'
+                            stroke='currentColor'
+                            viewBox='0 0 24 24'
+                            xmlns='http://www.w3.org/2000/svg'
+                          >
+                            <path
+                              strokeLinecap='round'
+                              strokeLinejoin='round'
+                              strokeWidth={2}
+                              d='M4 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm-2 15h20M8 20h8'
+                            />
+                          </svg>
+                          <span className='hidden lg:inline max-w-0 group-hover:max-w-[120px] overflow-hidden whitespace-nowrap transition-all duration-200 ease-in-out text-white'>
+                            PC Client打开
+                          </span>
+                        </button>
+
                         {showExternalTranscodeButton && (
                           <button
                             onClick={async (e) => {
@@ -10436,7 +10650,7 @@ function PlayPageClient() {
 
                       {/* 去广告开关 */}
                       <button
-                        onClick={() => setExternalPlayerAdBlock(!externalPlayerAdBlock)}
+                        onClick={toggleToolbarAdBlock}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer border flex-shrink-0 ${externalPlayerAdBlock
                           ? 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white border-blue-400'
                           : 'bg-white hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
@@ -10469,6 +10683,54 @@ function PlayPageClient() {
                           {externalPlayerAdBlock ? '去广告' : '去广告'}
                         </span>
                       </button>
+
+                      {/* 鸿蒙 HLS.js 开关：关闭后使用原生 HLS，便于浏览器投屏 */}
+                      {isHarmonyOS && isHlsPlaybackUrl(videoUrl) && (
+                        <button
+                          type='button'
+                          onClick={() =>
+                            switchHarmonyHlsPlaybackMode(
+                              harmonyHlsPlaybackMode === 'hlsjs'
+                                ? 'native'
+                                : 'hlsjs'
+                            )
+                          }
+                          aria-pressed={harmonyHlsPlaybackMode === 'hlsjs'}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer border flex-shrink-0 ${harmonyHlsPlaybackMode === 'hlsjs'
+                            ? 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white border-blue-400'
+                            : 'bg-white hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
+                            }`}
+                          title={
+                            harmonyHlsPlaybackMode === 'hlsjs'
+                              ? 'HLS.js 已开启，点击切换为原生 HLS'
+                              : 'HLS.js 已关闭，当前使用原生 HLS'
+                          }
+                        >
+                          <svg
+                            className='w-4 h-4 flex-shrink-0'
+                            fill='none'
+                            stroke='currentColor'
+                            viewBox='0 0 24 24'
+                          >
+                            {harmonyHlsPlaybackMode === 'hlsjs' ? (
+                              <path
+                                strokeLinecap='round'
+                                strokeLinejoin='round'
+                                strokeWidth='2'
+                                d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+                              />
+                            ) : (
+                              <path
+                                strokeLinecap='round'
+                                strokeLinejoin='round'
+                                strokeWidth='2'
+                                d='M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636'
+                              />
+                            )}
+                          </svg>
+                          <span className='whitespace-nowrap'>HLS.js</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

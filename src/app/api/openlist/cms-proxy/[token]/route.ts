@@ -277,7 +277,7 @@ async function handleDetail(
   // 调用 OpenList 客户端获取视频文件列表
   const { OpenListClient } = await import('@/lib/openlist.client');
   const { getCachedVideoInfo, setCachedVideoInfo } = await import('@/lib/openlist-cache');
-  const { parseVideoFileName } = await import('@/lib/video-parser');
+  const { formatEpisodeDisplayTitle, parseVideoFileName } = await import('@/lib/video-parser');
 
   const client = new OpenListClient(
     openListConfig.URL,
@@ -348,6 +348,13 @@ async function handleDetail(
     (host?.includes('localhost') || host?.includes('127.0.0.1') ? 'http' : 'https');
   const baseUrl = process.env.SITE_BASE || `${proto}://${host}`;
 
+  const parsedSeasons = new Set(
+    videoFiles
+      .map((file) => parseVideoFileName(file.name).season)
+      .filter((season): season is number => typeof season === 'number')
+  );
+  const hasMultipleSeasons = parsedSeasons.size > 1;
+
   const episodes = videoFiles
     .map((file, index) => {
       const parsed = parseVideoFileName(file.name);
@@ -357,9 +364,12 @@ async function handleDetail(
       } else {
         episodeInfo = videoInfo!.episodes[file.name] || { episode: index + 1, season: undefined, title: undefined, parsed_from: 'filename' };
       }
-      let displayTitle = episodeInfo.title;
-      if (!displayTitle && episodeInfo.episode) {
-        displayTitle = episodeInfo.isOVA ? `OVA ${episodeInfo.episode}` : `第${episodeInfo.episode}集`;
+      let displayTitle = formatEpisodeDisplayTitle(
+        { episode: episodeInfo.episode, season: episodeInfo.season, isOVA: episodeInfo.isOVA },
+        hasMultipleSeasons
+      );
+      if (!displayTitle) {
+        displayTitle = episodeInfo.title;
       }
       if (!displayTitle) {
         displayTitle = file.name;

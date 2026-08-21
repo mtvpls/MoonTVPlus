@@ -2,6 +2,7 @@
 
 import { Link as LinkIcon, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { createPortal } from 'react-dom';
 import React, {
   useCallback,
   useEffect,
@@ -105,11 +106,10 @@ const EpisodeButton: React.FC<EpisodeButtonProps> = ({
 }) => {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const displayLabel = getEpisodeDisplayLabel(originalTitle, episodeNumber);
+  // 只要返回了原始集名就允许右键/长按。即使短标签与原名相同，
+  // 也不能把按钮设为 disabled，否则 PC 端不会触发 contextmenu。
   const canShowOriginalName =
-    enableOriginalNamePopup &&
-    !!originalTitle &&
-    originalTitle.trim() !== '' &&
-    originalTitle !== displayLabel;
+    enableOriginalNamePopup && !!originalTitle && originalTitle.trim() !== '';
 
   const showOriginalName = useCallback(() => {
     if (!canShowOriginalName || !buttonRef.current) return;
@@ -130,7 +130,7 @@ const EpisodeButton: React.FC<EpisodeButtonProps> = ({
     <button
       ref={buttonRef}
       type='button'
-      // netdisk 不用 disabled，否则当前集无法长按/右键查看原名
+      // 仅在可显示原名时保持可交互，否则当前集恢复禁用状态。
       disabled={canShowOriginalName ? undefined : isActive || undefined}
       aria-disabled={isActive || undefined}
       aria-current={isActive ? 'true' : undefined}
@@ -1378,29 +1378,32 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       />
 
       {/* 原集名 popup：移动端长按 / 桌面右键，样式对齐标题上方 aka 提示 */}
-      {episodeNamePopup && (
-        <div
-          className='fixed z-[1000] px-3 py-2 bg-gray-800 dark:bg-gray-900 text-white text-sm rounded-lg shadow-xl pointer-events-none max-w-[min(80vw,20rem)]'
-          style={{
-            left: episodeNamePopup.x,
-            top: episodeNamePopup.y,
-            transform:
-              episodeNamePopup.placement === 'top'
-                ? 'translate(-50%, -100%)'
-                : 'translate(-50%, 0)',
-          }}
-          role='tooltip'
-        >
-          <div className='text-sm break-words whitespace-normal'>
-            {episodeNamePopup.title}
-          </div>
-          {episodeNamePopup.placement === 'top' ? (
-            <div className='absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800 dark:border-t-gray-900' />
-          ) : (
-            <div className='absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-800 dark:border-b-gray-900' />
-          )}
-        </div>
-      )}
+      {episodeNamePopup &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className='fixed z-[1000] px-3 py-2 bg-gray-800 dark:bg-gray-900 text-white text-sm rounded-lg shadow-xl pointer-events-none max-w-[min(80vw,20rem)]'
+            style={{
+              left: episodeNamePopup.x,
+              top: episodeNamePopup.y,
+              transform:
+                episodeNamePopup.placement === 'top'
+                  ? 'translate(-50%, -100%)'
+                  : 'translate(-50%, 0)',
+            }}
+            role='tooltip'
+          >
+            <div className='text-sm break-words whitespace-normal'>
+              {episodeNamePopup.title}
+            </div>
+            {episodeNamePopup.placement === 'top' ? (
+              <div className='absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800 dark:border-t-gray-900' />
+            ) : (
+              <div className='absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-800 dark:border-b-gray-900' />
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

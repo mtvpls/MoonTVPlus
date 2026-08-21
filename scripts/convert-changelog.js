@@ -145,26 +145,47 @@ function updateVersionFile(version) {
   }
 }
 
-function updateVersionTs(version) {
+function generateVersionTs(version) {
+  return `/* eslint-disable no-console */
+
+const CURRENT_VERSION = '${version}';
+
+// 导出当前版本号供其他地方使用
+export { CURRENT_VERSION };
+`;
+}
+
+function convertVersionTxtToTs() {
+  const versionTxtPath = path.join(process.cwd(), 'VERSION.txt');
   const versionTsPath = path.join(process.cwd(), 'src/lib/version.ts');
   try {
-    let content = fs.readFileSync(versionTsPath, 'utf8');
+    const version = fs.readFileSync(versionTxtPath, 'utf8').trim();
+    if (!/^[\d.]+$/.test(version)) {
+      throw new Error(`VERSION.txt 内容无效: "${version}"`);
+    }
 
-    // 替换 CURRENT_VERSION 常量
-    const updatedContent = content.replace(
-      /const CURRENT_VERSION = ['"`][^'"`]+['"`];/,
-      `const CURRENT_VERSION = '${version}';`
-    );
+    const outputDir = path.dirname(versionTsPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
 
-    fs.writeFileSync(versionTsPath, updatedContent, 'utf8');
-    console.log(`✅ 已更新 version.ts: ${version}`);
+    fs.writeFileSync(versionTsPath, generateVersionTs(version), 'utf8');
+    console.log(`✅ 已从 VERSION.txt (${version}) 生成 version.ts`);
   } catch (error) {
-    console.error(`❌ 无法更新 version.ts:`, error.message);
+    console.error(`❌ 转换 VERSION.txt → version.ts 失败:`, error.message);
     process.exit(1);
   }
 }
 
 function main() {
+  // 独立模式：仅从 VERSION.txt 生成 version.ts
+  if (process.argv.includes('--sync-version')) {
+    console.log('正在转换 VERSION.txt → version.ts...');
+    convertVersionTxtToTs();
+    console.log('\n🎉 转换完成!');
+    return;
+  }
+
   try {
     const changelogPath = path.join(process.cwd(), 'CHANGELOG');
     const outputPath = path.join(process.cwd(), 'src/lib/changelog.ts');
@@ -202,11 +223,12 @@ function main() {
       // 在 GitHub Actions 中，更新版本文件
       console.log('正在更新版本文件...');
       updateVersionFile(latestVersion);
-      updateVersionTs(latestVersion);
+      convertVersionTxtToTs();
     } else {
       // 在本地运行时，只提示但不更新版本文件
       console.log('🔧 本地运行模式：跳过版本文件更新');
       console.log('💡 版本文件更新将在 git tag 触发的 release 工作流中完成');
+      console.log('💡 本地可执行 node scripts/convert-changelog.js --sync-version 从 VERSION.txt 同步 version.ts');
     }
 
     console.log(`✅ 成功生成 ${outputPath}`);

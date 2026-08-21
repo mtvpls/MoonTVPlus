@@ -9,8 +9,7 @@
 
 import { createHash, randomBytes } from 'crypto';
 import dgram from 'dgram';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import nodeFetch from 'node-fetch';
+import { safeFetch } from './safe-http';
 
 export type MagnetHealthLevel = 'good' | 'ok' | 'risk' | 'unknown';
 
@@ -300,10 +299,7 @@ async function fetchBinary(
     },
     signal: AbortSignal.timeout(timeoutMs),
   };
-  if (proxy) {
-    init.agent = new HttpsProxyAgent(proxy, { timeout: timeoutMs, keepAlive: false });
-  }
-  const resp = (await nodeFetch(url, init)) as any;
+  const resp = (await safeFetch(url, init, proxy)) as any;
   if (!resp.ok) throw new Error(`下载失败 HTTP ${resp.status}`);
   const ab = await resp.arrayBuffer();
   return Buffer.from(ab);

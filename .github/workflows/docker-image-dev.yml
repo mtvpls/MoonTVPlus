@@ -41,6 +41,10 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Read version
+        id: version
+        run: echo "version=v$(tr -d '[:space:]' < VERSION.txt)" >> "$GITHUB_OUTPUT"
+
       # 新增步骤：根据分支动态设置镜像名称
       - name: Set image name based on branch
         id: set_image_name
@@ -74,11 +78,13 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            # 1. 只有在手动触发时，才使用输入的 tag
+            # 1. 版本号标签，始终打上（来自 VERSION.txt）
+            type=raw,value=${{ steps.version.outputs.version }}
+            # 2. 只有在手动触发时，才使用输入的 tag
             type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
-            # 2. 推送到分支时，使用分支名作为 tag (e.g., 'dev', 'main')
+            # 3. 推送到分支时，使用分支名作为 tag (e.g., 'dev', 'main')
             type=ref,event=branch
-            # 3. 只有当是默认分支(通常是main)时，才打 'latest' 标签
+            # 4. 只有当是默认分支(通常是main)时，才打 'latest' 标签
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push by digest
@@ -113,6 +119,13 @@ jobs:
     needs:
       - build
     steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=v$(tr -d '[:space:]' < VERSION.txt)" >> "$GITHUB_OUTPUT"
+
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
@@ -139,6 +152,7 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
@@ -156,17 +170,37 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          # 更改：使用从 meta 生成的所有标签来创建 manifest
-          # 将逗号分隔的标签列表转换为 ' -t <tag1> -t <tag2> ...' 的格式
-          FORMATTED_TAGS=$(echo "${{ steps.meta.outputs.tags }}" | sed 's/,/ -t /g')
-          
-          docker buildx imagetools create -t $FORMATTED_TAGS \
+          # metadata-action 的 tags 输出是换行分隔的，用官方 JSON 输出转成 -t 参数
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+  cleanup-untagged:
+    runs-on: ubuntu-latest
+    needs:
+      - merge
+    steps:
+      - name: Set package name based on branch
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "PACKAGE_NAME=moontvplus" >> $GITHUB_ENV
+          else
+            echo "PACKAGE_NAME=moontvplus-dev2" >> $GITHUB_ENV
+          fi
+
+      - name: Delete untagged image versions
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          owner: ${{ github.repository_owner }}
+          package: ${{ env.PACKAGE_NAME }}
+          delete-untagged: true
+          validate: true
 
   cleanup-refresh:
     runs-on: ubuntu-latest
     needs:
-      - merge
+      - cleanup-untagged
     if: always()
     steps:
       - name: Delete workflow runs

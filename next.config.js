@@ -150,6 +150,16 @@ const createNextConfig = (phase) => {
               ),
             }
           : {}),
+        // opencc-js 字典体积巨大（~1.9MB），仅客户端繁简转换需要。
+        // server 构建用空实现 shim 替换，避免字典内联进 Worker；client 构建用真库。
+        ...(isCloudflare && isServer
+          ? {
+              'opencc-js': path.resolve(
+                __dirname,
+                'src/lib/cloudflare-shims/opencc-js.ts'
+              ),
+            }
+          : {}),
       };
       config.externals = (config.externals || []).filter((external) => {
         return !(

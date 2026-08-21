@@ -4,14 +4,10 @@
  */
 
 import * as fs from 'fs';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import nodeFetch, { RequestInit } from 'node-fetch';
 import * as path from 'path';
 import { URL } from 'url';
 
-type NodeFetchOptions = RequestInit & {
-  agent?: HttpsProxyAgent<string>;
-};
+import { safeFetch } from './safe-http';
 
 export interface OfflineDownloadTask {
   id: string;
@@ -434,20 +430,11 @@ export class OfflineDownloader {
     );
   }
 
-  private getRequestOptions(url: string, timeout = 30000): NodeFetchOptions {
-    const options: NodeFetchOptions = {
+  private getRequestOptions(url: string, timeout = 30000): RequestInit {
+    return {
       headers: this.getHeaders(url),
       signal: AbortSignal.timeout(timeout) as unknown as RequestInit['signal'],
     };
-
-    if (this.proxy && !this.isCloudflareEnvironment()) {
-      options.agent = new HttpsProxyAgent(this.proxy, {
-        timeout: 30000,
-        keepAlive: false,
-      });
-    }
-
-    return options;
   }
 
   private async fetchUrl(url: string, timeout = 30000): Promise<Response> {
@@ -458,7 +445,7 @@ export class OfflineDownloader {
       });
     }
 
-    return nodeFetch(url, this.getRequestOptions(url, timeout)) as unknown as Promise<Response>;
+    return safeFetch(url, this.getRequestOptions(url, timeout), this.proxy) as unknown as Promise<Response>;
   }
 
   /**
@@ -475,7 +462,8 @@ export class OfflineDownloader {
       throw new Error('响应体为空');
     }
 
-    const body = response.body as unknown as NodeJS.ReadableStream | null;
+    const body = (await (response as any).getBody?.()) ??
+      (response.body as unknown as NodeJS.ReadableStream | null);
 
     if (!body || typeof body.pipe !== 'function') {
       const arrayBuffer = await response.arrayBuffer();

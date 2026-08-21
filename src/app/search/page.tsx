@@ -48,6 +48,7 @@ import SearchResultFilter, {
 import SearchSuggestions from '@/components/SearchSuggestions';
 import VideoCard, { VideoCardHandle } from '@/components/VideoCard';
 import VirtualScrollableGrid from '@/components/VirtualScrollableGrid';
+import { loadTraditionalToSimplifiedConverter } from '@/lib/danmaku/traditional-to-simplified';
 
 const PANSOU_CLOUD_TYPE_OPTIONS = Object.entries(CLOUD_TYPE_NAMES).map(
   ([value, label]) => ({ value, label })
@@ -90,6 +91,8 @@ function SearchPageClient() {
   );
   const [netdiskSearchEnabled, setNetdiskSearchEnabled] = useState(false);
   const [magnetSearchEnabled, setMagnetSearchEnabled] = useState(false);
+  const [privateLibrarySearchEnabled, setPrivateLibrarySearchEnabled] =
+    useState(false);
   const [featureFlagsReady, setFeatureFlagsReady] = useState(false);
   // 繁体转简体转换器
   const converterRef = useRef<((text: string) => string) | null>(null);
@@ -1060,24 +1063,22 @@ function SearchPageClient() {
     const runtimeConfig = (window as any).RUNTIME_CONFIG || {};
     setNetdiskSearchEnabled(!!runtimeConfig.NETDISK_SEARCH_ENABLED);
     setMagnetSearchEnabled(!!runtimeConfig.MAGNET_SEARCH_ENABLED);
+    const hasPrivateLibrary = !!runtimeConfig.PRIVATE_LIBRARY_ENABLED;
+    setPrivateLibrarySearchEnabled(hasPrivateLibrary);
+    // 无私人影库权限时，强制关闭"只搜私人影库"（防止 localStorage 残留旧设置继续过滤）
+    if (!hasPrivateLibrary) {
+      setPrivateLibraryOnly(false);
+    }
     setFeatureFlagsReady(true);
 
     // 初始化繁体转简体转换器
     if (typeof window !== 'undefined') {
-      import('opencc-js')
-        .then((module) => {
-          try {
-            const OpenCC = module.default || module;
-            const converter = OpenCC.Converter({ from: 'hk', to: 'cn' });
-            converterRef.current = converter;
-            setConverterReady(true);
-          } catch (error) {
-            console.error('初始化繁体转简体转换器失败:', error);
-            setConverterReady(true); // 即使失败也设置为 true，避免阻塞
-          }
+      loadTraditionalToSimplifiedConverter()
+        .then((converter) => {
+          converterRef.current = converter;
+          setConverterReady(true);
         })
-        .catch((error) => {
-          console.error('加载 opencc-js 失败:', error);
+        .catch(() => {
           setConverterReady(true); // 即使失败也设置为 true，避免阻塞
         });
     } else {
@@ -1936,23 +1937,58 @@ function SearchPageClient() {
                         <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
                       </div>
                     </label>
-                    <label className='flex cursor-pointer select-none items-center justify-between gap-3 rounded-lg px-1 py-2'>
-                      <span className='text-sm text-gray-700 dark:text-gray-300'>
-                        只搜私人影库
+                    {privateLibrarySearchEnabled && (
+                      <label className='flex cursor-pointer select-none items-center justify-between gap-3 rounded-lg px-1 py-2'>
+                        <span className='text-sm text-gray-700 dark:text-gray-300'>
+                          只搜私人影库
+                        </span>
+                        <div className='relative'>
+                          <input
+                            type='checkbox'
+                            className='peer sr-only'
+                            checked={privateLibraryOnly}
+                            onChange={(e) =>
+                              setPrivateLibraryOnly(e.target.checked)
+                            }
+                          />
+                          <div className='h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 dark:bg-gray-600'></div>
+                          <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
+                        </div>
+                      </label>
+                    )}
+                    <div className='mt-2 border-t border-gray-200 pt-2 dark:border-gray-700'>
+                      <span className='px-1 text-sm text-gray-700 dark:text-gray-300'>
+                        显示方式
                       </span>
-                      <div className='relative'>
-                        <input
-                          type='checkbox'
-                          className='peer sr-only'
-                          checked={privateLibraryOnly}
-                          onChange={(e) =>
-                            setPrivateLibraryOnly(e.target.checked)
-                          }
-                        />
-                        <div className='h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 dark:bg-gray-600'></div>
-                        <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
+                      <div className='mt-2 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800'>
+                        <button
+                          type='button'
+                          onClick={() => setResultDisplayMode('card')}
+                          className={`inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                            resultDisplayMode === 'card'
+                              ? 'bg-green-500 text-white'
+                              : 'text-gray-600 hover:bg-white dark:text-gray-300 dark:hover:bg-gray-700'
+                          }`}
+                          aria-label='切换为卡片视图'
+                        >
+                          <Grid2x2 className='h-4 w-4' />
+                          <span>卡片</span>
+                        </button>
+                        <button
+                          type='button'
+                          onClick={() => setResultDisplayMode('list')}
+                          className={`inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                            resultDisplayMode === 'list'
+                              ? 'bg-green-500 text-white'
+                              : 'text-gray-600 hover:bg-white dark:text-gray-300 dark:hover:bg-gray-700'
+                          }`}
+                          aria-label='切换为列表视图'
+                        >
+                          <List className='h-4 w-4' />
+                          <span>列表</span>
+                        </button>
                       </div>
-                    </label>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2140,23 +2176,25 @@ function SearchPageClient() {
                               <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
                             </div>
                           </label>
-                          <label className='flex cursor-pointer select-none items-center justify-between gap-3 rounded-lg px-1 py-2'>
-                            <span className='text-sm text-gray-700 dark:text-gray-300'>
-                              只搜私人影库
-                            </span>
-                            <div className='relative'>
-                              <input
-                                type='checkbox'
-                                className='peer sr-only'
-                                checked={privateLibraryOnly}
-                                onChange={(e) =>
-                                  setPrivateLibraryOnly(e.target.checked)
-                                }
-                              />
-                              <div className='h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 dark:bg-gray-600'></div>
-                              <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
-                            </div>
-                          </label>
+                          {privateLibrarySearchEnabled && (
+                            <label className='flex cursor-pointer select-none items-center justify-between gap-3 rounded-lg px-1 py-2'>
+                              <span className='text-sm text-gray-700 dark:text-gray-300'>
+                                只搜私人影库
+                              </span>
+                              <div className='relative'>
+                                <input
+                                  type='checkbox'
+                                  className='peer sr-only'
+                                  checked={privateLibraryOnly}
+                                  onChange={(e) =>
+                                    setPrivateLibraryOnly(e.target.checked)
+                                  }
+                                />
+                                <div className='h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 dark:bg-gray-600'></div>
+                                <div className='absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4'></div>
+                              </div>
+                            </label>
+                          )}
                           <div className='mt-2 border-t border-gray-200 pt-2 dark:border-gray-700'>
                             <span className='px-1 text-sm text-gray-700 dark:text-gray-300'>
                               显示方式

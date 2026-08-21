@@ -41,6 +41,10 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Read version
+        id: version
+        run: echo "version=v$(tr -d '[:space:]' < VERSION.txt)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -62,6 +66,7 @@ jobs:
         with:
           images: ghcr.io/mtvpls/moontvplus
           tags: |
+            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
             type=raw,value=${{ github.event.inputs.tag || 'latest' }},enable={{is_default_branch}}
 
       - name: Build and push by digest
@@ -72,7 +77,9 @@ jobs:
           file: ./Dockerfile
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          tags: ghcr.io/mtvpls/moontvplus:${{ github.event.inputs.tag || 'latest' }}
+          tags: |
+            ghcr.io/mtvpls/moontvplus:${{ steps.version.outputs.version }}
+            ghcr.io/mtvpls/moontvplus:${{ github.event.inputs.tag || 'latest' }}
           outputs: type=image,name=ghcr.io/mtvpls/moontvplus,name-canonical=true,push=true
 
       - name: Export digest
@@ -94,6 +101,13 @@ jobs:
     needs:
       - build
     steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=v$(tr -d '[:space:]' < VERSION.txt)" >> "$GITHUB_OUTPUT"
+
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
@@ -118,13 +132,29 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create -t ghcr.io/mtvpls/moontvplus:${{ github.event.inputs.tag || 'latest' }} \
+          docker buildx imagetools create \
+            -t ghcr.io/mtvpls/moontvplus:${{ steps.version.outputs.version }} \
+            -t ghcr.io/mtvpls/moontvplus:${{ github.event.inputs.tag || 'latest' }} \
             $(printf 'ghcr.io/mtvpls/moontvplus@sha256:%s ' *)
+
+  cleanup-untagged:
+    runs-on: ubuntu-latest
+    needs:
+      - merge
+    steps:
+      - name: Delete untagged image versions
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          owner: mtvpls
+          package: moontvplus
+          delete-untagged: true
+          validate: true
 
   cleanup-refresh:
     runs-on: ubuntu-latest
     needs:
-      - merge
+      - cleanup-untagged
     if: always()
     steps:
       - name: Delete workflow runs

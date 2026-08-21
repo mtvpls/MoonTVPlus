@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import nodeFetch from 'node-fetch';
+import { safeFetch } from './safe-http';
 
 import { getNextApiKey } from './tmdb.client';
+import { getTmdbImageBaseUrl } from './tmdb-image-base';
 
 // TMDB API 默认 Base URL（不包含 /3/，由程序拼接）
 const DEFAULT_TMDB_BASE_URL = 'https://api.themoviedb.org';
@@ -28,20 +28,10 @@ async function universalFetch(url: string, proxy?: string): Promise<Response> {
     });
     return response as unknown as Response;
   } else {
-    // Node.js 环境：使用 node-fetch，支持 proxy
-    const fetchOptions: any = proxy
-      ? {
-          agent: new HttpsProxyAgent(proxy, {
-            timeout: 30000,
-            keepAlive: false,
-          }),
-          signal: AbortSignal.timeout(30000),
-        }
-      : {
-          signal: AbortSignal.timeout(15000),
-        };
+    // Node.js 环境：使用 node-fetch（safeFetch），支持 proxy
+    const signal = proxy ? AbortSignal.timeout(30000) : AbortSignal.timeout(15000);
 
-    return nodeFetch(url, fetchOptions) as unknown as Response;
+    return safeFetch(url, { signal }, proxy) as unknown as Response;
   }
 }
 
@@ -237,8 +227,6 @@ export function getTMDBImageUrl(
     return path;
   }
 
-  const baseUrl = typeof window !== 'undefined'
-    ? localStorage.getItem('tmdbImageBaseUrl') || 'https://image.tmdb.org'
-    : 'https://image.tmdb.org';
+  const baseUrl = getTmdbImageBaseUrl();
   return `${baseUrl}/t/p/${size}${path}`;
 }

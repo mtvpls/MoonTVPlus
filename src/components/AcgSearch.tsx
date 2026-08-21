@@ -4,6 +4,7 @@
 import {
   Activity,
   AlertCircle,
+  Copy,
   Download,
   ExternalLink,
   Loader2,
@@ -121,6 +122,7 @@ export default function AcgSearch({
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [copyingId, setCopyingId] = useState<string | null>(null);
   const [showNameDialog, setShowNameDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState<AcgSearchItem | null>(null);
   const [customName, setCustomName] = useState('');
@@ -490,6 +492,31 @@ export default function AcgSearch({
     }
   };
 
+  // 复制磁链：原样复制 RSS 里的链接（磁链复制磁链，.torrent 复制 .torrent），纯前端不走服务器
+  const handleCopyMagnet = async (item: AcgSearchItem, index: number) => {
+    const itemId = getAcgItemId(item, index);
+    const link = item.torrentUrl || item.link;
+    if (!link || copyingId === itemId) return;
+
+    setCopyingId(itemId);
+    try {
+      await navigator.clipboard.writeText(link);
+      setToast({
+        message: '链接已复制',
+        type: 'success',
+        onClose: () => setToast(null),
+      });
+    } catch (err: any) {
+      setToast({
+        message: err.message || '复制失败',
+        type: 'error',
+        onClose: () => setToast(null),
+      });
+    } finally {
+      setCopyingId(null);
+    }
+  };
+
   const renderBody = () => {
     if (loading && allItems.length === 0) {
       return (
@@ -634,6 +661,19 @@ export default function AcgSearch({
                       <span>{health ? '重新测活' : '测活'}</span>
                     </>
                   )}
+                </button>
+                <button
+                  onClick={() => handleCopyMagnet(item, index)}
+                  disabled={(!item.torrentUrl && !item.link) || copyingId === itemId}
+                  className='flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-200 text-gray-700 text-sm hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                  title='复制磁链'
+                >
+                  {copyingId === itemId ? (
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                  ) : (
+                    <Copy className='h-4 w-4' />
+                  )}
+                  <span>复制磁链</span>
                 </button>
                 <a
                   href={item.link || item.torrentUrl || '#'}

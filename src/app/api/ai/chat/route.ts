@@ -6,11 +6,24 @@ import {
   orchestrateDataSources,
   VideoContext,
 } from '@/lib/ai-orchestrator';
+import {
+  buildAgentSystemPrompt,
+  buildAgentTools,
+  HistoryTurn,
+  NewProtocol,
+  runToolAgent,
+  ToolDataSources,
+} from '@/lib/ai-tool-agent';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { hasFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
+
+function normalizeClaudeBaseURL(baseURL: string): string {
+  const normalized = baseURL.trim().replace(/\/+$/, '');
+  return /\/v1$/i.test(normalized) ? normalized : `${normalized}/v1`;
+}
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -20,7 +33,7 @@ interface ChatMessage {
 interface ChatRequest {
   message: string;
   context?: VideoContext;
-  history?: ChatMessage[];
+  history?: HistoryTurn[];
 }
 
 /**
@@ -196,11 +209,135 @@ function transformToSSE(
         }
       } catch (error) {
         console.error('Stream error:', error);
-        controller.error(error);
+        const message = error instanceof Error ? error.message : String(error);
+        controller.enqueue(
+          new TextEncoder().encode(`data: ${JSON.stringify({ error: `AI请求失败: ${message}` })}\n\n`)
+        );
       } finally {
         controller.close();
       }
     },
+  });
+}
+
+/**
+ * 新版（工具式调用）：模型自主调用 联网搜索/豆瓣/TMDB 工具后输出回答。
+ * 支持 OpenAI 普通协议 / OpenAI Response 协议 / Claude Messages 协议。
+ */
+async function handleNewMode(
+  aiConfig: any,
+  adminConfig: any,
+  body: ChatRequest,
+  request: NextRequest,
+  username?: string
+): Promise<NextResponse> {
+  const { message, context, history = [] } = body;
+  const protocol: NewProtocol =
+    aiConfig.NewProtocol === 'openai-responses' || aiConfig.NewProtocol === 'claude'
+      ? aiConfig.NewProtocol
+      : 'openai-completions';
+
+
+  // 解析凭据
+  let apiKey = '';
+  let baseURL = '';
+  let model = '';
+  if (protocol === 'claude') {
+    apiKey = aiConfig.ClaudeApiKey || '';
+    baseURL = normalizeClaudeBaseURL(aiConfig.ClaudeBaseURL || 'https://api.anthropic.com');
+    model = aiConfig.ClaudeModel || '';
+  } else {
+    apiKey = aiConfig.OpenAIApiKey || aiConfig.CustomApiKey || '';
+    baseURL = aiConfig.OpenAIBaseURL || aiConfig.CustomBaseURL || '';
+    model = aiConfig.OpenAIModel || aiConfig.CustomModel || 'gpt-3.5-turbo';
+  }
+
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: `新版模式（${protocol}）未配置 API Key` },
+      { status: 400 }
+    );
+  }
+  if (!model) {
+    return NextResponse.json(
+      { error: `新版模式（${protocol}）未配置模型名称` },
+      { status: 400 }
+    );
+  }
+  if (!baseURL) {
+    return NextResponse.json(
+      { error: `新版模式（${protocol}）未配置 Base URL` },
+      { status: 400 }
+    );
+  }
+
+  // 组装数据源
+  const dataSources: ToolDataSources = {
+    webSearch:
+      aiConfig.EnableWebSearch && aiConfig.WebSearchProvider
+        ? {
+            provider: aiConfig.WebSearchProvider,
+            apiKey:
+              aiConfig.WebSearchProvider === 'tavily'
+                ? aiConfig.TavilyApiKey
+                : aiConfig.WebSearchProvider === 'serper'
+                  ? aiConfig.SerperApiKey
+                  : aiConfig.WebSearchProvider === 'serpapi'
+                    ? aiConfig.SerpApiKey
+                    : '',
+          }
+        : undefined,
+    tmdb:
+      adminConfig?.SiteConfig?.TMDBApiKey
+        ? {
+            apiKey: adminConfig.SiteConfig.TMDBApiKey,
+            proxy: adminConfig.SiteConfig.TMDBProxy,
+            reverseProxy: adminConfig.SiteConfig.TMDBReverseProxy,
+          }
+        : undefined,
+    username,
+  };
+  // 无 key 时不注册 web_search 工具
+  if (dataSources.webSearch && !dataSources.webSearch.apiKey && dataSources.webSearch.provider !== 'bing') {
+    dataSources.webSearch = undefined;
+  }
+
+  const systemPrompt = buildAgentSystemPrompt({
+    customSystemPrompt: aiConfig.SystemPrompt,
+    context,
+  });
+
+  const result = await runToolAgent({
+    protocol,
+    apiKey,
+    baseURL,
+    model,
+    maxTokens: aiConfig.MaxTokens ?? 1000,
+    temperature: aiConfig.Temperature ?? 0.7,
+    maxContext: aiConfig.MaxContext ?? 131072,
+    compressThreshold: aiConfig.CompressThreshold ?? 90,
+    streaming: aiConfig.EnableStreaming !== false,
+    systemPrompt,
+    history,
+    message,
+    tools: buildAgentTools(dataSources),
+    dataSources,
+    signal: request.signal,
+  });
+
+  if (result.kind === 'stream') {
+    return new NextResponse(result.stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    });
+  }
+
+  return NextResponse.json({
+    content: result.content,
+    ...(result.compressedSummary ? { compressedSummary: result.compressedSummary } : {}),
   });
 }
 
@@ -238,6 +375,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 新版（工具式调用）分支：由管理员开启
+    if (aiConfig.EnableNewMode) {
+      return await handleNewMode(aiConfig, adminConfig, body, request, authInfo.username);
+    }
+
     console.log('📨 收到AI聊天请求:', {
       message: message.slice(0, 50),
       context,
@@ -269,7 +411,7 @@ export async function POST(request: NextRequest) {
 
     console.log('🎯 数据协调完成, systemPrompt长度:', orchestrationResult.systemPrompt.length);
 
-    // 5. 构建消息列表
+    // 5. 构建消息列表（旧模式无工具式调用，历史需剥离 toolCalls 字段）
     const systemPrompt = aiConfig.SystemPrompt
       ? `${aiConfig.SystemPrompt}\n\n${orchestrationResult.systemPrompt}`
       : orchestrationResult.systemPrompt;
@@ -277,7 +419,7 @@ export async function POST(request: NextRequest) {
     const messages: ChatMessage[] = [
       { role: 'user', content: systemPrompt },
       { role: 'assistant', content: '明白了，我会按照要求回答用户的问题。' },
-      ...history,
+      ...history.map((h) => ({ role: h.role, content: h.content })),
       { role: 'user', content: message },
     ];
 
