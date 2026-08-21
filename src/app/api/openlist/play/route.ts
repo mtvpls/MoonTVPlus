@@ -4,58 +4,28 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
-import { requireFeaturePermission } from '@/lib/permissions';
 import { OpenListClient } from '@/lib/openlist.client';
+import { requireFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
 /**
- * 使用 HEAD 请求跟随重定向获取最终 URL（直连方法 - 降级使用）
+ * 构建同源代理播放 URL（format=json 时使用）
+ * 绕过第三方直链（如夸克网盘）无 CORS 头导致的跨域播放失败
  */
-async function getFinalUrl(url: string, maxRedirects = 5): Promise<string> {
-  let currentUrl = url;
-  let redirectCount = 0;
-
-  while (redirectCount < maxRedirects) {
-    try {
-      const response = await fetch(currentUrl, {
-        method: 'HEAD',
-        redirect: 'manual',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      });
-
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('location');
-        if (!location) {
-          return currentUrl;
-        }
-
-        if (location.startsWith('http://') || location.startsWith('https://')) {
-          currentUrl = location;
-        } else if (location.startsWith('/')) {
-          const urlObj = new URL(currentUrl);
-          currentUrl = `${urlObj.protocol}//${urlObj.host}${location}`;
-        } else {
-          const urlObj = new URL(currentUrl);
-          const pathParts = urlObj.pathname.split('/');
-          pathParts.pop();
-          pathParts.push(location);
-          currentUrl = `${urlObj.protocol}//${urlObj.host}${pathParts.join('/')}`;
-        }
-
-        redirectCount++;
-      } else {
-        return currentUrl;
-      }
-    } catch (error) {
-      console.error('[openlist/play] 获取最终 URL 失败:', error);
-      return currentUrl;
-    }
+function buildProxyUrl(
+  folderName: string,
+  fileName: string,
+  quality?: string
+): string {
+  const params = new URLSearchParams({
+    folder: folderName,
+    fileName,
+  });
+  if (quality) {
+    params.set('quality', quality);
   }
-
-  return currentUrl;
+  return `/api/openlist/video-proxy?${params.toString()}`;
 }
 
 /**
@@ -127,17 +97,12 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // 如果指定了 format=json，使用 getFinalUrl 并返回 JSON
+      // 如果指定了 format=json，返回同源代理地址（避免第三方直链无 CORS 头导致跨域播放失败）
       if (format === 'json') {
-        const finalUrl = await getFinalUrl(fileResponse.data.raw_url);
-
-        // 检查URL是否为空
-        if (!finalUrl || finalUrl.trim() === '') {
-          throw new Error('获取到的播放链接为空');
-        }
+        const proxyUrl = buildProxyUrl(folderName, fileName);
 
         return NextResponse.json({
-          url: finalUrl,
+          url: proxyUrl,
           refresh14m: pathMetaResolved.refresh14m,
           category: pathMetaResolved.category,
         });
@@ -181,18 +146,16 @@ export async function GET(request: NextRequest) {
         throw new Error('未找到已完成的播放链接');
       }
 
-      // 如果指定了 format=json，尝试解析到最终直链后再返回 JSON
+      // 如果指定了 format=json，返回同源代理地址（避免第三方直链无 CORS 头导致跨域播放失败）
       if (format === 'json') {
-        const resolvedQualities = await Promise.all(
-          qualities.map(async (quality: any) => ({
-            ...quality,
-            url: await getFinalUrl(quality.url),
-          }))
-        );
+        const proxyQualities = qualities.map((quality: any) => ({
+          name: quality.name,
+          url: buildProxyUrl(folderName, fileName, quality.name),
+        }));
 
         return NextResponse.json({
-          url: resolvedQualities[0].url,
-          qualities: resolvedQualities,
+          url: buildProxyUrl(folderName, fileName, qualities[0].name),
+          qualities: proxyQualities,
           refresh14m: pathMetaResolved.refresh14m,
           category: pathMetaResolved.category,
         });
@@ -218,17 +181,12 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // 如果指定了 format=json，使用 getFinalUrl 并返回 JSON
+      // 如果指定了 format=json，返回同源代理地址（避免第三方直链无 CORS 头导致跨域播放失败）
       if (format === 'json') {
-        const finalUrl = await getFinalUrl(fileResponse.data.raw_url);
-
-        // 检查URL是否为空
-        if (!finalUrl || finalUrl.trim() === '') {
-          throw new Error('获取到的播放链接为空');
-        }
+        const proxyUrl = buildProxyUrl(folderName, fileName);
 
         return NextResponse.json({
-          url: finalUrl,
+          url: proxyUrl,
           refresh14m: pathMetaResolved.refresh14m,
           category: pathMetaResolved.category,
         });
