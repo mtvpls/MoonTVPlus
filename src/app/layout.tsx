@@ -138,6 +138,10 @@ export default async function RootLayout({
     process.env.LEGADO_ENABLED === 'true';
   let musicProxyEnabled = true;
   let advancedRecommendationEnabled = false;
+  // 特殊源名单：供客户端按入口隔离收藏与播放记录。
+  // 入口开关是本机 cookie，与存储模式无关，所以 localstorage 模式也要注入；
+  // getConfig() 有模块级缓存，generateMetadata 里已经调过一次，这里不产生额外读取。
+  const specialSourceApis = (await getConfig()).SpecialSourceApis || [];
   let userFeatureAccess =
     storageType === 'localstorage'
       ? await getUserFeatureAccess(process.env.USERNAME || 'localstorage-owner')
@@ -341,6 +345,7 @@ export default async function RootLayout({
     NETDISK_TRANSFER_ENABLED: userFeatureAccess.netdisk_transfer,
     NETDISK_TEMP_PLAY_ENABLED: userFeatureAccess.netdisk_temp_play,
     FESTIVE_EFFECT_ENABLED: process.env.FESTIVE_EFFECT_ENABLED === 'true',
+    SPECIAL_SOURCE_APIS: specialSourceApis,
   };
 
   return (

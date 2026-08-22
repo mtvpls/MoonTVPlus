@@ -29,8 +29,14 @@ export async function fetchVideoDetail({
     // 如果特殊源返回 null，继续使用标准流程
   }
 
-  const apiSites = await getAvailableApiSites();
-  const apiSite = apiSites.find((site) => site.key === source);
+  // 源已由调用方（收藏、定时任务）持有，此处按 key 直查两个分区，不做入口隔离
+  const [normalSites, specialSites] = await Promise.all([
+    getAvailableApiSites(),
+    getAvailableApiSites(undefined, true),
+  ]);
+  const apiSite = [...normalSites, ...specialSites].find(
+    (site) => site.key === source
+  );
   if (!apiSite) {
     throw new Error('无效的API来源');
   }

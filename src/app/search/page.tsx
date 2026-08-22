@@ -33,11 +33,16 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { SearchResult } from '@/lib/types';
-import { appendSpecialSourceParam, isSpecialSourcesEnabledOnDevice } from '@/lib/special-source.client';
+import {
+  appendSpecialSourceParam,
+  isSpecialSourceContext,
+  SPECIAL_SOURCE_PATH,
+} from '@/lib/special-source.client';
 import { processImageUrl } from '@/lib/utils';
 
 import AcgSearch from '@/components/AcgSearch';
 import CapsuleSwitch from '@/components/CapsuleSwitch';
+import ContinueWatching from '@/components/ContinueWatching';
 import ImageViewer from '@/components/ImageViewer';
 import PageLayout from '@/components/PageLayout';
 import PansouSearch, { CLOUD_TYPE_NAMES } from '@/components/PansouSearch';
@@ -61,7 +66,7 @@ type SearchCachePayload = {
   updatedAt: number;
 };
 
-function SearchPageClient() {
+export function SearchPageClient({ searchBase = '/search' }: { searchBase?: string }) {
   // 搜索历史
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   // 返回顶部按钮显示状态
@@ -140,7 +145,7 @@ function SearchPageClient() {
   // 生成缓存键
   const getCacheKey = (query: string) => {
     const suffixParts = [
-      isSpecialSourcesEnabledOnDevice() ? 'special' : '',
+      isSpecialSourceContext() ? 'special' : '',
       privateLibraryOnly ? 'private' : '',
     ].filter(Boolean);
     const suffix = suffixParts.length > 0 ? `_${suffixParts.join('_')}` : '';
@@ -872,16 +877,20 @@ function SearchPageClient() {
     const preferParam = params.isAggregate ? '&prefer=true' : '';
 
     if (params.isAggregate || !params.source || !params.id) {
-      return `/play?title=${encodeURIComponent(
-        params.title.trim()
-      )}${yearParam}${typeParam}${preferParam}${queryParam}`;
+      return appendSpecialSourceParam(
+        `/play?title=${encodeURIComponent(
+          params.title.trim()
+        )}${yearParam}${typeParam}${preferParam}${queryParam}`
+      );
     }
 
-    return `/play?source=${params.source}&id=${
-      params.id
-    }&title=${encodeURIComponent(
-      params.title.trim()
-    )}${yearParam}${preferParam}${queryParam}${typeParam}`;
+    return appendSpecialSourceParam(
+      `/play?source=${params.source}&id=${
+        params.id
+      }&title=${encodeURIComponent(
+        params.title.trim()
+      )}${yearParam}${preferParam}${queryParam}${typeParam}`
+    );
   };
 
   const renderTag = (label: string, className: string) => (
@@ -1218,7 +1227,7 @@ function SearchPageClient() {
             const trimmedConverted = query.trim();
             // 使用 replace 而不是 push，避免在历史记录中留下繁体版本
             router.replace(
-              `/search?q=${encodeURIComponent(trimmedConverted)}${
+              `${searchBase}?q=${encodeURIComponent(trimmedConverted)}${
                 searchParams.get('type')
                   ? `&type=${searchParams.get('type')}`
                   : ''
@@ -1586,15 +1595,15 @@ function SearchPageClient() {
     // 根据当前选项卡执行不同的搜索
     if (activeTab === 'video') {
       // 影视搜索
-      router.push(`/search?q=${encodeURIComponent(trimmed)}&type=video`);
+      router.push(`${searchBase}?q=${encodeURIComponent(trimmed)}&type=video`);
       // 其余由 searchParams 变化的 effect 处理
     } else if (activeTab === 'pansou') {
       // 网盘搜索 - 触发搜索
-      router.push(`/search?q=${encodeURIComponent(trimmed)}&type=pansou`);
+      router.push(`${searchBase}?q=${encodeURIComponent(trimmed)}&type=pansou`);
       setTriggerPansouSearch((prev) => !prev); // 切换状态来触发搜索
     } else if (activeTab === 'acg') {
       // ACG 磁力搜索 - 触发搜索
-      router.push(`/search?q=${encodeURIComponent(trimmed)}&type=acg`);
+      router.push(`${searchBase}?q=${encodeURIComponent(trimmed)}&type=acg`);
       setTriggerAcgSearch((prev) => !prev);
     }
   };
@@ -1628,19 +1637,19 @@ function SearchPageClient() {
     if (activeTab === 'video') {
       // 影视搜索
       router.push(
-        `/search?q=${encodeURIComponent(processedSuggestion)}&type=video`
+        `${searchBase}?q=${encodeURIComponent(processedSuggestion)}&type=video`
       );
       // 其余由 searchParams 变化的 effect 处理
     } else if (activeTab === 'pansou') {
       // 网盘搜索 - 触发搜索
       router.push(
-        `/search?q=${encodeURIComponent(processedSuggestion)}&type=pansou`
+        `${searchBase}?q=${encodeURIComponent(processedSuggestion)}&type=pansou`
       );
       setTriggerPansouSearch((prev) => !prev);
     } else if (activeTab === 'acg') {
       // ACG 磁力搜索 - 触发搜索
       router.push(
-        `/search?q=${encodeURIComponent(processedSuggestion)}&type=acg`
+        `${searchBase}?q=${encodeURIComponent(processedSuggestion)}&type=acg`
       );
       setTriggerAcgSearch((prev) => !prev);
     }
@@ -1777,13 +1786,13 @@ function SearchPageClient() {
     const currentQuery = searchParams.get('q');
     if (currentQuery) {
       router.push(
-        `/search?q=${encodeURIComponent(currentQuery)}&type=${newTab}`
+        `${searchBase}?q=${encodeURIComponent(currentQuery)}&type=${newTab}`
       );
     }
   };
 
   return (
-    <PageLayout activePath='/search'>
+    <PageLayout activePath={searchBase}>
       <div className='px-4 sm:px-10 py-4 sm:py-8 overflow-visible mb-10'>
         {/* 搜索框 */}
         <div className='mb-0'>
@@ -1833,7 +1842,7 @@ function SearchPageClient() {
                   setShowResults(true);
                   setShowSuggestions(false);
                   router.push(
-                    `/search?q=${encodeURIComponent(trimmed)}&type=${activeTab}`
+                    `${searchBase}?q=${encodeURIComponent(trimmed)}&type=${activeTab}`
                   );
                   if (activeTab === 'pansou') {
                     setTriggerPansouSearch((prev) => !prev);
@@ -2456,7 +2465,13 @@ function SearchPageClient() {
                 </>
               )}
             </section>
-          ) : searchHistory.length > 0 ? (
+          ) : (
+            <>
+              {/* /under 入口下展示特殊源的继续观看（播放记录按入口隔离） */}
+              {searchBase === SPECIAL_SOURCE_PATH && activeTab === 'video' && (
+                <ContinueWatching />
+              )}
+              {searchHistory.length > 0 && (
             // 搜索历史
             <section className='mb-12'>
               <h2 className='mb-4 text-xl font-bold text-gray-800 text-left dark:text-gray-200'>
@@ -2486,14 +2501,14 @@ function SearchPageClient() {
                         if (activeTab === 'video') {
                           // 影视搜索
                           router.push(
-                            `/search?q=${encodeURIComponent(
+                            `${searchBase}?q=${encodeURIComponent(
                               item.trim()
                             )}&type=video`
                           );
                         } else if (activeTab === 'pansou') {
                           // 网盘搜索
                           router.push(
-                            `/search?q=${encodeURIComponent(
+                            `${searchBase}?q=${encodeURIComponent(
                               item.trim()
                             )}&type=pansou`
                           );
@@ -2501,7 +2516,7 @@ function SearchPageClient() {
                         } else if (activeTab === 'acg') {
                           // ACG 磁力搜索
                           router.push(
-                            `/search?q=${encodeURIComponent(
+                            `${searchBase}?q=${encodeURIComponent(
                               item.trim()
                             )}&type=acg`
                           );
@@ -2528,7 +2543,9 @@ function SearchPageClient() {
                 ))}
               </div>
             </section>
-          ) : null}
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -2557,6 +2574,8 @@ function SearchPageClient() {
   );
 }
 
+// /search 路由页面：App Router 要求 page.tsx 必须有默认导出。
+// SearchPageClient 同时被 /under 以 searchBase='/under' 复用。
 export default function SearchPage() {
   return (
     <Suspense>

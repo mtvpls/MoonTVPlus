@@ -6591,6 +6591,24 @@ const VideoSourceConfig = ({
     }>
   >([]);
 
+  // 一键批量操作的目标源：已禁用的、检测为无效的、检测为无法搜索的
+  const disabledSourceKeys = useMemo(
+    () => sources.filter((s) => s.disabled).map((s) => s.key),
+    [sources]
+  );
+  const invalidSourceKeys = useMemo(
+    () =>
+      validationResults.filter((r) => r.status === 'invalid').map((r) => r.key),
+    [validationResults]
+  );
+  const noResultSourceKeys = useMemo(
+    () =>
+      validationResults
+        .filter((r) => r.status === 'no_results')
+        .map((r) => r.key),
+    [validationResults]
+  );
+
   // dnd-kit 传感器
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -7546,6 +7564,62 @@ const VideoSourceConfig = ({
     });
   };
 
+  // 一键批量：不依赖勾选，直接对给定的 keys 走已有的 batch_enable / batch_disable
+  const handleQuickBatch = (
+    action: 'batch_enable' | 'batch_disable',
+    keys: string[],
+    actionName: string,
+    emptyMessage: string
+  ) => {
+    const closeConfirm = () =>
+      setConfirmModal({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => {},
+        onCancel: () => {},
+      });
+
+    if (keys.length === 0) {
+      showAlert({
+        type: 'warning',
+        title: `没有需要${
+          action === 'batch_enable' ? '启用' : '禁用'
+        }的视频源`,
+        message: emptyMessage,
+      });
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: '确认操作',
+      message: `确定要${actionName}吗？共 ${keys.length} 个视频源。`,
+      onConfirm: async () => {
+        try {
+          await withLoading(`batchSource_${action}`, () =>
+            callSourceApi({ action, keys })
+          );
+          showAlert({
+            type: 'success',
+            title: `${actionName}成功`,
+            message: `已处理 ${keys.length} 个视频源`,
+            timer: 2000,
+          });
+          setSelectedSources(new Set());
+        } catch (err) {
+          showAlert({
+            type: 'error',
+            title: `${actionName}失败`,
+            message: err instanceof Error ? err.message : '操作失败',
+          });
+        }
+        closeConfirm();
+      },
+      onCancel: closeConfirm,
+    });
+  };
+
   if (!config) {
     return (
       <div className='text-center text-gray-500 dark:text-gray-400'>
@@ -7558,10 +7632,10 @@ const VideoSourceConfig = ({
     <div className='space-y-6'>
       {/* 添加视频源表单 */}
       <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
-        <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+        <h4 className='shrink-0 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-300'>
           视频源列表
         </h4>
-        <div className='flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2'>
+        <div className='flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2'>
           {/* 批量操作按钮 - 移动端显示在下一行，PC端显示在左侧 */}
           {selectedSources.size > 0 && (
             <>
@@ -7615,9 +7689,9 @@ const VideoSourceConfig = ({
               <div className='hidden sm:block w-px h-6 bg-gray-300 dark:bg-gray-600 order-2'></div>
             </>
           )}
-          <div className='flex w-full flex-col gap-2 order-1 sm:order-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2'>
-            <div className='w-full overflow-x-auto sm:w-auto'>
-              <div className='ml-auto flex w-max items-center gap-2 whitespace-nowrap'>
+          <div className='flex w-full min-w-0 flex-col gap-2 order-1 sm:order-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2'>
+            <div className='w-full min-w-0 sm:w-auto'>
+              <div className='flex flex-wrap items-center justify-end gap-2'>
                 <button
                   onClick={openSpecialSourcesModal}
                   className={`${buttonStyles.secondary} flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
@@ -7654,8 +7728,8 @@ const VideoSourceConfig = ({
                 </button>
               </div>
             </div>
-            <div className='w-full overflow-x-auto sm:w-auto'>
-              <div className='ml-auto flex w-max items-center gap-2 whitespace-nowrap'>
+            <div className='w-full min-w-0 sm:w-auto'>
+              <div className='flex flex-wrap items-center justify-end gap-2'>
                 <button
                   onClick={() => setShowValidationModal(true)}
                   disabled={isValidating}
@@ -7670,6 +7744,86 @@ const VideoSourceConfig = ({
                     </>
                   ) : (
                     '有效性检测'
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    handleQuickBatch(
+                      'batch_enable',
+                      disabledSourceKeys,
+                      '启用全部源',
+                      '所有视频源都已处于启用状态'
+                    )
+                  }
+                  disabled={isLoading('batchSource_batch_enable')}
+                  className={`${
+                    isLoading('batchSource_batch_enable')
+                      ? buttonStyles.disabled
+                      : buttonStyles.success
+                  } flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
+                  title='把所有已禁用的视频源一键启用'
+                >
+                  <span>
+                    {isLoading('batchSource_batch_enable')
+                      ? '启用中...'
+                      : '启用全部源'}
+                  </span>
+                  {disabledSourceKeys.length > 0 && (
+                    <span className='rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold'>
+                      {disabledSourceKeys.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    handleQuickBatch(
+                      'batch_disable',
+                      invalidSourceKeys,
+                      '禁用无效源',
+                      '当前没有检测为无效的视频源，请先执行「有效性检测」'
+                    )
+                  }
+                  disabled={
+                    isValidating || isLoading('batchSource_batch_disable')
+                  }
+                  className={`${
+                    isValidating || isLoading('batchSource_batch_disable')
+                      ? buttonStyles.disabled
+                      : buttonStyles.danger
+                  } flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
+                  title='禁用有效性检测中连接失败（无效）的视频源'
+                >
+                  <span>禁用无效源</span>
+                  {invalidSourceKeys.length > 0 && (
+                    <span className='rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold'>
+                      {invalidSourceKeys.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    handleQuickBatch(
+                      'batch_disable',
+                      noResultSourceKeys,
+                      '禁用无法搜索源',
+                      '当前没有检测为无法搜索的视频源，请先执行「有效性检测」'
+                    )
+                  }
+                  disabled={
+                    isValidating || isLoading('batchSource_batch_disable')
+                  }
+                  className={`${
+                    isValidating || isLoading('batchSource_batch_disable')
+                      ? buttonStyles.disabled
+                      : buttonStyles.warning
+                  } flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
+                  title='禁用有效性检测中能连通但搜不到结果的视频源'
+                >
+                  <span>禁用无法搜索源</span>
+                  {noResultSourceKeys.length > 0 && (
+                    <span className='rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold'>
+                      {noResultSourceKeys.length}
+                    </span>
                   )}
                 </button>
                 <button
@@ -7817,7 +7971,7 @@ const VideoSourceConfig = ({
                     特殊源设置
                   </h3>
                   <p className='mt-1 text-sm text-gray-600 dark:text-gray-400'>
-                    选中的视频源默认对普通搜索隐藏，仅在当前设备访问 /special 开启后参与普通 Web 搜索。
+                    选中的视频源对普通搜索完全隐藏，只在 /under 入口可用；/under 也不会出现普通源。开关状态见 /sp。
                   </p>
                 </div>
                 <button
