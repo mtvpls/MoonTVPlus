@@ -10,6 +10,7 @@ import {
   deleteFavorite,
   generateStorageKey,
   isFavorited as checkIsFavorited,
+  isLivePlayRecordSavingEnabled,
   saveFavorite,
   savePlayRecord,
   subscribeToDataUpdates,
@@ -482,23 +483,25 @@ function LivePageClient() {
         if (selectedChannel) {
           fetchEpgData(selectedChannel, source);
 
-          // 保存播放记录
-          try {
-            await savePlayRecord(`live_${source.key}`, `live_${selectedChannel.id}`, {
-              title: selectedChannel.name,
-              source_name: source.name,
-              year: '',
-              cover: getLogoUrl(selectedChannel.logo, source.key),
-              index: 1,
-              total_episodes: 1,
-              play_time: 0,
-              total_time: 0,
-              save_time: Date.now(),
-              search_title: '',
-              origin: 'live',
-            });
-          } catch (err) {
-            console.error('保存播放记录失败:', err);
+          // 保存播放记录（由本地设置控制，默认关闭）
+          if (isLivePlayRecordSavingEnabled()) {
+            try {
+              await savePlayRecord(`live_${source.key}`, `live_${selectedChannel.id}`, {
+                title: selectedChannel.name,
+                source_name: source.name,
+                year: '',
+                cover: getLogoUrl(selectedChannel.logo, source.key),
+                index: 1,
+                total_episodes: 1,
+                play_time: 0,
+                total_time: 0,
+                save_time: Date.now(),
+                search_title: '',
+                origin: 'live',
+              });
+            } catch (err) {
+              console.error('保存播放记录失败:', err);
+            }
           }
 
           // 更新URL参数
@@ -672,8 +675,8 @@ function LivePageClient() {
       await fetchEpgData(channel, currentSource);
     }
 
-    // 保存播放记录
-    if (currentSource) {
+    // 保存播放记录（由本地设置控制，默认关闭）
+    if (currentSource && isLivePlayRecordSavingEnabled()) {
       try {
         await savePlayRecord(`live_${currentSource.key}`, `live_${channel.id}`, {
           title: channel.name,

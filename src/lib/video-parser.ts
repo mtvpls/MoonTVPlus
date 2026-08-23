@@ -7,6 +7,20 @@ export interface ParsedVideoInfo {
   isOVA?: boolean;
 }
 
+export function formatEpisodeDisplayTitle(
+  parsed: { season?: number; episode?: number; isOVA?: boolean },
+  hasMultipleSeasons: boolean
+): string | undefined {
+  if (!parsed.episode) return undefined;
+  if (parsed.isOVA) return `OVA ${parsed.episode}`;
+  if (hasMultipleSeasons && parsed.season) {
+    return `S${parsed.season.toString().padStart(2, '0')}E${parsed.episode
+      .toString()
+      .padStart(2, '0')}`;
+  }
+  return `第${parsed.episode}集`;
+}
+
 /**
  * 解析视频文件名
  */

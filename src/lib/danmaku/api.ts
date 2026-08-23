@@ -227,6 +227,9 @@ export async function getDanmakuByUrl(url: string): Promise<DanmakuComment[]> {
   }
 }
 
+// opencc-js 繁简转换逻辑已拆到独立客户端文件，避免服务端 bundle 内联其字典
+import { convertDanmakuText } from './traditional-to-simplified';
+
 // 将 danmu_api 的弹幕格式转换为 artplayer-plugin-danmuku 格式
 export function convertDanmakuFormat(
   comments: DanmakuComment[]
@@ -253,7 +256,7 @@ export function convertDanmakuFormat(
     else if (type === 4) mode = 2; // 底部
 
     return {
-      text: comment.m,
+      text: convertDanmakuText(comment.m),
       time,
       color,
       border: false,

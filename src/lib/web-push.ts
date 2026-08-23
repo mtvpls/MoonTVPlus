@@ -2,8 +2,7 @@
 
 import crypto from 'crypto';
 
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import nodeFetch from 'node-fetch';
+import { safeFetch } from './safe-http';
 
 import { lockManager } from './lock';
 import { IStorage, Notification, PushSubscriptionRecord } from './types';
@@ -138,14 +137,7 @@ async function fetchWebPushEndpoint(
     body: init.body,
   };
 
-  if (proxy) {
-    fetchOptions.agent = new HttpsProxyAgent(proxy, {
-      timeout: 30000,
-      keepAlive: false,
-    });
-  }
-
-  return nodeFetch(requestUrl, fetchOptions) as unknown as Response;
+  return safeFetch(requestUrl, fetchOptions, proxy) as unknown as Response;
 }
 
 function generateVapidKeys(): VapidKeys {

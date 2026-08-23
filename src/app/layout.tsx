@@ -86,6 +86,7 @@ export default async function RootLayout({
   let danmakuAutoLoadDefault = true;
   let recommendationDataSource = 'Mixed';
   let tmdbApiKey = '';
+  let tmdbImageBaseUrl = 'https://image.tmdb.org';
   let bangumiDataSource =
     (process.env.NEXT_PUBLIC_BANGUMI_DATA_SOURCE as any) || 'direct';
   let bangumiApiBaseUrl =
@@ -176,6 +177,8 @@ export default async function RootLayout({
     recommendationDataSource =
       config.SiteConfig.RecommendationDataSource || 'Mixed';
     tmdbApiKey = config.SiteConfig.TMDBApiKey || '';
+    tmdbImageBaseUrl =
+      config.SiteConfig.TMDBImageBaseUrl || 'https://image.tmdb.org';
     bangumiDataSource = config.SiteConfig.BangumiDataSource || 'direct';
     bangumiApiBaseUrl =
       config.SiteConfig.BangumiApiBaseUrl || 'https://api.bgm.tv';
@@ -285,6 +288,7 @@ export default async function RootLayout({
     EnableComments: enableComments,
     DANMAKU_AUTO_LOAD_DEFAULT: danmakuAutoLoadDefault,
     RecommendationDataSource: recommendationDataSource,
+    TMDB_IMAGE_BASE_URL: tmdbImageBaseUrl,
     BANGUMI_DATA_SOURCE: bangumiDataSource,
     BANGUMI_API_BASE_URL: bangumiApiBaseUrl,
     BANGUMI_IMAGE_BASE_URL: bangumiImageBaseUrl,
