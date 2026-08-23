@@ -2,13 +2,22 @@
 
 'use client';
 
-import { AlertCircle, CheckCircle, Eye, EyeOff, Send, User, Lock } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle,
+  Eye,
+  EyeOff,
+  Lock,
+  Send,
+  User,
+} from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 import { CURRENT_VERSION } from '@/lib/version';
 import { checkForUpdates, UpdateStatus } from '@/lib/version_check';
 
+import { LanguageToggle } from '@/components/LanguageToggle';
 import { useSite } from '@/components/SiteProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -42,12 +51,13 @@ function VersionDisplay() {
       <span className='font-mono'>v{CURRENT_VERSION}</span>
       {!isChecking && updateStatus !== UpdateStatus.FETCH_FAILED && (
         <div
-          className={`flex items-center gap-1.5 ${updateStatus === UpdateStatus.HAS_UPDATE
-            ? 'text-yellow-600 dark:text-yellow-400'
-            : updateStatus === UpdateStatus.NO_UPDATE
+          className={`flex items-center gap-1.5 ${
+            updateStatus === UpdateStatus.HAS_UPDATE
+              ? 'text-yellow-600 dark:text-yellow-400'
+              : updateStatus === UpdateStatus.NO_UPDATE
               ? 'text-green-600 dark:text-green-400'
               : ''
-            }`}
+          }`}
         >
           {updateStatus === UpdateStatus.HAS_UPDATE && (
             <>
@@ -81,10 +91,15 @@ function RegisterPageClient() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileLoaded, setTurnstileLoaded] = useState(false);
   const [siteConfig, setSiteConfig] = useState<any>(null);
-  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
+  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(
+    null
+  );
   const [backgroundImage, setBackgroundImage] = useState<string>('');
   const [registerSuccess, setRegisterSuccess] = useState(false);
-  const [telegramBind, setTelegramBind] = useState<{ code: string; deepLink?: string } | null>(null);
+  const [telegramBind, setTelegramBind] = useState<{
+    code: string;
+    deepLink?: string;
+  } | null>(null);
 
   const { siteName } = useSite();
 
@@ -111,8 +126,10 @@ function RegisterPageClient() {
       // 设置站点配置
       const config = {
         EnableRegistration: runtimeConfig?.ENABLE_REGISTRATION || false,
-        RequireRegistrationInviteCode: runtimeConfig?.REQUIRE_REGISTRATION_INVITE_CODE || false,
-        RegistrationRequireTurnstile: runtimeConfig?.REGISTRATION_REQUIRE_TURNSTILE || false,
+        RequireRegistrationInviteCode:
+          runtimeConfig?.REQUIRE_REGISTRATION_INVITE_CODE || false,
+        RegistrationRequireTurnstile:
+          runtimeConfig?.REGISTRATION_REQUIRE_TURNSTILE || false,
         TurnstileSiteKey: runtimeConfig?.TURNSTILE_SITE_KEY || '',
       };
       setSiteConfig(config);
@@ -126,7 +143,10 @@ function RegisterPageClient() {
 
   // 加载Cloudflare Turnstile脚本
   useEffect(() => {
-    if (!siteConfig?.RegistrationRequireTurnstile || !siteConfig?.TurnstileSiteKey) {
+    if (
+      !siteConfig?.RegistrationRequireTurnstile ||
+      !siteConfig?.TurnstileSiteKey
+    ) {
       return;
     }
 
@@ -152,12 +172,15 @@ function RegisterPageClient() {
 
     const container = document.getElementById('turnstile-container');
     if (container && (window as any).turnstile) {
-      const widgetId = (window as any).turnstile.render('#turnstile-container', {
-        sitekey: siteConfig.TurnstileSiteKey,
-        callback: (token: string) => {
-          setTurnstileToken(token);
-        },
-      });
+      const widgetId = (window as any).turnstile.render(
+        '#turnstile-container',
+        {
+          sitekey: siteConfig.TurnstileSiteKey,
+          callback: (token: string) => {
+            setTurnstileToken(token);
+          },
+        }
+      );
       setTurnstileWidgetId(widgetId);
     }
   }, [turnstileLoaded, siteConfig]);
@@ -200,8 +223,12 @@ function RegisterPageClient() {
         body: JSON.stringify({
           username,
           password,
-          inviteCode: siteConfig?.RequireRegistrationInviteCode ? inviteCode.trim() : undefined,
-          turnstileToken: siteConfig?.RegistrationRequireTurnstile ? turnstileToken : undefined,
+          inviteCode: siteConfig?.RequireRegistrationInviteCode
+            ? inviteCode.trim()
+            : undefined,
+          turnstileToken: siteConfig?.RegistrationRequireTurnstile
+            ? turnstileToken
+            : undefined,
         }),
       });
 
@@ -221,7 +248,11 @@ function RegisterPageClient() {
         router.replace(redirect);
       } else {
         // 注册失败，重置Turnstile
-        if (siteConfig?.RegistrationRequireTurnstile && turnstileWidgetId !== null && (window as any).turnstile) {
+        if (
+          siteConfig?.RegistrationRequireTurnstile &&
+          turnstileWidgetId !== null &&
+          (window as any).turnstile
+        ) {
           (window as any).turnstile.reset(turnstileWidgetId);
           setTurnstileToken(null);
         }
@@ -238,7 +269,11 @@ function RegisterPageClient() {
       }
     } catch (error) {
       // 网络错误，重置Turnstile
-      if (siteConfig?.RegistrationRequireTurnstile && turnstileWidgetId !== null && (window as any).turnstile) {
+      if (
+        siteConfig?.RegistrationRequireTurnstile &&
+        turnstileWidgetId !== null &&
+        (window as any).turnstile
+      ) {
         (window as any).turnstile.reset(turnstileWidgetId);
         setTurnstileToken(null);
       }
@@ -260,14 +295,19 @@ function RegisterPageClient() {
   return (
     <div
       className='relative min-h-screen flex items-center justify-center px-4 overflow-hidden'
-      style={backgroundImage ? {
-        backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
-      } : undefined}
+      style={
+        backgroundImage
+          ? {
+              backgroundImage: `url(${backgroundImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+            }
+          : undefined
+      }
     >
-      <div className='absolute top-4 right-4'>
+      <div className='absolute top-4 right-4 flex items-center gap-2'>
+        <LanguageToggle />
         <ThemeToggle />
       </div>
       <div className='relative z-10 w-full max-w-md rounded-3xl bg-gradient-to-b from-white/90 via-white/70 to-white/40 dark:from-zinc-900/90 dark:via-zinc-900/70 dark:to-zinc-900/40 shadow-2xl p-10 dark:border dark:border-zinc-800'>
@@ -284,7 +324,10 @@ function RegisterPageClient() {
                 <CheckCircle className='h-5 w-5' />
                 注册成功
               </div>
-              <p className='text-sm'>账号已创建。你可以现在绑定 Telegram，用于接收通知和后续快捷登录。</p>
+              <p className='text-sm'>
+                账号已创建。你可以现在绑定
+                Telegram，用于接收通知和后续快捷登录。
+              </p>
             </div>
 
             {telegramBind && (
@@ -300,162 +343,180 @@ function RegisterPageClient() {
                 {telegramBind.deepLink && (
                   <button
                     type='button'
-                    onClick={() => window.open(telegramBind.deepLink, '_blank', 'noopener,noreferrer')}
+                    onClick={() =>
+                      window.open(
+                        telegramBind.deepLink,
+                        '_blank',
+                        'noopener,noreferrer'
+                      )
+                    }
                     className='mb-3 inline-flex w-full items-center justify-center rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-sky-700'
                   >
                     打开 Telegram
                   </button>
                 )}
-                <p className='text-xs opacity-80'>绑定码 10 分钟内有效，也可稍后登录后在通知设置中重新生成。</p>
+                <p className='text-xs opacity-80'>
+                  绑定码 10 分钟内有效，也可稍后登录后在通知设置中重新生成。
+                </p>
               </div>
             )}
 
             <button
               type='button'
-              onClick={() => router.replace(searchParams.get('redirect') || '/login')}
+              onClick={() =>
+                router.replace(searchParams.get('redirect') || '/login')
+              }
               className='inline-flex w-full justify-center rounded-lg bg-green-600 py-3 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:bg-green-700'
             >
               前往登录
             </button>
           </div>
         ) : (
-        <form onSubmit={handleSubmit} className='space-y-6'>
-          <div>
-            <label htmlFor='username' className='sr-only'>
-              用户名
-            </label>
-            <div className='relative'>
-              <div className='absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none'>
-                <User className='h-5 w-5 text-gray-400 dark:text-gray-500' />
-              </div>
-              <input
-                id='username'
-                type='text'
-                autoComplete='username'
-                className='block w-full rounded-lg border-0 py-3 pl-10 pr-4 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-white/60 dark:ring-white/20 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none sm:text-base bg-white/60 dark:bg-zinc-800/60'
-                placeholder='输入用户名'
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor='password' className='sr-only'>
-              密码
-            </label>
-            <div className='relative'>
-              <div className='absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none'>
-                <Lock className='h-5 w-5 text-gray-400 dark:text-gray-500' />
-              </div>
-              <input
-                id='password'
-                type={showPassword ? 'text' : 'password'}
-                autoComplete='new-password'
-                className='block w-full rounded-lg border-0 py-3 pl-10 pr-12 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-white/60 dark:ring-white/20 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none sm:text-base bg-white/60 dark:bg-zinc-800/60'
-                placeholder='输入密码（至少6位）'
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <button
-                type='button'
-                className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? (
-                  <EyeOff className='h-5 w-5' />
-                ) : (
-                  <Eye className='h-5 w-5' />
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor='confirmPassword' className='sr-only'>
-              确认密码
-            </label>
-            <div className='relative'>
-              <div className='absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none'>
-                <Lock className='h-5 w-5 text-gray-400 dark:text-gray-500' />
-              </div>
-              <input
-                id='confirmPassword'
-                type={showConfirmPassword ? 'text' : 'password'}
-                autoComplete='new-password'
-                className='block w-full rounded-lg border-0 py-3 pl-10 pr-12 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-white/60 dark:ring-white/20 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none sm:text-base bg-white/60 dark:bg-zinc-800/60'
-                placeholder='再次输入密码'
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-              <button
-                type='button'
-                className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className='h-5 w-5' />
-                ) : (
-                  <Eye className='h-5 w-5' />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {siteConfig?.RequireRegistrationInviteCode && (
+          <form onSubmit={handleSubmit} className='space-y-6'>
             <div>
-              <label htmlFor='inviteCode' className='sr-only'>
-                邀请码
+              <label htmlFor='username' className='sr-only'>
+                用户名
               </label>
               <div className='relative'>
                 <div className='absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none'>
                   <User className='h-5 w-5 text-gray-400 dark:text-gray-500' />
                 </div>
                 <input
-                  id='inviteCode'
+                  id='username'
                   type='text'
+                  autoComplete='username'
                   className='block w-full rounded-lg border-0 py-3 pl-10 pr-4 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-white/60 dark:ring-white/20 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none sm:text-base bg-white/60 dark:bg-zinc-800/60'
-                  placeholder='输入邀请码'
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
+                  placeholder='输入用户名'
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                 />
               </div>
             </div>
-          )}
 
-          {/* Cloudflare Turnstile */}
-          {siteConfig?.RegistrationRequireTurnstile && siteConfig?.TurnstileSiteKey && (
-            <div id='turnstile-container' className='flex justify-center'></div>
-          )}
+            <div>
+              <label htmlFor='password' className='sr-only'>
+                密码
+              </label>
+              <div className='relative'>
+                <div className='absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none'>
+                  <Lock className='h-5 w-5 text-gray-400 dark:text-gray-500' />
+                </div>
+                <input
+                  id='password'
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete='new-password'
+                  className='block w-full rounded-lg border-0 py-3 pl-10 pr-12 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-white/60 dark:ring-white/20 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none sm:text-base bg-white/60 dark:bg-zinc-800/60'
+                  placeholder='输入密码（至少6位）'
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type='button'
+                  className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className='h-5 w-5' />
+                  ) : (
+                    <Eye className='h-5 w-5' />
+                  )}
+                </button>
+              </div>
+            </div>
 
-          {error && (
-            <p className='text-sm text-red-600 dark:text-red-400'>{error}</p>
-          )}
+            <div>
+              <label htmlFor='confirmPassword' className='sr-only'>
+                确认密码
+              </label>
+              <div className='relative'>
+                <div className='absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none'>
+                  <Lock className='h-5 w-5 text-gray-400 dark:text-gray-500' />
+                </div>
+                <input
+                  id='confirmPassword'
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  autoComplete='new-password'
+                  className='block w-full rounded-lg border-0 py-3 pl-10 pr-12 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-white/60 dark:ring-white/20 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none sm:text-base bg-white/60 dark:bg-zinc-800/60'
+                  placeholder='再次输入密码'
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                <button
+                  type='button'
+                  className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className='h-5 w-5' />
+                  ) : (
+                    <Eye className='h-5 w-5' />
+                  )}
+                </button>
+              </div>
+            </div>
 
-          {/* 注册按钮 */}
-          <button
-            type='submit'
-            disabled={
-              !username || !password || !confirmPassword || loading ||
-              (siteConfig?.RequireRegistrationInviteCode && !inviteCode.trim()) ||
-              (siteConfig?.RegistrationRequireTurnstile && !turnstileToken)
-            }
-            className='inline-flex w-full justify-center rounded-lg bg-green-600 py-3 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:from-green-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-50'
-          >
-            {loading ? '注册中...' : '注册'}
-          </button>
+            {siteConfig?.RequireRegistrationInviteCode && (
+              <div>
+                <label htmlFor='inviteCode' className='sr-only'>
+                  邀请码
+                </label>
+                <div className='relative'>
+                  <div className='absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none'>
+                    <User className='h-5 w-5 text-gray-400 dark:text-gray-500' />
+                  </div>
+                  <input
+                    id='inviteCode'
+                    type='text'
+                    className='block w-full rounded-lg border-0 py-3 pl-10 pr-4 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-white/60 dark:ring-white/20 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none sm:text-base bg-white/60 dark:bg-zinc-800/60'
+                    placeholder='输入邀请码'
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
 
-          {/* 返回登录链接 */}
-          <div className='text-center'>
+            {/* Cloudflare Turnstile */}
+            {siteConfig?.RegistrationRequireTurnstile &&
+              siteConfig?.TurnstileSiteKey && (
+                <div
+                  id='turnstile-container'
+                  className='flex justify-center'
+                ></div>
+              )}
+
+            {error && (
+              <p className='text-sm text-red-600 dark:text-red-400'>{error}</p>
+            )}
+
+            {/* 注册按钮 */}
             <button
-              type='button'
-              onClick={() => router.push('/login')}
-              className='text-sm text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors'
+              type='submit'
+              disabled={
+                !username ||
+                !password ||
+                !confirmPassword ||
+                loading ||
+                (siteConfig?.RequireRegistrationInviteCode &&
+                  !inviteCode.trim()) ||
+                (siteConfig?.RegistrationRequireTurnstile && !turnstileToken)
+              }
+              className='inline-flex w-full justify-center rounded-lg bg-green-600 py-3 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:from-green-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-50'
             >
-              已有账号？返回登录
+              {loading ? '注册中...' : '注册'}
             </button>
-          </div>
-        </form>
+
+            {/* 返回登录链接 */}
+            <div className='text-center'>
+              <button
+                type='button'
+                onClick={() => router.push('/login')}
+                className='text-sm text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors'
+              >
+                已有账号？返回登录
+              </button>
+            </div>
+          </form>
         )}
       </div>
 

@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { LanguageToggle } from '@/components/LanguageToggle';
 import { useSite } from '@/components/SiteProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -160,7 +161,8 @@ export default function BooksLayout({
               {meta.subtitle}
             </div>
           </div>
-          <div className='hidden md:block'>
+          <div className='hidden md:flex items-center gap-2'>
+            <LanguageToggle />
             <ThemeToggle />
           </div>
           {isRead ? (

@@ -2,13 +2,22 @@
 
 'use client';
 
-import { AlertCircle, CheckCircle, Eye, EyeOff, Send, User, Lock } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle,
+  Eye,
+  EyeOff,
+  Lock,
+  Send,
+  User,
+} from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 import { CURRENT_VERSION } from '@/lib/version';
 import { checkForUpdates, UpdateStatus } from '@/lib/version_check';
 
+import { LanguageToggle } from '@/components/LanguageToggle';
 import { useSite } from '@/components/SiteProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -42,12 +51,13 @@ function VersionDisplay() {
       <span className='font-mono'>v{CURRENT_VERSION}</span>
       {!isChecking && updateStatus !== UpdateStatus.FETCH_FAILED && (
         <div
-          className={`flex items-center gap-1.5 ${updateStatus === UpdateStatus.HAS_UPDATE
-            ? 'text-yellow-600 dark:text-yellow-400'
-            : updateStatus === UpdateStatus.NO_UPDATE
+          className={`flex items-center gap-1.5 ${
+            updateStatus === UpdateStatus.HAS_UPDATE
+              ? 'text-yellow-600 dark:text-yellow-400'
+              : updateStatus === UpdateStatus.NO_UPDATE
               ? 'text-green-600 dark:text-green-400'
               : ''
-            }`}
+          }`}
         >
           {updateStatus === UpdateStatus.HAS_UPDATE && (
             <>
@@ -75,20 +85,30 @@ function getOIDCProviderIcon(buttonText: string) {
     { keywords: ['linuxdo'], icon: '/icons/linuxdo.png', alt: 'LinuxDo' },
     { keywords: ['github'], icon: '/icons/github.png', alt: 'GitHub' },
     { keywords: ['google'], icon: '/icons/google.png', alt: 'Google' },
-    { keywords: ['microsoft', 'azure', 'entra'], icon: '/icons/microsoft.png', alt: 'Microsoft' },
+    {
+      keywords: ['microsoft', 'azure', 'entra'],
+      icon: '/icons/microsoft.png',
+      alt: 'Microsoft',
+    },
     { keywords: ['gitlab'], icon: '/icons/gitlab.png', alt: 'GitLab' },
   ];
 
   for (const provider of providers) {
-    if (provider.keywords.some(keyword => text.includes(keyword))) {
-      return <img src={provider.icon} alt={provider.alt} className='w-5 h-5 mr-2' />;
+    if (provider.keywords.some((keyword) => text.includes(keyword))) {
+      return (
+        <img src={provider.icon} alt={provider.alt} className='w-5 h-5 mr-2' />
+      );
     }
   }
 
   // 默认图标
   return (
     <svg className='w-5 h-5 mr-2' fill='currentColor' viewBox='0 0 20 20'>
-      <path fillRule='evenodd' d='M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z' clipRule='evenodd' />
+      <path
+        fillRule='evenodd'
+        d='M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z'
+        clipRule='evenodd'
+      />
     </svg>
   );
 }
@@ -106,11 +126,15 @@ function LoginPageClient() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileLoaded, setTurnstileLoaded] = useState(false);
   const [siteConfig, setSiteConfig] = useState<any>(null);
-  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
+  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(
+    null
+  );
   const [backgroundImage, setBackgroundImage] = useState<string>('');
   const [telegramLoginEnabled, setTelegramLoginEnabled] = useState(false);
   const [telegramLoginLoading, setTelegramLoginLoading] = useState(false);
-  const [telegramLoginHint, setTelegramLoginHint] = useState<string | null>(null);
+  const [telegramLoginHint, setTelegramLoginHint] = useState<string | null>(
+    null
+  );
 
   const { siteName } = useSite();
 
@@ -156,7 +180,9 @@ function LoginPageClient() {
       setTelegramLoginEnabled(Boolean(runtimeConfig?.ENABLE_TELEGRAM_LOGIN));
 
       // 从localStorage读取记住的密码信息
-      const rememberedCredentials = localStorage.getItem('rememberedCredentials');
+      const rememberedCredentials = localStorage.getItem(
+        'rememberedCredentials'
+      );
       if (rememberedCredentials) {
         try {
           const credentials = JSON.parse(rememberedCredentials);
@@ -203,12 +229,15 @@ function LoginPageClient() {
 
     const container = document.getElementById('turnstile-container');
     if (container && (window as any).turnstile) {
-      const widgetId = (window as any).turnstile.render('#turnstile-container', {
-        sitekey: siteConfig.TurnstileSiteKey,
-        callback: (token: string) => {
-          setTurnstileToken(token);
-        },
-      });
+      const widgetId = (window as any).turnstile.render(
+        '#turnstile-container',
+        {
+          sitekey: siteConfig.TurnstileSiteKey,
+          callback: (token: string) => {
+            setTurnstileToken(token);
+          },
+        }
+      );
       setTurnstileWidgetId(widgetId);
     }
   }, [turnstileLoaded, siteConfig]);
@@ -245,7 +274,10 @@ function LoginPageClient() {
           if (shouldAskUsername && username) {
             credentials.username = username;
           }
-          localStorage.setItem('rememberedCredentials', JSON.stringify(credentials));
+          localStorage.setItem(
+            'rememberedCredentials',
+            JSON.stringify(credentials)
+          );
         } else {
           // 如果不记住密码，清除已存储的信息
           localStorage.removeItem('rememberedCredentials');
@@ -255,7 +287,11 @@ function LoginPageClient() {
         window.location.replace(redirect);
       } else {
         // 登录失败，重置Turnstile
-        if (siteConfig?.LoginRequireTurnstile && turnstileWidgetId !== null && (window as any).turnstile) {
+        if (
+          siteConfig?.LoginRequireTurnstile &&
+          turnstileWidgetId !== null &&
+          (window as any).turnstile
+        ) {
           (window as any).turnstile.reset(turnstileWidgetId);
           setTurnstileToken(null);
         }
@@ -269,7 +305,11 @@ function LoginPageClient() {
       }
     } catch (error) {
       // 网络错误，重置Turnstile
-      if (siteConfig?.LoginRequireTurnstile && turnstileWidgetId !== null && (window as any).turnstile) {
+      if (
+        siteConfig?.LoginRequireTurnstile &&
+        turnstileWidgetId !== null &&
+        (window as any).turnstile
+      ) {
         (window as any).turnstile.reset(turnstileWidgetId);
         setTurnstileToken(null);
       }
@@ -285,13 +325,25 @@ function LoginPageClient() {
 
     try {
       setTelegramLoginLoading(true);
-      const createRes = await fetch('/api/telegram/login/create', { method: 'POST' });
+      const createRes = await fetch('/api/telegram/login/create', {
+        method: 'POST',
+      });
       const createData = await createRes.json().catch(() => ({}));
       if (!createRes.ok) {
         const configDetail = createData.config
-          ? `（enabled=${String(createData.config.enabled)}, loginEnabled=${String(createData.config.loginEnabled)}, hasBotToken=${String(createData.config.hasBotToken)}, hasBotUsername=${String(createData.config.hasBotUsername)}, botUsername=${createData.config.botUsername || '-'}）`
+          ? `（enabled=${String(
+              createData.config.enabled
+            )}, loginEnabled=${String(
+              createData.config.loginEnabled
+            )}, hasBotToken=${String(
+              createData.config.hasBotToken
+            )}, hasBotUsername=${String(
+              createData.config.hasBotUsername
+            )}, botUsername=${createData.config.botUsername || '-'}）`
           : `（HTTP ${createRes.status}）`;
-        setError(`${createData.error || 'Telegram 登录接口不可用'}${configDetail}`);
+        setError(
+          `${createData.error || 'Telegram 登录接口不可用'}${configDetail}`
+        );
         return;
       }
 
@@ -308,7 +360,11 @@ function LoginPageClient() {
           return;
         }
 
-        const statusRes = await fetch(`/api/telegram/login/status?token=${encodeURIComponent(createData.token)}`);
+        const statusRes = await fetch(
+          `/api/telegram/login/status?token=${encodeURIComponent(
+            createData.token
+          )}`
+        );
         const statusData = await statusRes.json().catch(() => ({}));
         if (statusData.status === 'confirmed') {
           window.clearInterval(timer);
@@ -333,20 +389,22 @@ function LoginPageClient() {
     }
   };
 
-
-
-
   return (
     <div
       className='relative min-h-screen flex items-center justify-center px-4 overflow-hidden'
-      style={backgroundImage ? {
-        backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
-      } : undefined}
+      style={
+        backgroundImage
+          ? {
+              backgroundImage: `url(${backgroundImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+            }
+          : undefined
+      }
     >
-      <div className='absolute top-4 right-4'>
+      <div className='absolute top-4 right-4 flex items-center gap-2'>
+        <LanguageToggle />
         <ThemeToggle />
       </div>
       <div className='relative z-10 w-full max-w-md rounded-3xl bg-gradient-to-b from-white/90 via-white/70 to-white/40 dark:from-zinc-900/90 dark:via-zinc-900/70 dark:to-zinc-900/40 shadow-2xl p-10 dark:border dark:border-zinc-800'>
@@ -408,9 +466,13 @@ function LoginPageClient() {
           </div>
 
           {/* Cloudflare Turnstile */}
-          {siteConfig?.LoginRequireTurnstile && siteConfig?.TurnstileSiteKey && (
-            <div id='turnstile-container' className='flex justify-center'></div>
-          )}
+          {siteConfig?.LoginRequireTurnstile &&
+            siteConfig?.TurnstileSiteKey && (
+              <div
+                id='turnstile-container'
+                className='flex justify-center'
+              ></div>
+            )}
 
           {error && (
             <p className='text-sm text-red-600 dark:text-red-400'>{error}</p>
@@ -437,7 +499,9 @@ function LoginPageClient() {
           <button
             type='submit'
             disabled={
-              !password || loading || (shouldAskUsername && !username) ||
+              !password ||
+              loading ||
+              (shouldAskUsername && !username) ||
               (siteConfig?.LoginRequireTurnstile && !turnstileToken)
             }
             className='inline-flex w-full justify-center rounded-lg bg-green-600 py-3 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:from-green-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-50'
@@ -460,50 +524,55 @@ function LoginPageClient() {
         </form>
 
         {/* 第三方登录区域 */}
-        {shouldAskUsername && (telegramLoginEnabled || siteConfig?.EnableOIDCLogin) && (
-          <div className='mt-6'>
-            <div className='relative'>
-              <div className='absolute inset-0 flex items-center'>
-                <div className='w-full border-t border-gray-300 dark:border-gray-600'></div>
+        {shouldAskUsername &&
+          (telegramLoginEnabled || siteConfig?.EnableOIDCLogin) && (
+            <div className='mt-6'>
+              <div className='relative'>
+                <div className='absolute inset-0 flex items-center'>
+                  <div className='w-full border-t border-gray-300 dark:border-gray-600'></div>
+                </div>
+                <div className='relative flex justify-center text-sm'>
+                  <span className='px-2 text-gray-500 dark:text-gray-400'>
+                    或
+                  </span>
+                </div>
               </div>
-              <div className='relative flex justify-center text-sm'>
-                <span className='px-2 text-gray-500 dark:text-gray-400'>
-                  或
-                </span>
+              <div className='mt-4 space-y-3'>
+                {/* Telegram登录按钮 */}
+                {telegramLoginEnabled && (
+                  <button
+                    type='button'
+                    disabled={telegramLoginLoading}
+                    onClick={handleTelegramLogin}
+                    className='w-full inline-flex justify-center items-center rounded-lg border-2 border-sky-300 dark:border-sky-700 bg-white/60 dark:bg-zinc-800/60 py-3 text-base font-semibold text-sky-700 dark:text-sky-300 shadow-sm transition-all duration-200 hover:bg-sky-50 dark:hover:bg-sky-900/30 disabled:cursor-not-allowed disabled:opacity-60'
+                  >
+                    <Send className='w-5 h-5 mr-2' />
+                    {telegramLoginLoading
+                      ? '等待 Telegram 确认...'
+                      : '使用 Telegram 登录'}
+                  </button>
+                )}
+                {telegramLoginHint && (
+                  <p className='text-center text-xs text-gray-500 dark:text-gray-400'>
+                    {telegramLoginHint}
+                  </p>
+                )}
+                {/* OIDC登录按钮 */}
+                {siteConfig?.EnableOIDCLogin && (
+                  <button
+                    type='button'
+                    onClick={() =>
+                      (window.location.href = '/api/auth/oidc/login')
+                    }
+                    className='w-full inline-flex justify-center items-center rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white/60 dark:bg-zinc-800/60 py-3 text-base font-semibold text-gray-700 dark:text-gray-200 shadow-sm transition-all duration-200 hover:bg-gray-50 dark:hover:bg-zinc-700/60'
+                  >
+                    {getOIDCProviderIcon(siteConfig?.OIDCButtonText || '')}
+                    {siteConfig?.OIDCButtonText || '使用OIDC登录'}
+                  </button>
+                )}
               </div>
             </div>
-            <div className='mt-4 space-y-3'>
-              {/* Telegram登录按钮 */}
-              {telegramLoginEnabled && (
-                <button
-                  type='button'
-                  disabled={telegramLoginLoading}
-                  onClick={handleTelegramLogin}
-                  className='w-full inline-flex justify-center items-center rounded-lg border-2 border-sky-300 dark:border-sky-700 bg-white/60 dark:bg-zinc-800/60 py-3 text-base font-semibold text-sky-700 dark:text-sky-300 shadow-sm transition-all duration-200 hover:bg-sky-50 dark:hover:bg-sky-900/30 disabled:cursor-not-allowed disabled:opacity-60'
-                >
-                  <Send className='w-5 h-5 mr-2' />
-                  {telegramLoginLoading ? '等待 Telegram 确认...' : '使用 Telegram 登录'}
-                </button>
-              )}
-              {telegramLoginHint && (
-                <p className='text-center text-xs text-gray-500 dark:text-gray-400'>
-                  {telegramLoginHint}
-                </p>
-              )}
-              {/* OIDC登录按钮 */}
-              {siteConfig?.EnableOIDCLogin && (
-                <button
-                  type='button'
-                  onClick={() => window.location.href = '/api/auth/oidc/login'}
-                  className='w-full inline-flex justify-center items-center rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white/60 dark:bg-zinc-800/60 py-3 text-base font-semibold text-gray-700 dark:text-gray-200 shadow-sm transition-all duration-200 hover:bg-gray-50 dark:hover:bg-zinc-700/60'
-                >
-                  {getOIDCProviderIcon(siteConfig?.OIDCButtonText || '')}
-                  {siteConfig?.OIDCButtonText || '使用OIDC登录'}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+          )}
       </div>
 
       {/* 版本信息显示 */}

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { BackButton } from './BackButton';
+import { LanguageToggle } from './LanguageToggle';
 import MobileBottomNav from './MobileBottomNav';
 import MobileHeader from './MobileHeader';
 import Sidebar from './Sidebar';
@@ -18,7 +19,11 @@ interface PageLayoutProps {
   hideNavigation?: boolean; // 控制是否隐藏顶部和底部导航栏
 }
 
-const PageLayout = ({ children, activePath = '/', hideNavigation = false }: PageLayoutProps) => {
+const PageLayout = ({
+  children,
+  activePath = '/',
+  hideNavigation = false,
+}: PageLayoutProps) => {
   const router = useRouter();
   const [backgroundImage, setBackgroundImage] = useState('');
   const shouldShowSharedBackground = !hideNavigation && activePath !== '/play';
@@ -75,7 +80,9 @@ const PageLayout = ({ children, activePath = '/', hideNavigation = false }: Page
 
         {/* 移动端头部 */}
         {!hideNavigation && (
-          <MobileHeader showBackButton={['/play', '/live'].includes(activePath)} />
+          <MobileHeader
+            showBackButton={['/play', '/live'].includes(activePath)}
+          />
         )}
 
         {/* 主要布局容器 */}
@@ -99,6 +106,7 @@ const PageLayout = ({ children, activePath = '/', hideNavigation = false }: Page
             {/* 桌面端顶部按钮 */}
             {!hideNavigation && (
               <div className='absolute top-2 right-4 z-20 hidden md:flex items-center gap-2'>
+                <LanguageToggle />
                 <ThemeToggle />
                 <UserMenu />
                 <UpdateNotification />

@@ -1,9 +1,18 @@
 ﻿'use client';
 
-import { BookOpen, ChevronLeft, Compass, History, List, Search, Settings2 } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronLeft,
+  Compass,
+  History,
+  List,
+  Search,
+  Settings2,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 
+import { LanguageToggle } from '@/components/LanguageToggle';
 import { useSite } from '@/components/SiteProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { UpdateNotification } from '@/components/UpdateNotification';
@@ -20,7 +29,10 @@ const sectionTabs = [
   { href: '/manga/history', label: '历史', icon: History },
 ];
 
-function getMeta(pathname: string, searchParams: ReturnType<typeof useSearchParams>) {
+function getMeta(
+  pathname: string,
+  searchParams: ReturnType<typeof useSearchParams>
+) {
   if (pathname === '/manga/shelf') {
     return { title: '漫画书架', subtitle: '集中管理收藏的漫画' };
   }
@@ -47,7 +59,13 @@ function getMeta(pathname: string, searchParams: ReturnType<typeof useSearchPara
     return {
       title,
       subtitle: searchParams.get('chapterName') || '章节',
-      backHref: `/manga/detail?mangaId=${encodeURIComponent(mangaId)}&sourceId=${encodeURIComponent(sourceId)}&title=${encodeURIComponent(title)}&cover=${encodeURIComponent(cover)}&sourceName=${encodeURIComponent(sourceName)}&returnTo=${encodeURIComponent(returnTo)}`,
+      backHref: `/manga/detail?mangaId=${encodeURIComponent(
+        mangaId
+      )}&sourceId=${encodeURIComponent(sourceId)}&title=${encodeURIComponent(
+        title
+      )}&cover=${encodeURIComponent(cover)}&sourceName=${encodeURIComponent(
+        sourceName
+      )}&returnTo=${encodeURIComponent(returnTo)}`,
     };
   }
   return { title: '漫画推荐', subtitle: '按来源查看热门与最新漫画' };
@@ -87,7 +105,9 @@ export default function MangaLayout({ children }: MangaLayoutProps) {
             )}
             <div className='min-w-0'>
               <div className='group relative'>
-                <div className='truncate text-sm font-semibold sm:text-base'>{meta.title}</div>
+                <div className='truncate text-sm font-semibold sm:text-base'>
+                  {meta.title}
+                </div>
                 <div className='absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-3 py-2 bg-gray-800 dark:bg-gray-900 text-white text-sm rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out z-[100] pointer-events-none w-max max-w-[85vw] whitespace-normal break-words text-center sm:max-w-none sm:whitespace-nowrap'>
                   <div className='text-sm'>{meta.title}</div>
                 </div>
@@ -121,14 +141,20 @@ export default function MangaLayout({ children }: MangaLayoutProps) {
             })}
           </nav>
 
-          <div className={`${isReadingPage ? 'ml-auto flex shrink-0' : 'ml-auto hidden md:flex'} items-center gap-2`}>
+          <div
+            className={`${
+              isReadingPage ? 'ml-auto flex shrink-0' : 'ml-auto hidden md:flex'
+            } items-center gap-2`}
+          >
             {isReadingPage ? (
               <>
                 <button
                   type='button'
                   className='inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition hover:bg-gray-100 hover:text-sky-600 dark:text-gray-300 dark:hover:bg-gray-800'
                   onClick={() => {
-                    window.dispatchEvent(new CustomEvent('manga-read-toggle-chapters'));
+                    window.dispatchEvent(
+                      new CustomEvent('manga-read-toggle-chapters')
+                    );
                   }}
                   aria-label='章节列表'
                 >
@@ -138,7 +164,9 @@ export default function MangaLayout({ children }: MangaLayoutProps) {
                   type='button'
                   className='inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition hover:bg-gray-100 hover:text-sky-600 dark:text-gray-300 dark:hover:bg-gray-800'
                   onClick={() => {
-                    window.dispatchEvent(new CustomEvent('manga-read-toggle-settings'));
+                    window.dispatchEvent(
+                      new CustomEvent('manga-read-toggle-settings')
+                    );
                   }}
                   aria-label='阅读设置'
                 >
@@ -147,6 +175,7 @@ export default function MangaLayout({ children }: MangaLayoutProps) {
               </>
             ) : (
               <>
+                <LanguageToggle />
                 <ThemeToggle />
                 <UserMenu />
                 <UpdateNotification />
@@ -183,12 +212,16 @@ export default function MangaLayout({ children }: MangaLayoutProps) {
                 >
                   <Icon
                     className={`h-5 w-5 ${
-                      active ? 'text-sky-600 dark:text-sky-400' : 'text-gray-500 dark:text-gray-400'
+                      active
+                        ? 'text-sky-600 dark:text-sky-400'
+                        : 'text-gray-500 dark:text-gray-400'
                     }`}
                   />
                   <span
                     className={
-                      active ? 'text-sky-600 dark:text-sky-400' : 'text-gray-600 dark:text-gray-300'
+                      active
+                        ? 'text-sky-600 dark:text-sky-400'
+                        : 'text-gray-600 dark:text-gray-300'
                     }
                   >
                     {tab.label}

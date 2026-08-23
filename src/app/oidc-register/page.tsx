@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 
 import { CURRENT_VERSION } from '@/lib/version';
 
+import { LanguageToggle } from '@/components/LanguageToggle';
 import { useSite } from '@/components/SiteProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -27,7 +28,9 @@ function OIDCRegisterPageClient() {
           setOidcInfo(data);
         } else {
           // session无效,跳转到登录页
-          router.replace('/login?error=' + encodeURIComponent('OIDC会话已过期'));
+          router.replace(
+            '/login?error=' + encodeURIComponent('OIDC会话已过期')
+          );
         }
       } catch (error) {
         console.error('检查session失败:', error);
@@ -79,7 +82,8 @@ function OIDCRegisterPageClient() {
 
   return (
     <div className='relative min-h-screen flex items-center justify-center px-4 overflow-hidden'>
-      <div className='absolute top-4 right-4'>
+      <div className='absolute top-4 right-4 flex items-center gap-2'>
+        <LanguageToggle />
         <ThemeToggle />
       </div>
       <div className='relative z-10 w-full max-w-md rounded-3xl bg-gradient-to-b from-white/90 via-white/70 to-white/40 dark:from-zinc-900/90 dark:via-zinc-900/70 dark:to-zinc-900/40 backdrop-blur-xl shadow-2xl p-10 dark:border dark:border-zinc-800'>
@@ -117,7 +121,10 @@ function OIDCRegisterPageClient() {
 
         <form onSubmit={handleSubmit} className='space-y-6'>
           <div>
-            <label htmlFor='username' className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+            <label
+              htmlFor='username'
+              className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'
+            >
               选择用户名
             </label>
             <input

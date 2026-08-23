@@ -3,6 +3,7 @@
 import Link from 'next/link';
 
 import { BackButton } from './BackButton';
+import { LanguageToggle } from './LanguageToggle';
 import { useSite } from './SiteProvider';
 import { ThemeToggle } from './ThemeToggle';
 import { UpdateNotification } from './UpdateNotification';
@@ -46,6 +47,7 @@ const MobileHeader = ({ showBackButton = false }: MobileHeaderProps) => {
 
         {/* 右侧按钮 */}
         <div className='flex items-center gap-2'>
+          <LanguageToggle />
           <ThemeToggle />
           <UserMenu />
           <UpdateNotification />
