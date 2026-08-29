@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Blend, Cat, Clover, Container, Film, Globe, Home, Star, Tv, TvMinimalPlay, Users } from 'lucide-react';
+import { Blend, Cat, Clover, Container, Film, Globe, Home, Star, Tv, TvMinimalPlay, Users, Youtube } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -96,6 +96,11 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
             },
           ]
         : []),
+      {
+        icon: Youtube,
+        label: 'YouTube',
+        href: '/youtube',
+      },
     ];
 
     // 如果启用网络直播，添加网络直播入口
