@@ -15,6 +15,7 @@ import { getTMDBImageUrl, TMDBItem } from '@/lib/tmdb.client';
 import { DoubanItem } from '@/lib/types';
 import { base58Encode, processImageUrl } from '@/lib/utils';
 
+import AdBanner from '@/components/AdBanner';
 import AIChatPanel from '@/components/AIChatPanel';
 import BannerCarousel from '@/components/BannerCarousel';
 import ContinueWatching from '@/components/ContinueWatching';
@@ -749,6 +750,9 @@ function HomeClient() {
           <BannerCarousel delayLoad={true} />
         </div>
       )}
+
+      {/* 首页顶部广告 */}
+      <AdBanner />
 
       <div className='px-2 sm:px-10 pb-4 sm:pb-8 overflow-visible'>
         <div className='max-w-[95%] mx-auto'>
