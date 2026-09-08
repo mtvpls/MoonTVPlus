@@ -7,9 +7,10 @@ import {
   MusicV2HistoryRecord,
   MusicV2PlaylistItem,
   MusicV2PlaylistRecord,
+  sortMusicV2History,
 } from './music-v2';
 import { RedisAdapter } from './redis-adapter';
-import { Favorite, IStorage, Notification, PlayRecord, PushSubscriptionRecord, SkipConfig } from './types';
+import { Favorite, IStorage, LocalSettingsSyncRecord, Notification, PlayRecord, PushSubscriptionRecord, SetLocalSettingsSyncOptions, SetLocalSettingsSyncResult, SkipConfig } from './types';
 import { userInfoCache } from './user-cache';
 import { dispatchNotificationChannels } from './notification-dispatch';
 
@@ -760,19 +761,12 @@ export abstract class BaseRedisStorage implements IStorage {
       this.adapter.hGetAll(this.musicV2HistoryKey(userName))
     );
 
-    return (
+    // 按队列顺序返回（sortOrder 优先，遗留记录回退到 createdAt）；
+    // 当前播放项由最大 lastPlayedAt 决定，不参与排序。
+    return sortMusicV2History(
       Object.values(rows || {})
         .filter(Boolean)
         .map((value) => JSON.parse(value as string) as MusicV2HistoryRecord)
-        // 按队列顺序返回；当前播放项由最大 lastPlayedAt 决定。
-        // createdAt 相同时使用歌曲标识做稳定兜底，避免最近播放时间把歌曲顶到队尾。
-        .sort((a, b) => {
-          const createdAtDiff = (a.createdAt || 0) - (b.createdAt || 0);
-          if (createdAtDiff !== 0) return createdAtDiff;
-          return `${a.source}:${a.songId}`.localeCompare(
-            `${b.source}:${b.songId}`
-          );
-        })
     );
   }
 
@@ -1574,6 +1568,9 @@ export abstract class BaseRedisStorage implements IStorage {
     // 从用���列表中移除
     await this.withRetry(() => this.adapter.zRem(this.userListKey(), userName));
 
+    // 删除用户的本地设置云同步副本
+    await this.withRetry(() => this.adapter.del(this.settingsSyncKey(userName)));
+
     // 删除用户的其他数据（播放记录、收藏等）
     await this.deleteUser(userName);
 
@@ -1885,6 +1882,67 @@ export abstract class BaseRedisStorage implements IStorage {
     await this.withRetry(() =>
       this.adapter.set(this.adminConfigKey(), JSON.stringify(config))
     );
+  }
+
+  // ---------- 本地设置云同步 ----------
+  // 使用单个 String key 存完整快照文档（单副本、覆盖式），字段与关系型表逐列对应
+  private settingsSyncKey(user: string) {
+    return `u:${user}:settings_sync`;
+  }
+
+  async getUserLocalSettings(
+    userName: string
+  ): Promise<LocalSettingsSyncRecord | null> {
+    const val = await this.withRetry(() =>
+      this.adapter.get(this.settingsSyncKey(userName))
+    );
+    if (!val) return null;
+    try {
+      const parsed = JSON.parse(val) as LocalSettingsSyncRecord;
+      return {
+        payload: String(parsed.payload ?? ''),
+        payloadMd5: String(parsed.payloadMd5 ?? ''),
+        payloadSize: Number(parsed.payloadSize) || 0,
+        version: Number(parsed.version) || 0,
+        updatedAt: Number(parsed.updatedAt) || 0,
+      };
+    } catch (err) {
+      console.error('getUserLocalSettings parse error:', err);
+      return null;
+    }
+  }
+
+  async setUserLocalSettings(
+    userName: string,
+    payload: string,
+    opts: SetLocalSettingsSyncOptions
+  ): Promise<SetLocalSettingsSyncResult> {
+    const key = this.settingsSyncKey(userName);
+    const now = Date.now();
+    let version = 1;
+
+    // 乐观锁：仅当期望版本匹配时才覆盖（无 expectedVersion 时无条件覆盖）
+    if (opts.expectedVersion !== undefined) {
+      const current = await this.getUserLocalSettings(userName);
+      if (current && current.version !== opts.expectedVersion) {
+        return { ok: false, version: current.version, updatedAt: current.updatedAt };
+      }
+      version = current ? current.version + 1 : 1;
+    } else {
+      const current = await this.getUserLocalSettings(userName);
+      version = current ? current.version + 1 : 1;
+    }
+
+    const doc: LocalSettingsSyncRecord = {
+      payload,
+      payloadMd5: opts.payloadMd5,
+      payloadSize: opts.payloadSize,
+      version,
+      updatedAt: now,
+    };
+
+    await this.withRetry(() => this.adapter.set(key, JSON.stringify(doc)));
+    return { ok: true, version, updatedAt: now };
   }
 
   // ---------- 跳过片头片尾配置 ----------

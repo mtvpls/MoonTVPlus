@@ -11,6 +11,27 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "225.1.0",
+    date: "2026-09-07",
+    added: [
+    "新增本地设置云同步",
+    "openlist增加代理功能",
+    "增加缩略图禁用开关",
+    "新增支持环境变量指定运行UID/GID",
+    "新增 detectOpenListMediaType 函数来识别播放链接的媒体类型",
+    "新增网盘挂载源原生HLS播放支持",
+    "新增音乐播放记录拖动功能",
+    "源站寻片增加置顶与返回快照"
+    ],
+    changed: [
+    "移除百度图片代理",
+    "移动时刻表进入视图"
+    ],
+    fixed: [
+    "修复缩略图更换集数后不变更"
+    ]
+  },
+  {
     version: "225.0.1",
     date: "2026-08-21",
     added: [

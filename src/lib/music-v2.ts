@@ -64,6 +64,9 @@ export interface MusicV2HistoryRecord extends MusicV2Song {
   lastQuality?: string;
   createdAt: number;
   updatedAt: number;
+  // 播放队列顺序。浮点数，拖拽时取前后邻居中值，因此只需改写被移动的那一条。
+  // 旧数据（尤其是 Redis 系无法迁移的历史 hash）可能缺失，读取侧需回退到 createdAt。
+  sortOrder?: number;
 }
 
 export interface MusicV2PlaylistRecord {
@@ -113,6 +116,77 @@ export interface LxServerSong {
 
 export function isMusicSource(source: string | null | undefined): source is MusicSource {
   return !!source && ['wy', 'tx', 'kw', 'kg', 'mg'].includes(source);
+}
+
+// ---------- 播放队列排序 ----------
+
+// 相邻两首歌之间预留的 sortOrder 间距。新歌追加到队尾时按此步长递增。
+export const MUSIC_V2_SORT_STEP = 1000;
+
+// 中值插入的最小可用间距。低于此值说明浮点精度快要耗尽，需要整队重新编号。
+const MUSIC_V2_SORT_MIN_GAP = 1e-4;
+
+// 队列顺序的稳定兜底：sortOrder 相同时用歌曲标识排序，避免顺序在两次读取间抖动。
+function compareSongIdentity(a: MusicV2HistoryRecord, b: MusicV2HistoryRecord) {
+  return `${a.source}:${a.songId}`.localeCompare(`${b.source}:${b.songId}`);
+}
+
+// 是否所有记录都已带上 sortOrder。缺一条就不能按 sortOrder 排序——
+// 因为遗留记录的回退值 createdAt 是毫秒时间戳，和 sortOrder 的量级完全不同，混排会乱序。
+export function hasCompleteSortOrder(records: MusicV2HistoryRecord[]): boolean {
+  return records.every((record) => Number.isFinite(record.sortOrder));
+}
+
+export function sortMusicV2History(records: MusicV2HistoryRecord[]): MusicV2HistoryRecord[] {
+  const useSortOrder = hasCompleteSortOrder(records);
+  return [...records].sort((a, b) => {
+    const primaryDiff = useSortOrder
+      ? (a.sortOrder as number) - (b.sortOrder as number)
+      : (a.createdAt || 0) - (b.createdAt || 0);
+    if (primaryDiff !== 0) return primaryDiff;
+    return compareSongIdentity(a, b);
+  });
+}
+
+// 按当前顺序重新编号为等距稀疏序号。用于遗留数据回填和精度耗尽后的整队重排。
+export function renumberMusicV2History(
+  orderedRecords: MusicV2HistoryRecord[],
+  updatedAt = Date.now()
+): MusicV2HistoryRecord[] {
+  return orderedRecords.map((record, index) => ({
+    ...record,
+    sortOrder: (index + 1) * MUSIC_V2_SORT_STEP,
+    updatedAt,
+  }));
+}
+
+export function nextMusicV2SortOrder(records: MusicV2HistoryRecord[]): number {
+  const max = records.reduce(
+    (acc, record) => (Number.isFinite(record.sortOrder) ? Math.max(acc, record.sortOrder as number) : acc),
+    0
+  );
+  return max + MUSIC_V2_SORT_STEP;
+}
+
+// 计算把一首歌插到 prev / next 之间所需的 sortOrder。
+// 返回 null 表示间距不足，调用方应改为整队重新编号。
+export function interpolateMusicV2SortOrder(
+  prevOrder: number | undefined,
+  nextOrder: number | undefined
+): number | null {
+  const hasPrev = Number.isFinite(prevOrder);
+  const hasNext = Number.isFinite(nextOrder);
+
+  if (hasPrev && hasNext) {
+    const gap = (nextOrder as number) - (prevOrder as number);
+    if (gap <= MUSIC_V2_SORT_MIN_GAP) return null;
+    return (prevOrder as number) + gap / 2;
+  }
+  // 移到队首：往前让出一个完整步长（允许为负，排序不受影响）
+  if (hasNext) return (nextOrder as number) - MUSIC_V2_SORT_STEP;
+  // 移到队尾
+  if (hasPrev) return (prevOrder as number) + MUSIC_V2_SORT_STEP;
+  return MUSIC_V2_SORT_STEP;
 }
 
 export function parseDurationTextToSec(durationText?: string): number | undefined {

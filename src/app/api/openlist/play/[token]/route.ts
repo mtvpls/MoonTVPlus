@@ -82,6 +82,32 @@ export async function GET(
     const folderPath = `${rootPath}${rootPath.endsWith('/') ? '' : '/'}${folderName}`;
     const filePath = `${folderPath}/${fileName}`;
 
+    // 解析路径元信息：路径开启代理播放时重定向到服务器代理地址
+    const { resolvePathMeta } = await import('@/lib/openlist-path-meta');
+    const pathMetaResolved = resolvePathMeta(
+      folderName,
+      openListConfig.PathMeta
+    );
+
+    if (pathMetaResolved.proxyPlay) {
+      const { buildOpenListProxyUrl } = await import('@/lib/openlist-play-url');
+      const host =
+        request.headers.get('host') || request.headers.get('x-forwarded-host');
+      const proto =
+        request.headers.get('x-forwarded-proto') ||
+        (host?.includes('localhost') || host?.includes('127.0.0.1')
+          ? 'http'
+          : 'https');
+      const baseUrl = process.env.SITE_BASE || `${proto}://${host}`;
+      const proxyUrl = buildOpenListProxyUrl({
+        token: requestToken,
+        folder: folderName,
+        fileName,
+        baseUrl,
+      });
+      return NextResponse.redirect(proxyUrl);
+    }
+
     const client = new OpenListClient(
       openListConfig.URL,
       openListConfig.Username,

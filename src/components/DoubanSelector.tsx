@@ -106,10 +106,12 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
     { label: '剧场版', value: '剧场版' },
   ];
 
-  // 「每日放送」视图切换选项
-  const viewOptions: SelectorOption[] = [
-    { label: '卡片', value: 'grid' },
-    { label: '时刻表', value: 'schedule' },
+  const scheduleValue = '__schedule__';
+  const animeSelectorOptions: SelectorOption[] = [
+    { label: '每日放送', value: '每日放送' },
+    { label: '时刻表', value: scheduleValue },
+    { label: '番剧', value: '番剧' },
+    { label: '剧场版', value: '剧场版' },
   ];
 
   // 处理多级选择器变化
@@ -175,9 +177,12 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
         setPrimaryIndicatorStyle
       );
     } else if (type === 'anime') {
-      const activeIndex = animePrimaryOptions.findIndex(
-        (opt) =>
-          opt.value === (primarySelection || animePrimaryOptions[0].value)
+      const activeValue =
+        primarySelection === '每日放送' && viewMode === 'schedule'
+          ? scheduleValue
+          : primarySelection || animePrimaryOptions[0].value;
+      const activeIndex = animeSelectorOptions.findIndex(
+        (opt) => opt.value === activeValue
       );
       updateIndicatorPosition(
         activeIndex,
@@ -251,8 +256,12 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
       );
       return cleanup;
     } else if (type === 'anime') {
-      const activeIndex = animePrimaryOptions.findIndex(
-        (opt) => opt.value === primarySelection
+      const activeValue =
+        primarySelection === '每日放送' && viewMode === 'schedule'
+          ? scheduleValue
+          : primarySelection;
+      const activeIndex = animeSelectorOptions.findIndex(
+        (opt) => opt.value === activeValue
       );
       const cleanup = updateIndicatorPosition(
         activeIndex,
@@ -273,7 +282,7 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
       );
       return cleanup;
     }
-  }, [primarySelection]);
+  }, [primarySelection, viewMode]);
 
   // 监听副选择器变化
   useEffect(() => {
@@ -307,21 +316,6 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
       return cleanup;
     }
   }, [secondarySelection]);
-
-  // 监听「每日放送」视图切换（卡片/时刻表）——
-  // 视图胶囊复用副选择器的滑动指示器，需要单独定位
-  useEffect(() => {
-    const activeIndex = viewOptions.findIndex(
-      (opt) => opt.value === viewMode
-    );
-    const cleanup = updateIndicatorPosition(
-      activeIndex,
-      secondaryContainerRef,
-      secondaryButtonRefs,
-      setSecondaryIndicatorStyle
-    );
-    return cleanup;
-  }, [viewMode, primarySelection]);
 
   // 渲染胶囊式选择器
   const renderCapsuleSelector = (
@@ -490,9 +484,19 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
             </span>
             <div className='overflow-x-auto'>
               {renderCapsuleSelector(
-                animePrimaryOptions,
-                primarySelection || animePrimaryOptions[0].value,
-                onPrimaryChange,
+                animeSelectorOptions,
+                primarySelection === '每日放送' && viewMode === 'schedule'
+                  ? scheduleValue
+                  : primarySelection || animePrimaryOptions[0].value,
+                (value) => {
+                  if (value === scheduleValue) {
+                    onPrimaryChange('每日放送');
+                    onViewModeChange?.('schedule');
+                    return;
+                  }
+                  onPrimaryChange(value);
+                  onViewModeChange?.('grid');
+                },
                 true
               )}
             </div>
@@ -500,30 +504,12 @@ const DoubanSelector: React.FC<DoubanSelectorProps> = ({
 
           {/* 筛选部分 - 根据一级选择器显示不同内容 */}
           {(primarySelection || animePrimaryOptions[0].value) === '每日放送' ? (
-            // 每日放送分类下：视图切换 + 星期选择器（两种视图共用，控制当天内容）
-            <div className='space-y-3 sm:space-y-4'>
-              <div className='flex flex-col sm:flex-row sm:items-center gap-2'>
-                <span className='text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 min-w-[48px]'>
-                  视图
-                </span>
-                <div className='overflow-x-auto'>
-                  {renderCapsuleSelector(
-                    viewOptions,
-                    viewMode,
-                    (value) =>
-                      onViewModeChange?.(value === 'schedule' ? 'schedule' : 'grid'),
-                    false
-                  )}
-                </div>
-              </div>
-
-              <div className='flex flex-col sm:flex-row sm:items-center gap-2'>
-                <span className='text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 min-w-[48px]'>
-                  星期
-                </span>
-                <div className='overflow-x-auto'>
-                  <WeekdaySelector onWeekdayChange={onWeekdayChange} />
-                </div>
+            <div className='flex flex-col sm:flex-row sm:items-center gap-2'>
+              <span className='text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 min-w-[48px]'>
+                星期
+              </span>
+              <div className='overflow-x-auto'>
+                <WeekdaySelector onWeekdayChange={onWeekdayChange} />
               </div>
             </div>
           ) : (

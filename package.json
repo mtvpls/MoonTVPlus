@@ -39,6 +39,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@headlessui/react": "^2.2.4",
     "@heroicons/react": "^2.2.0",
+    "@libsql/client": "^0.15.0",
     "@types/crypto-js": "^4.2.2",
     "@types/nprogress": "^0.2.3",
     "@types/qrcode": "^1.5.6",
@@ -48,7 +49,6 @@
     "@xmldom/xmldom": "^0.9.10",
     "anime4k-webgpu": "^1.0.0",
     "artplayer": "^5.4.0",
-    "artplayer-plugin-auto-thumbnail": "^1.1.0",
     "artplayer-plugin-danmuku": "^5.2.0",
     "artplayer-plugin-jassub": "1.1.0",
     "better-sqlite3": "^12.6.2",
@@ -62,7 +62,6 @@
     "he": "^1.2.0",
     "hls.js": "^1.6.10",
     "https-proxy-agent": "^7.0.6",
-    "@libsql/client": "^0.15.0",
     "lucide-react": "^0.438.0",
     "media-icons": "^1.1.5",
     "mux.js": "^6.3.0",
@@ -113,6 +112,7 @@
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "autoprefixer": "^10.4.20",
+    "edgeone": "^1.6.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.23",
     "eslint-config-prettier": "^8.10.0",
@@ -126,8 +126,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^4.9.5",
     "vercel": "^50.4.10",
-    "webpack-obfuscator": "^3.5.1",
-    "edgeone": "^1.6.2"
+    "webpack-obfuscator": "^3.5.1"
   },
   "packageManager": "pnpm@10.14.0"
 }

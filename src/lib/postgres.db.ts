@@ -17,6 +17,9 @@ import {
   Notification,
   MovieRequest,
   PushSubscriptionRecord,
+  LocalSettingsSyncRecord,
+  SetLocalSettingsSyncOptions,
+  SetLocalSettingsSyncResult,
 } from './types';
 import { AdminConfig } from './admin.types';
 import { MangaReadRecord, MangaShelfItem } from './manga.types';
@@ -1721,9 +1724,9 @@ export class PostgresStorage implements IStorage {
   async listMusicV2History(userName: string): Promise<MusicV2HistoryRecord[]> {
     try {
       const results = await this.db
-        // 按队列顺序返回；当前播放项由最大 last_played_at 决定
+        // 按队列顺序返回（sort_order 由拖拽维护）；当前播放项由最大 last_played_at 决定
         .prepare(
-          'SELECT * FROM music_v2_history WHERE username = $1 ORDER BY created_at ASC, id ASC'
+          'SELECT * FROM music_v2_history WHERE username = $1 ORDER BY sort_order ASC, created_at ASC, id ASC'
         )
         .bind(userName)
         .all();
@@ -1746,6 +1749,7 @@ export class PostgresStorage implements IStorage {
         lastQuality: row.last_quality || undefined,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        sortOrder: row.sort_order ?? undefined,
       }));
     } catch (err) {
       console.error('PostgresStorage.listMusicV2History error:', err);
@@ -1763,9 +1767,9 @@ export class PostgresStorage implements IStorage {
           `
           INSERT INTO music_v2_history (
             username, song_id, source, songmid, name, artist, album, cover, duration_text, duration_sec,
-            play_progress_sec, last_played_at, play_count, last_quality, created_at, updated_at
+            play_progress_sec, last_played_at, play_count, last_quality, created_at, updated_at, sort_order
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
           ON CONFLICT(username, song_id) DO UPDATE SET
             source = EXCLUDED.source,
             songmid = EXCLUDED.songmid,
@@ -1779,7 +1783,8 @@ export class PostgresStorage implements IStorage {
             last_played_at = EXCLUDED.last_played_at,
             play_count = EXCLUDED.play_count,
             last_quality = EXCLUDED.last_quality,
-            updated_at = EXCLUDED.updated_at
+            updated_at = EXCLUDED.updated_at,
+            sort_order = EXCLUDED.sort_order
         `
         )
         .bind(
@@ -1798,7 +1803,8 @@ export class PostgresStorage implements IStorage {
           record.playCount,
           record.lastQuality || null,
           record.createdAt,
-          record.updatedAt
+          record.updatedAt,
+          record.sortOrder ?? record.createdAt
         )
         .run();
     } catch (err) {
@@ -3370,6 +3376,83 @@ export class PostgresStorage implements IStorage {
         .run();
     } catch (err) {
       console.error('PostgresStorage.setAdminConfig error:', err);
+      throw err;
+    }
+  }
+
+  // ---------- 本地设置云同步 ----------
+
+  async getUserLocalSettings(
+    userName: string
+  ): Promise<LocalSettingsSyncRecord | null> {
+    try {
+      const result = await this.db
+        .prepare(
+          `SELECT payload, payload_md5, payload_size, version, updated_at
+           FROM user_local_settings WHERE username = $1`
+        )
+        .bind(userName)
+        .first();
+      if (!result) return null;
+      return {
+        payload: result.payload as string,
+        payloadMd5: result.payload_md5 as string,
+        payloadSize: Number(result.payload_size),
+        version: Number(result.version),
+        updatedAt: Number(result.updated_at),
+      };
+    } catch (err) {
+      console.error('PostgresStorage.getUserLocalSettings error:', err);
+      return null;
+    }
+  }
+
+  async setUserLocalSettings(
+    userName: string,
+    payload: string,
+    opts: SetLocalSettingsSyncOptions
+  ): Promise<SetLocalSettingsSyncResult> {
+    try {
+      const now = Date.now();
+      let version = 1;
+
+      // 乐观锁：仅当期望版本匹配时才覆盖（无 expectedVersion 时无条件覆盖）
+      if (opts.expectedVersion !== undefined) {
+        const current = await this.getUserLocalSettings(userName);
+        if (current && current.version !== opts.expectedVersion) {
+          return { ok: false, version: current.version, updatedAt: current.updatedAt };
+        }
+        version = current ? current.version + 1 : 1;
+      } else {
+        const current = await this.getUserLocalSettings(userName);
+        version = current ? current.version + 1 : 1;
+      }
+
+      await this.db
+        .prepare(
+          `INSERT INTO user_local_settings
+             (username, payload, payload_md5, payload_size, version, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (username) DO UPDATE SET
+             payload = EXCLUDED.payload,
+             payload_md5 = EXCLUDED.payload_md5,
+             payload_size = EXCLUDED.payload_size,
+             version = EXCLUDED.version,
+             updated_at = EXCLUDED.updated_at`
+        )
+        .bind(
+          userName,
+          payload,
+          opts.payloadMd5,
+          opts.payloadSize,
+          version,
+          now
+        )
+        .run();
+
+      return { ok: true, version, updatedAt: now };
+    } catch (err) {
+      console.error('PostgresStorage.setUserLocalSettings error:', err);
       throw err;
     }
   }

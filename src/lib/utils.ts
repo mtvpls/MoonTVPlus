@@ -10,7 +10,6 @@ export type DoubanImageProxyType =
   | 'img3'
   | 'cmliussss-cdn-tencent'
   | 'cmliussss-cdn-ali'
-  | 'baidu'
   | 'custom';
 
 function normalizeDoubanImageProxyConfig(
@@ -55,10 +54,6 @@ function buildDoubanImageUrl(
         /img\d+\.doubanio\.com/g,
         'img.doubanio.cmliussss.com'
       );
-    case 'baidu':
-      return `https://image.baidu.com/search/down?url=${encodeURIComponent(
-        originalUrl
-      )}`;
     case 'custom':
       return proxyUrl
         ? `${proxyUrl}${encodeURIComponent(originalUrl)}`

@@ -1,8 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 'use client';
 
-import { Loader2, Search } from 'lucide-react';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { ChevronUp, Loader2, Search } from 'lucide-react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { isAnimeCategoryText } from '@/lib/anime-keyword-expr';
 import { ApiSite } from '@/lib/config';
@@ -20,6 +27,59 @@ interface Category {
 
 type ViewMode = 'browse' | 'search';
 
+// 观影前保存的浏览快照，返回后恢复到上一步操作位置
+const SOURCE_SEARCH_STATE_KEY = 'source_search_state';
+
+interface SourceSearchSnapshot {
+  apiSites: ApiSite[];
+  selectedSource: string;
+  categories: Category[];
+  selectedCategory: string;
+  videos: SearchResult[];
+  currentPage: number;
+  hasMore: boolean;
+  viewMode: ViewMode;
+  searchKeyword: string;
+  searchInputValue: string;
+  scrollTop: number;
+}
+
+// 实际滚动容器是 document.body，这里同时兼容 documentElement
+const getPageScrollTop = () =>
+  document.body.scrollTop || document.documentElement.scrollTop || 0;
+
+const scrollPageTo = (top: number) => {
+  document.body.scrollTop = top;
+  document.documentElement.scrollTop = top;
+};
+
+// 恢复动作需要在绘制前完成，避免闪现顶部；SSR 下退化为 useEffect
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+// 读取并消费快照：只在观影返回后恢复一次
+const consumeSnapshot = (): SourceSearchSnapshot | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(SOURCE_SEARCH_STATE_KEY);
+    sessionStorage.removeItem(SOURCE_SEARCH_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SourceSearchSnapshot;
+    if (
+      !parsed?.selectedSource ||
+      !Array.isArray(parsed.apiSites) ||
+      !Array.isArray(parsed.categories) ||
+      !Array.isArray(parsed.videos) ||
+      parsed.videos.length === 0
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
 function SourceSearchPageClient() {
   const [apiSites, setApiSites] = useState<ApiSite[]>([]);
   const [selectedSource, setSelectedSource] = useState<string>('');
@@ -34,10 +94,96 @@ function SourceSearchPageClient() {
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [searchInputValue, setSearchInputValue] = useState<string>('');
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  // 快照读取完成前不发请求，避免覆盖恢复的数据
+  const [restoreChecked, setRestoreChecked] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const snapshotRef = useRef<SourceSearchSnapshot | null>(null);
+  const pendingScrollTopRef = useRef<number | null>(null);
+  // 恢复时需要跳过一次「拉取分类」和「拉取列表」
+  const skipCategoryFetchRef = useRef(false);
+  const skipVideoFetchRef = useRef(false);
+
+  // 读取观影前保存的快照，恢复到上一步操作位置
+  useIsomorphicLayoutEffect(() => {
+    const snapshot = consumeSnapshot();
+    if (snapshot) {
+      skipCategoryFetchRef.current = true;
+      skipVideoFetchRef.current = true;
+      pendingScrollTopRef.current = snapshot.scrollTop;
+      setApiSites(snapshot.apiSites);
+      setSelectedSource(snapshot.selectedSource);
+      setCategories(snapshot.categories);
+      setSelectedCategory(snapshot.selectedCategory);
+      setVideos(snapshot.videos);
+      setCurrentPage(snapshot.currentPage);
+      setHasMore(snapshot.hasMore);
+      setViewMode(snapshot.viewMode);
+      setSearchKeyword(snapshot.searchKeyword);
+      setSearchInputValue(snapshot.searchInputValue);
+    }
+    setRestoreChecked(true);
+  }, []);
+
+  // 列表渲染完成后再恢复滚动位置
+  useIsomorphicLayoutEffect(() => {
+    const target = pendingScrollTopRef.current;
+    if (target == null || videos.length === 0) return;
+
+    pendingScrollTopRef.current = null;
+    scrollPageTo(target);
+    const rafId = requestAnimationFrame(() => scrollPageTo(target));
+    return () => cancelAnimationFrame(rafId);
+  }, [videos]);
+
+  // 镜像最新状态，供跳转播放页前保存快照
+  useEffect(() => {
+    snapshotRef.current = {
+      apiSites,
+      selectedSource,
+      categories,
+      selectedCategory,
+      videos,
+      // 当前页还在请求中，回退一页以便返回后重新拉取，避免缺页
+      currentPage: isLoadingVideos && currentPage > 1 ? currentPage - 1 : currentPage,
+      hasMore,
+      viewMode,
+      searchKeyword,
+      searchInputValue,
+      scrollTop: 0,
+    };
+  }, [
+    apiSites,
+    selectedSource,
+    categories,
+    selectedCategory,
+    videos,
+    currentPage,
+    hasMore,
+    viewMode,
+    searchKeyword,
+    searchInputValue,
+    isLoadingVideos,
+  ]);
+
+  // 跳转播放页前保存当前浏览位置
+  const saveSnapshot = useCallback(() => {
+    const snapshot = snapshotRef.current;
+    if (!snapshot || snapshot.videos.length === 0) return;
+    try {
+      sessionStorage.setItem(
+        SOURCE_SEARCH_STATE_KEY,
+        JSON.stringify({ ...snapshot, scrollTop: getPageScrollTop() })
+      );
+    } catch {
+      // 忽略 sessionStorage 写入失败（如超出配额）
+    }
+  }, []);
 
   // 加载用户可用的视频源
   useEffect(() => {
+    if (!restoreChecked) return;
+
     const fetchApiSites = async () => {
       setIsLoadingSources(true);
       try {
@@ -45,9 +191,13 @@ function SourceSearchPageClient() {
         const data = await response.json();
         if (data.sources && Array.isArray(data.sources)) {
           setApiSites(data.sources);
-          // 默认选择第一个源
+          // 默认选择第一个源（恢复的源仍可用时保持不变）
           if (data.sources.length > 0) {
-            setSelectedSource(data.sources[0].key);
+            setSelectedSource((prev) =>
+              prev && data.sources.some((site: ApiSite) => site.key === prev)
+                ? prev
+                : data.sources[0].key
+            );
           }
         }
       } catch (error) {
@@ -58,11 +208,17 @@ function SourceSearchPageClient() {
     };
 
     fetchApiSites();
-  }, []);
+  }, [restoreChecked]);
 
   // 当选择的源变化时，加载分类列表
   useEffect(() => {
-    if (!selectedSource) return;
+    if (!restoreChecked || !selectedSource) return;
+
+    // 恢复场景下分类与列表都来自快照，无需重新拉取
+    if (skipCategoryFetchRef.current) {
+      skipCategoryFetchRef.current = false;
+      return;
+    }
 
     const fetchCategories = async () => {
       setIsLoadingCategories(true);
@@ -91,11 +247,18 @@ function SourceSearchPageClient() {
     };
 
     fetchCategories();
-  }, [selectedSource]);
+  }, [restoreChecked, selectedSource]);
 
   // 当选择的分类或页码变化时，加载视频列表（浏览模式）
   useEffect(() => {
-    if (viewMode !== 'browse' || !selectedSource || !selectedCategory) return;
+    if (!restoreChecked || viewMode !== 'browse' || !selectedSource || !selectedCategory)
+      return;
+
+    // 恢复场景下列表已来自快照，跳过本次请求
+    if (skipVideoFetchRef.current) {
+      skipVideoFetchRef.current = false;
+      return;
+    }
 
     const fetchVideos = async () => {
       setIsLoadingVideos(true);
@@ -120,11 +283,18 @@ function SourceSearchPageClient() {
     };
 
     fetchVideos();
-  }, [selectedSource, selectedCategory, currentPage, viewMode]);
+  }, [restoreChecked, selectedSource, selectedCategory, currentPage, viewMode]);
 
   // 当搜索关键词或页码变化时，执行搜索（搜索模式）
   useEffect(() => {
-    if (viewMode !== 'search' || !selectedSource || !searchKeyword) return;
+    if (!restoreChecked || viewMode !== 'search' || !selectedSource || !searchKeyword)
+      return;
+
+    // 恢复场景下列表已来自快照，跳过本次请求
+    if (skipVideoFetchRef.current) {
+      skipVideoFetchRef.current = false;
+      return;
+    }
 
     const searchVideos = async () => {
       setIsLoadingVideos(true);
@@ -149,14 +319,15 @@ function SourceSearchPageClient() {
     };
 
     searchVideos();
-  }, [selectedSource, searchKeyword, currentPage, viewMode]);
+  }, [restoreChecked, selectedSource, searchKeyword, currentPage, viewMode]);
 
-  // 当分类变化时，重置到第一页
-  useEffect(() => {
+  // 切换分类时，重置到第一页
+  const handleCategoryChange = (value: string) => {
+    setSelectedCategory(value);
     setCurrentPage(1);
     setVideos([]);
     setHasMore(true);
-  }, [selectedCategory]);
+  };
 
   // 处理搜索提交
   const handleSearch = (e: React.FormEvent) => {
@@ -201,6 +372,32 @@ function SourceSearchPageClient() {
     };
   }, [hasMore, isLoadingVideos]);
 
+  // 滚动超过一屏后显示置顶按钮
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(getPageScrollTop() > 300);
+    };
+
+    handleScroll();
+    document.body.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      document.body.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  // 返回顶部
+  const scrollToTop = () => {
+    try {
+      document.body.scrollTo({ top: 0, behavior: 'smooth' });
+      document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      scrollPageTo(0);
+    }
+  };
+
   return (
     <PageLayout activePath='/source-search'>
       <div className='px-4 sm:px-10 py-4 sm:py-8 overflow-visible mb-10'>
@@ -221,7 +418,7 @@ function SourceSearchPageClient() {
             <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3'>
               选择视频源
             </label>
-            {isLoadingSources ? (
+            {isLoadingSources && apiSites.length === 0 ? (
               <div className='flex items-center justify-center h-12 bg-gray-50/80 rounded-lg border border-gray-200/50 dark:bg-gray-800 dark:border-gray-700'>
                 <Loader2 className='h-5 w-5 animate-spin text-gray-400' />
                 <span className='ml-2 text-sm text-gray-500 dark:text-gray-400'>
@@ -295,7 +492,7 @@ function SourceSearchPageClient() {
               <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3'>
                 选择分类
               </label>
-              {isLoadingCategories ? (
+              {isLoadingCategories && categories.length === 0 ? (
                 <div className='flex items-center justify-center h-12 bg-gray-50/80 rounded-lg border border-gray-200/50 dark:bg-gray-800 dark:border-gray-700'>
                   <Loader2 className='h-5 w-5 animate-spin text-gray-400' />
                   <span className='ml-2 text-sm text-gray-500 dark:text-gray-400'>
@@ -316,7 +513,7 @@ function SourceSearchPageClient() {
                       value: category.id,
                     }))}
                     active={selectedCategory}
-                    onChange={setSelectedCategory}
+                    onChange={handleCategoryChange}
                   />
                 </div>
               )}
@@ -370,6 +567,7 @@ function SourceSearchPageClient() {
                           episodes: item.episodes,
                           episodes_titles: item.episodes_titles,
                         }}
+                        onBeforeNavigate={saveSnapshot}
                       />
                     </div>
                   ))}
@@ -391,6 +589,19 @@ function SourceSearchPageClient() {
           </div>
         )}
       </div>
+
+      {/* 置顶（返回顶部）悬浮按钮 */}
+      <button
+        onClick={scrollToTop}
+        className={`fixed bottom-20 md:bottom-6 right-6 z-[500] w-12 h-12 bg-green-500/90 hover:bg-green-500 text-white rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 ease-in-out flex items-center justify-center group ${
+          showBackToTop
+            ? 'opacity-100 translate-y-0 pointer-events-auto'
+            : 'opacity-0 translate-y-4 pointer-events-none'
+        }`}
+        aria-label='返回顶部'
+      >
+        <ChevronUp className='w-6 h-6 transition-transform group-hover:scale-110' />
+      </button>
     </PageLayout>
   );
 }

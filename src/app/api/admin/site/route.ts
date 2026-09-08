@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
       LiveChartProxy,
       BannerDataSource,
       RecommendationDataSource,
+      LocalSettingsSyncMode,
       PansouApiUrl,
       PansouUsername,
       PansouPassword,
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest) {
       LiveChartProxy?: string;
       BannerDataSource?: string;
       RecommendationDataSource?: string;
+      LocalSettingsSyncMode?: 'off' | 'manual' | 'auto';
       PansouApiUrl?: string;
       PansouUsername?: string;
       PansouPassword?: string;
@@ -202,6 +204,10 @@ export async function POST(request: NextRequest) {
         typeof BannerDataSource !== 'string') ||
       (RecommendationDataSource !== undefined &&
         typeof RecommendationDataSource !== 'string') ||
+      (LocalSettingsSyncMode !== undefined &&
+        LocalSettingsSyncMode !== 'off' &&
+        LocalSettingsSyncMode !== 'manual' &&
+        LocalSettingsSyncMode !== 'auto') ||
       (PansouKeywordBlocklist !== undefined &&
         typeof PansouKeywordBlocklist !== 'string') ||
       (MagnetProxy !== undefined && typeof MagnetProxy !== 'string') ||
@@ -300,6 +306,7 @@ export async function POST(request: NextRequest) {
       LiveChartProxy: normalizeApiBaseUrl(LiveChartProxy),
       BannerDataSource,
       RecommendationDataSource,
+      LocalSettingsSyncMode,
       PansouApiUrl: normalizeApiBaseUrl(PansouApiUrl),
       PansouUsername,
       PansouPassword,

@@ -313,6 +313,8 @@ async function getInitConfig(
         '',
       BangumiProxy: process.env.BANGUMI_PROXY || '',
       LiveChartProxy: process.env.LIVECHART_PROXY || '',
+      // 本地设置云同步模式（全局）：off=关闭 manual=手动 auto=自动
+      LocalSettingsSyncMode: 'off',
       // Pansou配置
       PansouApiUrl: '',
       PansouUsername: '',
@@ -572,6 +574,13 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (adminConfig.SiteConfig.LiveChartProxy === undefined) {
     adminConfig.SiteConfig.LiveChartProxy = process.env.LIVECHART_PROXY || '';
   }
+  // 本地设置云同步模式兜底
+  if (
+    adminConfig.SiteConfig.LocalSettingsSyncMode !== 'manual' &&
+    adminConfig.SiteConfig.LocalSettingsSyncMode !== 'auto'
+  ) {
+    adminConfig.SiteConfig.LocalSettingsSyncMode = 'off';
+  }
   // 确保评论开关存在
   if (adminConfig.SiteConfig.EnableComments === undefined) {
     adminConfig.SiteConfig.EnableComments = false;
@@ -720,6 +729,24 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     }
     if (adminConfig.OpenListConfig.PathMeta === undefined) {
       adminConfig.OpenListConfig.PathMeta = {};
+    } else {
+      // 补齐新字段默认值（代理播放开关、缓存时长）
+      // 旧配置可能缺少新字段，运行期做兜底（类型上已声明为必填）
+      for (const entry of Object.values(
+        adminConfig.OpenListConfig.PathMeta
+      ) as Array<{
+        category: string;
+        refresh14m: boolean;
+        proxyPlay?: boolean;
+        proxyCacheMinutes?: number;
+      }>) {
+        if (entry.proxyPlay === undefined) {
+          entry.proxyPlay = false;
+        }
+        if (entry.proxyCacheMinutes === undefined) {
+          entry.proxyCacheMinutes = 60;
+        }
+      }
     }
   }
 

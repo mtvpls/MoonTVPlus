@@ -41,6 +41,8 @@ export interface AdminConfig {
     LiveChartProxy?: string;
     BannerDataSource?: string; // 轮播图数据源：TMDB、TX 或 Douban
     RecommendationDataSource?: string; // 更多推荐数据源：Douban、TMDB、Mixed、MixedSmart
+    // 本地设置云同步模式：off=关闭，manual=手动（面板右上角备份/恢复按钮），auto=自动（进入网站静默拉取、面板打开静默同步）
+    LocalSettingsSyncMode?: 'off' | 'manual' | 'auto';
     // Pansou配置
     PansouApiUrl?: string;
     PansouUsername?: string;
@@ -181,6 +183,8 @@ export interface AdminConfig {
       [path: string]: {
         category: string; // 分类名
         refresh14m: boolean; // 该路径播放时是否启用 14 分钟 URL 续期
+        proxyPlay: boolean; // 该路径播放链接是否使用服务器代理播放
+        proxyCacheMinutes: number; // 代理播放时链接最终重定向的缓存时长（分钟），默认 60
       };
     };
   };

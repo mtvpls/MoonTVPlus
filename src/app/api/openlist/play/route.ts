@@ -11,51 +11,150 @@ export const runtime = 'nodejs';
 
 /**
  * 使用 HEAD 请求跟随重定向获取最终 URL（直连方法 - 降级使用）
+ * HEAD 不支持（405/501）或请求异常时，降级使用普通 GET（无 Range）让 fetch 跟随重定向
  */
 async function getFinalUrl(url: string, maxRedirects = 5): Promise<string> {
   let currentUrl = url;
   let redirectCount = 0;
+  const userAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
   while (redirectCount < maxRedirects) {
+    let response: Response | null = null;
+
+    // 1) HEAD 请求跟随重定向（无响应体，成本低）
     try {
-      const response = await fetch(currentUrl, {
+      response = await fetch(currentUrl, {
         method: 'HEAD',
         redirect: 'manual',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent': userAgent,
         },
       });
+    } catch (error) {
+      console.log(
+        '[openlist/play] HEAD 请求失败，降级使用 GET:',
+        (error as Error).message
+      );
+    }
 
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('location');
-        if (!location) {
-          return currentUrl;
+    // 2) 部分服务器不支持 HEAD（返回 405/501 或直接抛错），用普通 GET 兜底
+    //    不带 Range（可能被服务器拒绝），直接让 fetch 跟随重定向，取 response.url 为最终地址
+    if (!response || response.status === 405 || response.status === 501) {
+      try {
+        const getResponse = await fetch(currentUrl, {
+          method: 'GET',
+          redirect: 'follow',
+          headers: {
+            'User-Agent': userAgent,
+          },
+        });
+        const finalUrl = getResponse.url || currentUrl;
+        // 只取响应头，立即取消响应体避免下载整份内容
+        if (getResponse.body) {
+          try {
+            await getResponse.body.cancel();
+          } catch (e) {
+            // 忽略取消错误
+          }
         }
-
-        if (location.startsWith('http://') || location.startsWith('https://')) {
-          currentUrl = location;
-        } else if (location.startsWith('/')) {
-          const urlObj = new URL(currentUrl);
-          currentUrl = `${urlObj.protocol}//${urlObj.host}${location}`;
-        } else {
-          const urlObj = new URL(currentUrl);
-          const pathParts = urlObj.pathname.split('/');
-          pathParts.pop();
-          pathParts.push(location);
-          currentUrl = `${urlObj.protocol}//${urlObj.host}${pathParts.join('/')}`;
-        }
-
-        redirectCount++;
-      } else {
+        return getResponse.status < 400 ? finalUrl : currentUrl;
+      } catch (error) {
+        console.error('[openlist/play] 获取最终 URL 失败:', error);
         return currentUrl;
       }
-    } catch (error) {
-      console.error('[openlist/play] 获取最终 URL 失败:', error);
+    }
+
+    if (!response) {
+      return currentUrl;
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) {
+        return currentUrl;
+      }
+
+      if (location.startsWith('http://') || location.startsWith('https://')) {
+        currentUrl = location;
+      } else if (location.startsWith('/')) {
+        const urlObj = new URL(currentUrl);
+        currentUrl = `${urlObj.protocol}//${urlObj.host}${location}`;
+      } else {
+        const urlObj = new URL(currentUrl);
+        const pathParts = urlObj.pathname.split('/');
+        pathParts.pop();
+        pathParts.push(location);
+        currentUrl = `${urlObj.protocol}//${urlObj.host}${pathParts.join('/')}`;
+      }
+
+      redirectCount++;
+    } else {
       return currentUrl;
     }
   }
 
   return currentUrl;
+}
+
+/**
+ * 探测播放 URL 的媒体类型，供前端分流（mkv/mp4 等单文件直链由浏览器原生播放，
+ * 避免无扩展名直链被误判为 m3u8 走 HLS 解析导致播放失败）：
+ * - hls：m3u8/fmp4 流
+ * - file：单文件视频容器（浏览器 <video> no-cors 可直接播放）
+ * - unknown：无法判断（前端回退到 URL 扩展名逻辑）
+ */
+async function detectOpenListMediaType(
+  playUrl: string
+): Promise<'hls' | 'file' | 'unknown'> {
+  try {
+    const path = playUrl.split('?')[0].toLowerCase();
+    if (/\.m3u8?$/i.test(path) || path.includes('m3u8')) return 'hls';
+    if (/\.(mp4|mkv|webm|mov|avi|m4v|flv|ts|mpeg|mpg|3gp|rmvb|rm|wmv|vob)$/i.test(path)) {
+      return 'file';
+    }
+  } catch {
+    return 'unknown';
+  }
+
+  const abortController = new AbortController();
+  const timer = setTimeout(() => abortController.abort(), 6000);
+  let response: Response | undefined;
+  try {
+    response = await fetch(playUrl, {
+      headers: {
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        accept: '*/*',
+        range: 'bytes=0-0',
+      },
+      redirect: 'follow',
+      signal: abortController.signal,
+    });
+    if (response.status !== 200 && response.status !== 206) {
+      return 'unknown';
+    }
+    const contentType = (response.headers.get('content-type') || '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    if (
+      contentType.includes('mpegurl') ||
+      contentType === 'application/x-mpegurl' ||
+      contentType.includes('x-mpegurl')
+    ) {
+      return 'hls';
+    }
+    if (contentType.startsWith('video/') || contentType === 'application/octet-stream') {
+      return 'file';
+    }
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  } finally {
+    clearTimeout(timer);
+    response?.body?.cancel().catch(() => {});
+  }
 }
 
 /**
@@ -105,6 +204,38 @@ export async function GET(request: NextRequest) {
       openListConfig.PathMeta
     );
 
+    // 路径开启了代理播放：直接返回服务器代理地址（代理端负责解析链接与缓存）
+    const { buildOpenListProxyUrl } = await import('@/lib/openlist-play-url');
+    const proxyUrl = pathMetaResolved.proxyPlay
+      ? buildOpenListProxyUrl({
+          token: 'proxy', // 固定 token，由登录 cookie 校验
+          folder: folderName,
+          fileName,
+        })
+      : '';
+
+    if (proxyUrl) {
+      if (format === 'json') {
+        return NextResponse.json({
+          url: proxyUrl,
+          refresh14m: false, // 代理链接稳定，无需 14 分钟续期
+          category: pathMetaResolved.category,
+          proxied: true,
+        });
+      }
+
+      // 默认返回重定向到代理地址（用于外部播放器）
+      const host =
+        request.headers.get('host') || request.headers.get('x-forwarded-host');
+      const proto =
+        request.headers.get('x-forwarded-proto') ||
+        (host?.includes('localhost') || host?.includes('127.0.0.1')
+          ? 'http'
+          : 'https');
+      const baseUrl = process.env.SITE_BASE || `${proto}://${host}`;
+      return NextResponse.redirect(`${baseUrl}${proxyUrl}`);
+    }
+
     const client = new OpenListClient(
       openListConfig.URL,
       openListConfig.Username,
@@ -138,6 +269,7 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
           url: finalUrl,
+          mediaType: await detectOpenListMediaType(finalUrl),
           refresh14m: pathMetaResolved.refresh14m,
           category: pathMetaResolved.category,
         });
@@ -192,6 +324,9 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
           url: resolvedQualities[0].url,
+          mediaType: await detectOpenListMediaType(
+            resolvedQualities[0].url
+          ),
           qualities: resolvedQualities,
           refresh14m: pathMetaResolved.refresh14m,
           category: pathMetaResolved.category,
@@ -229,6 +364,7 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
           url: finalUrl,
+          mediaType: await detectOpenListMediaType(finalUrl),
           refresh14m: pathMetaResolved.refresh14m,
           category: pathMetaResolved.category,
         });
