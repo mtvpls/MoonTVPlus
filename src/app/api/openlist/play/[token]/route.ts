@@ -129,8 +129,21 @@ export async function GET(
       );
     }
 
-    // 返回重定向到真实播放 URL
-    return NextResponse.redirect(fileResponse.data.raw_url);
+    const { resolveOpenListDirectPlayUrl } = await import(
+      '@/lib/openlist-play-url'
+    );
+    const playUrl = resolveOpenListDirectPlayUrl({
+      openListBaseUrl: openListConfig.URL,
+      filePath,
+      rawUrl: fileResponse.data.raw_url,
+      sign: fileResponse.data.sign,
+      provider: fileResponse.data.provider,
+    });
+    if (!playUrl) {
+      throw new Error('获取到的播放链接为空');
+    }
+
+    return NextResponse.redirect(playUrl);
   } catch (error) {
     console.error('获取播放链接失败:', error);
     return NextResponse.json(
