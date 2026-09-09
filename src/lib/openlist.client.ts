@@ -12,6 +12,7 @@ export interface OpenListFile {
   modified: string;
   sign?: string; // 临时下载签名
   raw_url?: string; // 完整下载链接
+  provider?: string; // OpenList 存储驱动名，如 115 Cloud
   thumb?: string;
   type: number;
   path?: string;
