@@ -38,6 +38,7 @@ import {
 } from '@/lib/db.client';
 import { getBangumiSubjectUrl } from '@/lib/bangumi.client';
 import { isNetdiskSource } from '@/lib/netdisk/source';
+import { appendSpecialSourceParam } from '@/lib/special-source.client';
 import {
   base58Decode,
   clearBangumiImageFallbackCacheIfFailed,
@@ -424,13 +425,17 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         const isCurrentlyOnPlayPage =
           typeof window !== 'undefined' && window.location.pathname === '/play';
 
-        let url = `/play?title=${encodeURIComponent(actualTitle.trim())}${
-          actualYear ? `&year=${actualYear}` : ''
-        }${actualSearchType ? `&stype=${actualSearchType}` : ''}${
-          isAggregate ? '&prefer=true' : ''
-        }${
-          actualQuery ? `&stitle=${encodeURIComponent(actualQuery.trim())}` : ''
-        }`;
+        let url = appendSpecialSourceParam(
+          `/play?title=${encodeURIComponent(actualTitle.trim())}${
+            actualYear ? `&year=${actualYear}` : ''
+          }${actualSearchType ? `&stype=${actualSearchType}` : ''}${
+            isAggregate ? '&prefer=true' : ''
+          }${
+            actualQuery
+              ? `&stitle=${encodeURIComponent(actualQuery.trim())}`
+              : ''
+          }`
+        );
 
         if (isCurrentlyOnPlayPage) {
           // 在 play 页面内，添加 _reload 参数强制刷新
@@ -445,13 +450,19 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         const isCurrentlyOnPlayPage =
           typeof window !== 'undefined' && window.location.pathname === '/play';
 
-        let url = `/play?source=${actualSource}&id=${actualId}&title=${encodeURIComponent(
-          actualTitle
-        )}${actualYear ? `&year=${actualYear}` : ''}${
-          isAggregate ? '&prefer=true' : ''
-        }${
-          actualQuery ? `&stitle=${encodeURIComponent(actualQuery.trim())}` : ''
-        }${actualSearchType ? `&stype=${actualSearchType}` : ''}${isDuanju ? '&duanju=1' : ''}`;
+        let url = appendSpecialSourceParam(
+          `/play?source=${actualSource}&id=${actualId}&title=${encodeURIComponent(
+            actualTitle
+          )}${actualYear ? `&year=${actualYear}` : ''}${
+            isAggregate ? '&prefer=true' : ''
+          }${
+            actualQuery
+              ? `&stitle=${encodeURIComponent(actualQuery.trim())}`
+              : ''
+          }${actualSearchType ? `&stype=${actualSearchType}` : ''}${
+            isDuanju ? '&duanju=1' : ''
+          }`
+        );
 
         if (isCurrentlyOnPlayPage) {
           // 在 play 页面内，添加 _reload 参数强制刷新
@@ -499,22 +510,32 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         from === 'tmdb' ||
         (isAggregate && !actualSource && !actualId)
       ) {
-        const url = `/play?title=${encodeURIComponent(actualTitle.trim())}${
-          actualYear ? `&year=${actualYear}` : ''
-        }${actualSearchType ? `&stype=${actualSearchType}` : ''}${
-          isAggregate ? '&prefer=true' : ''
-        }${
-          actualQuery ? `&stitle=${encodeURIComponent(actualQuery.trim())}` : ''
-        }`;
+        const url = appendSpecialSourceParam(
+          `/play?title=${encodeURIComponent(actualTitle.trim())}${
+            actualYear ? `&year=${actualYear}` : ''
+          }${actualSearchType ? `&stype=${actualSearchType}` : ''}${
+            isAggregate ? '&prefer=true' : ''
+          }${
+            actualQuery
+              ? `&stitle=${encodeURIComponent(actualQuery.trim())}`
+              : ''
+          }`
+        );
         window.open(url, '_blank');
       } else if (actualSource && actualId) {
-        const url = `/play?source=${actualSource}&id=${actualId}&title=${encodeURIComponent(
-          actualTitle
-        )}${actualYear ? `&year=${actualYear}` : ''}${
-          isAggregate ? '&prefer=true' : ''
-        }${
-          actualQuery ? `&stitle=${encodeURIComponent(actualQuery.trim())}` : ''
-        }${actualSearchType ? `&stype=${actualSearchType}` : ''}${isDuanju ? '&duanju=1' : ''}`;
+        const url = appendSpecialSourceParam(
+          `/play?source=${actualSource}&id=${actualId}&title=${encodeURIComponent(
+            actualTitle
+          )}${actualYear ? `&year=${actualYear}` : ''}${
+            isAggregate ? '&prefer=true' : ''
+          }${
+            actualQuery
+              ? `&stitle=${encodeURIComponent(actualQuery.trim())}`
+              : ''
+          }${actualSearchType ? `&stype=${actualSearchType}` : ''}${
+            isDuanju ? '&duanju=1' : ''
+          }`
+        );
         window.open(url, '_blank');
       }
     }, [

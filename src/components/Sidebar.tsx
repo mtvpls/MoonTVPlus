@@ -14,6 +14,8 @@ import {
   useState,
 } from 'react';
 
+import { SPECIAL_SOURCE_PATH } from '@/lib/special-source.client';
+
 import { useSite } from './SiteProvider';
 import { useWatchRoomContextSafe } from './WatchRoomProvider';
 
@@ -125,6 +127,12 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
     isCollapsed,
   };
 
+  // /under 下的「搜索」留在特殊源入口，避免一点就跳回普通搜索
+  const isUnderPath =
+    pathname === SPECIAL_SOURCE_PATH ||
+    pathname.startsWith(`${SPECIAL_SOURCE_PATH}/`);
+  const searchHref = isUnderPath ? SPECIAL_SOURCE_PATH : '/search';
+
   const [menuItems, setMenuItems] = useState([
     {
       icon: Film,
@@ -233,6 +241,8 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
       });
     }
 
+    // 特殊源入口不在导航展示，只能手动访问 /under
+
     setMenuItems(items);
   }, [watchRoomContext?.isEnabled]);
 
@@ -292,8 +302,8 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
                 )}
               </Link>
               <Link
-                href='/search'
-                data-active={active === '/search'}
+                href={searchHref}
+                data-active={active === searchHref}
                 className={`group flex items-center rounded-lg px-2 py-2 pl-4 text-gray-700 hover:bg-gray-100/30 hover:text-green-600 data-[active=true]:bg-green-500/20 data-[active=true]:text-green-700 font-medium transition-colors duration-200 min-h-[40px] dark:text-gray-300 dark:hover:text-green-400 dark:data-[active=true]:bg-green-500/10 dark:data-[active=true]:text-green-400 ${isCollapsed ? 'w-full max-w-none mx-0' : 'mx-0'
                   } gap-3 justify-start`}
               >

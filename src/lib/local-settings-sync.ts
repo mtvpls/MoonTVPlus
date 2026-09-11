@@ -51,6 +51,9 @@ export const LOCAL_SETTINGS_KEYS: string[] = [
   'danmakuTraditionalToSimplified',
   'searchTraditionalToSimplified',
   'exactSearch',
+  // 播放器跳转时间：快捷快进与方向键步长分开存，两个键都要跟着云同步走
+  'quickForwardSeconds',
+  'seekStepSeconds',
 ];
 
 export const LOCAL_SETTINGS_MAX_PAYLOAD_BYTES = 64 * 1024; // 64KB
