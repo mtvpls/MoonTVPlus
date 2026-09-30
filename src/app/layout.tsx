@@ -3,18 +3,23 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 
 import './globals.css';
 
 import { parseAuthInfo } from '@/lib/auth';
+import { isValidPageSession } from '@/lib/auth-session';
 import { getConfig } from '@/lib/config';
+import { isKeyLoginEnabled } from '@/lib/key-login-config';
 import { getUserFeatureAccess } from '@/lib/permissions';
+import { getPublicAuthConfig } from '@/lib/public-auth-config';
 import { listEnabledSourceScripts } from '@/lib/source-script';
 
 import { StartupCacheCleanup } from '../components/DanmakuCacheCleanup';
 import { DownloadBubble } from '../components/DownloadBubble';
 import { DownloadPanel } from '../components/DownloadPanel';
 import { GlobalErrorIndicator } from '../components/GlobalErrorIndicator';
+import PublicAuthBoundary from '../components/login/PublicAuthBoundary';
 import RouteScrollReset from '../components/RouteScrollReset';
 import { SiteProvider } from '../components/SiteProvider';
 import { ThemeProvider } from '../components/ThemeProvider';
@@ -27,13 +32,19 @@ import { DownloadProvider } from '../contexts/DownloadContext';
 const inter = Inter({ subsets: ['latin'] });
 export const dynamic = 'force-dynamic';
 
+const hasLayoutSession = cache(async () => {
+  const cookieStore = await cookies();
+  return isValidPageSession(parseAuthInfo(cookieStore.get('auth')?.value));
+});
+
 // 动态生成 metadata，支持配置更新后的标题变化
 export async function generateMetadata(): Promise<Metadata> {
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-  const config = await getConfig();
   let siteName = process.env.NEXT_PUBLIC_SITE_NAME || 'MoonTVPlus';
-  if (storageType !== 'localstorage') {
-    siteName = config.SiteConfig.SiteName;
+  if (!(await hasLayoutSession())) {
+    siteName = (await getPublicAuthConfig()).SITE_NAME;
+  } else if (storageType !== 'localstorage') {
+    siteName = (await getConfig()).SiteConfig.SiteName;
   }
 
   return {
@@ -62,6 +73,31 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Public authentication pages must not mount app providers or serialize
+  // business configuration before the server has verified a real session.
+  if (!(await hasLayoutSession())) {
+    const authConfig = await getPublicAuthConfig();
+    return (
+      <html lang='zh-CN' data-moontvplus='1' suppressHydrationWarning>
+        <head>
+          <link rel='apple-touch-icon' href='/icons/icon-192x192.png' />
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `window.RUNTIME_CONFIG = ${JSON.stringify(authConfig).replace(/</g, '\\u003c')};`,
+            }}
+          />
+        </head>
+        <body className={`${inter.className} min-h-screen bg-white text-gray-900 dark:bg-black dark:text-gray-200`}>
+          <ThemeProvider attribute='class' defaultTheme='system' enableSystem disableTransitionOnChange>
+            <SiteProvider siteName={authConfig.SITE_NAME} announcement=''>
+              <PublicAuthBoundary>{children}</PublicAuthBoundary>
+            </SiteProvider>
+          </ThemeProvider>
+        </body>
+      </html>
+    );
+  }
+
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
 
   let siteName = process.env.NEXT_PUBLIC_SITE_NAME || 'MoonTVPlus';
@@ -294,6 +330,7 @@ export default async function RootLayout({
 
   const runtimeConfig = {
     STORAGE_TYPE: runtimeStorageType,
+    KEY_LOGIN_ENABLED: isKeyLoginEnabled(),
     DISPLAY_STORAGE_TYPE: displayStorageType,
     LOCAL_SETTINGS_SYNC_MODE: localSettingsSyncMode,
     DOUBAN_PROXY_TYPE: doubanProxyType,

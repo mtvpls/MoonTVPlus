@@ -9500,7 +9500,14 @@ const ConfigFileComponent = ({
 
         const data = await resp.json();
         if (data.configContent) {
-          setConfigContent(data.configContent);
+          // 拉取成功后格式化 JSON，便于在下方文本框中阅读和编辑
+          let formattedContent = data.configContent;
+          try {
+            formattedContent = JSON.stringify(JSON.parse(data.configContent), null, 2);
+          } catch {
+            // 后端已做 JSON 校验；这里保留兜底，避免异常响应导致页面报错
+          }
+          setConfigContent(formattedContent);
           // 更新本地配置的最后检查时间
           const currentTime = new Date().toISOString();
           setLastCheckTime(currentTime);
@@ -9640,123 +9647,106 @@ const ConfigFileComponent = ({
 
   return (
     <div className='space-y-4'>
-      {/* 配置订阅区域 */}
-      <div className='bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 shadow-sm'>
-        <div className='flex items-center justify-between mb-6'>
-          <h3 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>
-            配置订阅
-          </h3>
-          <div className='text-sm text-gray-500 dark:text-gray-400 px-3 py-1.5 rounded-full'>
-            最后更新:{' '}
-            {lastCheckTime
-              ? new Date(lastCheckTime).toLocaleString('zh-CN')
-              : '从未更新'}
-          </div>
-        </div>
-
-        <div className='space-y-6'>
-          {/* 订阅URL输入 */}
-          <div>
-            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3'>
-              订阅URL
-            </label>
-            <input
-              type='url'
-              value={subscriptionUrl}
-              onChange={(e) => setSubscriptionUrl(e.target.value)}
-              placeholder='https://example.com/config.json'
-              disabled={false}
-              className='w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 shadow-sm hover:border-gray-400 dark:hover:border-gray-500'
-            />
-            <p className='mt-2 text-xs text-gray-500 dark:text-gray-400'>
-              输入配置文件的订阅地址，要求 JSON 格式，且使用 Base58 编码
-            </p>
+      {/* 配置来源：桌面端左右并排，中间竖线分隔；窄屏上下排列 */}
+      <div className='flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm'>
+        {/* 配置订阅区域 */}
+        <div className='min-w-0 p-6 md:w-1/2'>
+          <div className='flex flex-wrap items-center justify-between gap-2 mb-6'>
+            <h3 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>
+              配置订阅
+            </h3>
+            <div className='text-sm text-gray-500 dark:text-gray-400 px-3 py-1.5 rounded-full'>
+              最后更新:{' '}
+              {lastCheckTime
+                ? new Date(lastCheckTime).toLocaleString('zh-CN')
+                : '从未更新'}
+            </div>
           </div>
 
-          {/* 拉取配置按钮 */}
-          <div className='pt-2'>
-            <button
-              onClick={handleFetchConfig}
-              disabled={isLoading('fetchConfig') || !subscriptionUrl.trim()}
-              className={`w-full px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
-                isLoading('fetchConfig') || !subscriptionUrl.trim()
-                  ? buttonStyles.disabled
-                  : buttonStyles.success
-              }`}
-            >
-              {isLoading('fetchConfig') ? (
-                <div className='flex items-center justify-center gap-2'>
-                  <div className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></div>
-                  拉取中…
-                </div>
-              ) : (
-                '拉取配置'
-              )}
-            </button>
-          </div>
-
-          {/* 自动更新开关 */}
-          <div className='flex items-center justify-between'>
+          <div className='space-y-6'>
+            {/* 订阅URL输入 */}
             <div>
-              <label className='text-sm font-medium text-gray-700 dark:text-gray-300'>
-                自动更新
+              <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3'>
+                配置订阅 URL（支持原始 JSON / Base58）
               </label>
-              <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
-                启用后系统将定期自动拉取最新配置
+              <input
+                type='url'
+                value={subscriptionUrl}
+                onChange={(e) => setSubscriptionUrl(e.target.value)}
+                placeholder='https://example.com/config.json'
+                disabled={false}
+                className='w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 shadow-sm hover:border-gray-400 dark:hover:border-gray-500'
+              />
+              <p className='mt-2 text-xs text-gray-500 dark:text-gray-400'>
+                支持直接返回原始 JSON 的在线地址，也兼容旧版 Base58 编码 JSON；不依赖 .json/.txt 扩展名或 Content-Type
               </p>
             </div>
-            <button
-              type='button'
-              onClick={() => setAutoUpdate(!autoUpdate)}
-              disabled={false}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
-                autoUpdate ? buttonStyles.toggleOn : buttonStyles.toggleOff
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full ${
-                  buttonStyles.toggleThumb
-                } transition-transform ${
-                  autoUpdate
-                    ? buttonStyles.toggleThumbOn
-                    : buttonStyles.toggleThumbOff
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* 配置文件编辑区域 */}
-      <div className='space-y-4'>
-        <div className='relative'>
-          <textarea
-            value={configContent}
-            onChange={(e) => setConfigContent(e.target.value)}
-            rows={20}
-            placeholder='请输入配置文件内容（JSON 格式）...'
-            disabled={false}
-            className='w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm leading-relaxed resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400 dark:hover:border-gray-500'
-            style={{
-              fontFamily:
-                'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-            }}
-            spellCheck={false}
-            data-gramm={false}
-          />
+            {/* 拉取配置按钮 */}
+            <div className='pt-2'>
+              <button
+                onClick={handleFetchConfig}
+                disabled={isLoading('fetchConfig') || !subscriptionUrl.trim()}
+                className={`w-full px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                  isLoading('fetchConfig') || !subscriptionUrl.trim()
+                    ? buttonStyles.disabled
+                    : buttonStyles.success
+                }`}
+              >
+                {isLoading('fetchConfig') ? (
+                  <div className='flex items-center justify-center gap-2'>
+                    <div className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></div>
+                    拉取中…
+                  </div>
+                ) : (
+                  '拉取配置'
+                )}
+              </button>
+            </div>
+
+            {/* 自动更新开关 */}
+            <div className='flex items-center justify-between'>
+              <div>
+                <label className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                  自动更新
+                </label>
+                <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                  启用后系统将定期自动拉取最新配置
+                </p>
+              </div>
+              <button
+                type='button'
+                onClick={() => setAutoUpdate(!autoUpdate)}
+                disabled={false}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                  autoUpdate ? buttonStyles.toggleOn : buttonStyles.toggleOff
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full ${
+                    buttonStyles.toggleThumb
+                  } transition-transform ${
+                    autoUpdate
+                      ? buttonStyles.toggleThumbOn
+                      : buttonStyles.toggleThumbOff
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* 文件上传区域 */}
-        <div className='border-t border-gray-200 dark:border-gray-700 pt-4'>
-          <div className='flex items-center justify-between mb-3'>
-            <label className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+        <div className='flex min-w-0 flex-col p-6 md:w-1/2'>
+          <div className='flex flex-wrap items-center justify-between gap-2 mb-6'>
+            <h3 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>
               上传JSON配置文件
-            </label>
+            </h3>
             <div className='text-xs text-gray-500 dark:text-gray-400'>
               支持根据API字段自动去重
             </div>
           </div>
-          <div className='relative'>
+          <div className='relative flex flex-1'>
             <input
               type='file'
               accept='.json'
@@ -9767,7 +9757,7 @@ const ConfigFileComponent = ({
             />
             <label
               htmlFor='json-file-upload'
-              className={`flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer transition-colors ${
+              className={`flex min-h-40 items-center justify-center w-full px-4 py-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer transition-colors ${
                 isLoading('uploadConfig')
                   ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-50'
                   : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
@@ -9807,6 +9797,26 @@ const ConfigFileComponent = ({
           <p className='mt-2 text-xs text-gray-500 dark:text-gray-400'>
             上传的JSON配置将自动合并到当前配置，重复的API地址将被自动过滤
           </p>
+        </div>
+      </div>
+
+      {/* 配置文件编辑区域 */}
+      <div className='space-y-4'>
+        <div className='relative'>
+          <textarea
+            value={configContent}
+            onChange={(e) => setConfigContent(e.target.value)}
+            rows={20}
+            placeholder='请输入配置文件内容（JSON 格式）...'
+            disabled={false}
+            className='w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm leading-relaxed resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400 dark:hover:border-gray-500'
+            style={{
+              fontFamily:
+                'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+            }}
+            spellCheck={false}
+            data-gramm={false}
+          />
         </div>
 
         <div className='flex items-center justify-between'>
@@ -10937,7 +10947,7 @@ const SiteConfigComponent = ({
     DisableYellowFilter: false,
     FluidSearch: true,
     DanmakuSourceType: 'builtin',
-    DanmakuApiBase: 'https://mtvpls-danmu.netlify.app/87654321',
+    DanmakuApiBase: 'https://mtvpls-danmu.netlify.app',
     DanmakuApiToken: '87654321',
     DanmakuAutoLoadDefault: true,
     TMDBApiKey: '',
@@ -11769,7 +11779,7 @@ const SiteConfigComponent = ({
                 </label>
                 <input
                   type='text'
-                  placeholder='http://localhost:9321'
+                  placeholder='https://mtvpls-danmu.netlify.app'
                   value={siteSettings.DanmakuApiBase}
                   onChange={(e) =>
                     setSiteSettings((prev) => ({
@@ -11780,7 +11790,7 @@ const SiteConfigComponent = ({
                   className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent'
                 />
                 <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  自定义弹幕服务器的 API 地址。API部署参考
+                  填写弹幕服务器的基础地址，例如 https://mtvpls-danmu.netlify.app。不要在地址末尾添加 Token 或 /api/v2，访问令牌请在下方单独填写。API 部署参考
                   <a
                     href='https://github.com/huangxd-/danmu_api.git'
                     target='_blank'
@@ -11810,7 +11820,7 @@ const SiteConfigComponent = ({
                   className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent'
                 />
                 <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  自定义弹幕服务器的访问令牌，默认为 87654321
+                  填写弹幕服务器配置中的普通 TOKEN，只填写令牌本身，不要包含域名或路径，也不要填写管理员 ADMIN_TOKEN。87654321 仅为项目默认示例，自建服务请填写实际配置的令牌。
                 </p>
               </div>
             </>

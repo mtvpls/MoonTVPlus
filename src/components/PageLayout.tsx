@@ -1,16 +1,17 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { usePathname, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
-import { BackButton } from './BackButton';
+import DesktopNavbar from './DesktopNavbar';
 import MobileBottomNav from './MobileBottomNav';
 import MobileHeader from './MobileHeader';
-import Sidebar from './Sidebar';
-import { ThemeToggle } from './ThemeToggle';
-import { UpdateNotification } from './UpdateNotification';
-import { UserMenu } from './UserMenu';
 import { VersionCheckProvider } from './VersionCheckProvider';
+
+const DirectPlayDialog = dynamic(() => import('./DirectPlayDialog'), {
+  ssr: false,
+});
 
 interface PageLayoutProps {
   children: React.ReactNode;
@@ -18,9 +19,21 @@ interface PageLayoutProps {
   hideNavigation?: boolean; // 控制是否隐藏顶部和底部导航栏
 }
 
-const PageLayout = ({ children, activePath = '/', hideNavigation = false }: PageLayoutProps) => {
+const PageLayout = ({
+  children,
+  activePath = '/',
+  hideNavigation = false,
+}: PageLayoutProps) => {
   const router = useRouter();
+  const pathname = usePathname();
+  const [directPlayOpen, setDirectPlayOpen] = useState(false);
+  const openDirectPlay = useCallback(() => setDirectPlayOpen(true), []);
+  const closeDirectPlay = useCallback(() => setDirectPlayOpen(false), []);
   const [backgroundImage, setBackgroundImage] = useState('');
+
+  useEffect(() => {
+    closeDirectPlay();
+  }, [pathname, closeDirectPlay]);
   const shouldShowSharedBackground = !hideNavigation && activePath !== '/play';
 
   useEffect(() => {
@@ -60,54 +73,40 @@ const PageLayout = ({ children, activePath = '/', hideNavigation = false }: Page
     setBackgroundImage(urls[randomIndex]);
   }, [shouldShowSharedBackground]);
 
+  const navigationOffsetClass = hideNavigation
+    ? ''
+    : 'mt-[calc(3rem+env(safe-area-inset-top))] md:mt-16';
+
   return (
     <VersionCheckProvider>
-      <div className='relative w-full min-h-screen overflow-hidden'>
+      <div className='relative min-h-screen w-full overflow-hidden'>
         {shouldShowSharedBackground && backgroundImage && (
           <>
             <div
-              className='absolute inset-0 pointer-events-none bg-cover bg-center bg-no-repeat opacity-45'
+              className='pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat opacity-45'
               style={{ backgroundImage: `url(${backgroundImage})` }}
             />
-            <div className='absolute inset-0 pointer-events-none bg-white/50 dark:bg-gray-950/50' />
+            <div className='pointer-events-none absolute inset-0 bg-white/50 dark:bg-gray-950/50' />
           </>
         )}
 
-        {/* 移动端头部 */}
         {!hideNavigation && (
-          <MobileHeader showBackButton={['/play', '/live'].includes(activePath)} />
+          <>
+            <MobileHeader
+              showBackButton={['/play', '/live'].includes(activePath)}
+            />
+            <DesktopNavbar
+              onDirectPlay={openDirectPlay}
+              activePath={activePath}
+              showBackButton={['/play', '/live'].includes(activePath)}
+            />
+          </>
         )}
 
-        {/* 主要布局容器 */}
-        <div className='relative z-10 flex md:grid md:grid-cols-[auto_1fr] w-full min-h-screen md:min-h-auto'>
-          {/* 侧边栏 - 桌面端显示，移动端隐藏 */}
-          {!hideNavigation && (
-            <div className='hidden md:block'>
-              <Sidebar activePath={activePath} />
-            </div>
-          )}
-
-          {/* 主内容区域 */}
-          <div className='relative min-w-0 flex-1 transition-all duration-300'>
-            {/* 桌面端左上角返回按钮 */}
-            {!hideNavigation && ['/play', '/live'].includes(activePath) && (
-              <div className='absolute top-3 left-1 z-20 hidden md:flex'>
-                <BackButton />
-              </div>
-            )}
-
-            {/* 桌面端顶部按钮 */}
-            {!hideNavigation && (
-              <div className='absolute top-2 right-4 z-20 hidden md:flex items-center gap-2'>
-                <ThemeToggle />
-                <UserMenu />
-                <UpdateNotification />
-              </div>
-            )}
-
-            {/* 主内容 */}
+        <div className='relative z-10 flex min-h-screen w-full'>
+          <div className='relative min-w-0 flex-1'>
             <main
-              className='flex-1 md:min-h-0 mb-14 md:mb-0 md:mt-0 mt-[calc(3rem+env(safe-area-inset-top))]'
+              className={`flex-1 md:min-h-0 mb-14 md:mb-0 ${navigationOffsetClass}`}
               style={{
                 paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom))',
               }}
@@ -117,13 +116,18 @@ const PageLayout = ({ children, activePath = '/', hideNavigation = false }: Page
           </div>
         </div>
 
-        {/* 移动端底部导航 */}
         {!hideNavigation && (
           <div className='md:hidden'>
-            <MobileBottomNav activePath={activePath} />
+            <MobileBottomNav
+              activePath={activePath}
+              onDirectPlay={openDirectPlay}
+            />
           </div>
         )}
       </div>
+      {!hideNavigation && directPlayOpen && (
+        <DirectPlayDialog onClose={closeDirectPlay} />
+      )}
     </VersionCheckProvider>
   );
 };

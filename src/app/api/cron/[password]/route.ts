@@ -286,24 +286,9 @@ async function refreshConfig() {
       }
 
       const configContent = await response.text();
-
-      // 对 configContent 进行 base58 解码
-      let decodedContent;
-      try {
-        const bs58 = (await import('bs58')).default;
-        const decodedBytes = bs58.decode(configContent);
-        decodedContent = new TextDecoder().decode(decodedBytes);
-      } catch (decodeError) {
-        console.warn('Base58 解码失败:', decodeError);
-        throw decodeError;
-      }
-
-      try {
-        JSON.parse(decodedContent);
-      } catch (e) {
-        throw new Error('配置文件格式错误，请检查 JSON 语法');
-      }
-      config.ConfigFile = decodedContent;
+      const { parseConfigSubscriptionContent } = await import('@/lib/config-subscription');
+      const parsedSubscription = await parseConfigSubscriptionContent(configContent);
+      config.ConfigFile = parsedSubscription.content;
       config.ConfigSubscribtion.LastCheck = new Date().toISOString();
       config = refineConfig(config);
       await db.saveAdminConfig(config);

@@ -2,17 +2,12 @@
 
 'use client';
 
-import {
-  BookMarked,
-  BookOpen,
-  Bot,
-  ChevronRight,
-  Link as LinkIcon,
-  ListVideo,
-  Music,
-} from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+
+import styles from './home.module.css';
+import dashboard from '@/components/home/HomeDashboard.module.css';
 
 import {
   BangumiCalendarData,
@@ -21,17 +16,18 @@ import {
 import { getDoubanCategories } from '@/lib/douban.client';
 import { getTMDBImageUrl, TMDBItem } from '@/lib/tmdb.client';
 import { DoubanItem } from '@/lib/types';
-import { base58Encode, processImageUrl } from '@/lib/utils';
+import { processImageUrl } from '@/lib/utils';
 
 import AIChatPanel from '@/components/AIChatPanel';
 import BannerCarousel from '@/components/BannerCarousel';
 import ContinueWatching from '@/components/ContinueWatching';
 import FireworksCanvas from '@/components/FireworksCanvas';
+import HomeAISearch from '@/components/home/HomeAISearch';
+import HomeRecommendations from '@/components/home/HomeRecommendations';
 import HttpWarningDialog from '@/components/HttpWarningDialog';
 import PageLayout from '@/components/PageLayout';
 import ScrollableRow from '@/components/ScrollableRow';
 import { useSite } from '@/components/SiteProvider';
-import Toast, { ToastProps } from '@/components/Toast';
 import VideoCard from '@/components/VideoCard';
 
 // 首页模块配置接口
@@ -40,6 +36,14 @@ interface HomeModule {
   name: string;
   enabled: boolean;
   order: number;
+}
+
+function HomeEmptyState({ message }: { message: string }) {
+  return (
+    <p className={styles.emptyState} role='status'>
+      {message}
+    </p>
+  );
 }
 
 function HomeClient() {
@@ -70,189 +74,18 @@ function HomeClient() {
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [showHttpWarning, setShowHttpWarning] = useState(true);
   const [showAIChat, setShowAIChat] = useState(false);
+  const [aiStreaming, setAiStreaming] = useState(false);
+  const [aiRequest, setAiRequest] = useState<{ id: number; text: string }>();
+  const aiRequestId = useRef(0);
+
+  const askFromHome = (text: string) => {
+    setAiRequest({ id: ++aiRequestId.current, text });
+    setShowAIChat(true);
+  };
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiDefaultMessageNoVideo, setAiDefaultMessageNoVideo] = useState(
     '你好！我是MoonTVPlus的AI影视助手。想看什么电影或剧集？需要推荐吗？'
   );
-  const [sourceSearchEnabled, setSourceSearchEnabled] = useState(true);
-  const [musicEnabled, setMusicEnabled] = useState(false);
-  const [mangaEnabled, setMangaEnabled] = useState(false);
-  const [booksEnabled, setBooksEnabled] = useState(false);
-  const [netdiskTempPlayEnabled, setNetdiskTempPlayEnabled] = useState(false);
-  const [showDirectPlayDialog, setShowDirectPlayDialog] = useState(false);
-  const [directPlayUrl, setDirectPlayUrl] = useState('');
-  const [directPlaySubmitting, setDirectPlaySubmitting] = useState(false);
-  const [toast, setToast] = useState<ToastProps | null>(null);
-
-  const detectNetdiskLink = (
-    url: string
-  ): {
-    provider: 'quark' | 'mobile' | 'baidu' | 'tianyi' | '123' | 'uc' | '115';
-    shareUrl: string;
-    passcode?: string;
-  } | null => {
-    const trimmed = url.trim();
-
-    const pickPasscode = (...values: Array<string | undefined>) =>
-      values.map((item) => item?.trim()).find(Boolean);
-
-    const inlinePasscode = (text: string) =>
-      pickPasscode(
-        text.match(
-          /(?:提取码|访问码|密码)\s*[:：=]?\s*([a-zA-Z0-9]{4,8})/i
-        )?.[1],
-        text.match(/[?&](?:pwd|passcode|accessCode)=([^&\s]+)/i)?.[1]
-      );
-
-    if (
-      /https:\/\/(?:www\.)?123(?:684|865|912|pan)\.(?:com|cn)\/s\//i.test(
-        trimmed
-      )
-    ) {
-      return {
-        provider: '123',
-        shareUrl: trimmed,
-        passcode: pickPasscode(
-          trimmed.match(/[?&]pwd=([^&]+)/i)?.[1],
-          inlinePasscode(trimmed)
-        ),
-      };
-    }
-
-    if (
-      /https:\/\/cloud\.189\.cn\/(web\/share\?code=|t\/)/i.test(trimmed) ||
-      /https:\/\/h5\.cloud\.189\.cn\/share\.html#\/t\//i.test(trimmed)
-    ) {
-      return {
-        provider: 'tianyi',
-        shareUrl: trimmed,
-        passcode: pickPasscode(
-          trimmed.match(/[?&]pwd=([^&]+)/i)?.[1],
-          inlinePasscode(trimmed)
-        ),
-      };
-    }
-
-    if (/pan\.baidu\.com\/(s\/|wap\/init\?surl=)/i.test(trimmed)) {
-      return {
-        provider: 'baidu',
-        shareUrl: trimmed,
-        passcode: pickPasscode(
-          trimmed.match(/[?&](?:pwd|accessCode)=([^&]+)/i)?.[1],
-          inlinePasscode(trimmed)
-        ),
-      };
-    }
-
-    if (/https:\/\/pan\.quark\.cn\/s\//i.test(trimmed)) {
-      return {
-        provider: 'quark',
-        shareUrl: trimmed,
-        passcode: pickPasscode(
-          trimmed.match(/[?&](?:pwd|passcode)=([^&]+)/i)?.[1],
-          inlinePasscode(trimmed)
-        ),
-      };
-    }
-
-    if (/https:\/\/drive\.uc\.cn\/s\//i.test(trimmed)) {
-      return {
-        provider: 'uc',
-        shareUrl: trimmed,
-        passcode: pickPasscode(
-          trimmed.match(/[?&](?:pwd|passcode)=([^&]+)/i)?.[1],
-          inlinePasscode(trimmed)
-        ),
-      };
-    }
-
-    if (/https:\/\/(?:yun|caiyun)\.139\.com\//i.test(trimmed)) {
-      return { provider: 'mobile', shareUrl: trimmed };
-    }
-
-    if (/https:\/\/(?:115|anxia|115cdn)\.com\/s\//i.test(trimmed)) {
-      return {
-        provider: '115',
-        shareUrl: trimmed,
-        passcode: pickPasscode(
-          trimmed.match(/[?&](?:password|pwd|passcode)=([^&]+)/i)?.[1],
-          inlinePasscode(trimmed)
-        ),
-      };
-    }
-
-    return null;
-  };
-
-  const handleDirectPlay = () => {
-    setDirectPlayUrl('');
-    setShowDirectPlayDialog(true);
-  };
-
-  const submitDirectPlay = async () => {
-    const trimmed = directPlayUrl.trim();
-    if (!trimmed) return;
-    setDirectPlaySubmitting(true);
-    try {
-      const netdisk = detectNetdiskLink(trimmed);
-      if (netdisk && !netdiskTempPlayEnabled) {
-        throw new Error('无权限使用临时播放');
-      }
-
-      if (netdisk) {
-        const source =
-          netdisk.provider === 'mobile'
-            ? 'netdisk-mobile'
-            : netdisk.provider === 'baidu'
-            ? 'netdisk-baidu'
-            : netdisk.provider === 'tianyi'
-            ? 'netdisk-tianyi'
-            : netdisk.provider === '115'
-            ? 'netdisk-115'
-            : netdisk.provider === 'uc'
-            ? 'netdisk-uc'
-            : netdisk.provider === '123'
-            ? 'netdisk-123'
-            : 'netdisk-quark';
-        const id = base58Encode(
-          JSON.stringify({
-            shareUrl: netdisk.shareUrl,
-            passcode: netdisk.passcode || '',
-          })
-        );
-        if (!id) {
-          throw new Error('网盘链接编码失败');
-        }
-        const targetUrl = `/play?source=${encodeURIComponent(
-          source
-        )}&id=${encodeURIComponent(id)}&title=${encodeURIComponent(
-          '网盘直链播放'
-        )}`;
-        setShowDirectPlayDialog(false);
-        setDirectPlayUrl('');
-        window.location.assign(targetUrl);
-        return;
-      }
-
-      const encoded = base58Encode(trimmed);
-      if (!encoded) return;
-      const targetUrl = `/play?source=directplay&id=${encodeURIComponent(
-        encoded
-      )}`;
-      setShowDirectPlayDialog(false);
-      setDirectPlayUrl('');
-      window.location.assign(targetUrl);
-    } catch (error) {
-      setToast({
-        message: error instanceof Error ? error.message : '播放失败',
-        type: 'error',
-        onClose: () => setToast(null),
-      });
-    } finally {
-      setDirectPlaySubmitting(false);
-    }
-  };
-
   const loadHomeLayoutSettings = () => {
     if (typeof window === 'undefined') return;
 
@@ -314,48 +147,6 @@ function HomeClient() {
       if (defaultMsg) {
         setAiDefaultMessageNoVideo(defaultMsg);
       }
-    }
-  }, []);
-
-  // 检查源站寻片功能是否启用
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const enabled =
-        (window as any).RUNTIME_CONFIG?.ENABLE_SOURCE_SEARCH !== false;
-      setSourceSearchEnabled(enabled);
-    }
-  }, []);
-
-  // 检查音乐功能是否启用
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const enabled = !!(window as any).RUNTIME_CONFIG?.MUSIC_ENABLED;
-      setMusicEnabled(enabled);
-    }
-  }, []);
-
-  // 检查漫画功能是否启用
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const enabled = !!(window as any).RUNTIME_CONFIG?.SUWAYOMI_ENABLED;
-      setMangaEnabled(enabled);
-    }
-  }, []);
-
-  // 检查电子书功能是否启用
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const enabled = !!(window as any).RUNTIME_CONFIG?.BOOKS_ENABLED;
-      setBooksEnabled(enabled);
-    }
-  }, []);
-
-  // 检查网盘临时播放权限，仅有权限时在直链播放弹窗展示网盘在线播放提示
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const enabled = !!(window as any).RUNTIME_CONFIG
-        ?.NETDISK_TEMP_PLAY_ENABLED;
-      setNetdiskTempPlayEnabled(enabled);
     }
   }, []);
 
@@ -569,210 +360,189 @@ function HomeClient() {
     switch (moduleId) {
       case 'hotMovies':
         return (
-          <section key='hotMovies' className='mb-8'>
-            <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-                热门电影
-              </h2>
-              <Link
-                href='/douban?type=movie'
-                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-              >
-                查看更多
-                <ChevronRight className='w-4 h-4 ml-1' />
-              </Link>
-            </div>
-            <ScrollableRow>
-              {loading
-                ? Array.from({ length: 8 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                    >
-                      <div className='aspect-[2/3] bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse mb-2' />
-                      <div className='h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4' />
-                    </div>
-                  ))
-                : hotMovies.map((movie) => (
-                    <div
-                      key={movie.id}
-                      className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                    >
-                      <VideoCard
-                        id={movie.id}
-                        poster={movie.poster}
-                        title={movie.title}
-                        year={movie.year}
-                        rate={movie.rate}
-                        type='movie'
-                        from='douban'
-                        douban_id={movie.id ? parseInt(movie.id) : undefined}
-                      />
-                    </div>
-                  ))}
-            </ScrollableRow>
-          </section>
+          <HomeRecommendations
+            key='hotMovies'
+            items={hotMovies}
+            loading={loading}
+          />
         );
 
       case 'hotDuanju':
         if (hotDuanju.length === 0) return null;
         return (
-          <section key='hotDuanju' className='mb-8'>
-            <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+          <section
+            key='hotDuanju'
+            className={styles.section}
+            aria-labelledby='home-duanju-title'
+            aria-busy={loading}
+          >
+            <div className={styles.sectionHeader}>
+              <h2 id='home-duanju-title' className={styles.sectionTitle}>
                 热播短剧
               </h2>
-              <Link
-                href='/duanju'
-                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-              >
+              <Link href='/duanju' className={styles.moreLink}>
                 查看更多
-                <ChevronRight className='w-4 h-4 ml-1' />
+                <ChevronRight className='ml-1 h-4 w-4' aria-hidden='true' />
               </Link>
             </div>
-            <ScrollableRow>
-              {loading
-                ? Array.from({ length: 8 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                    >
-                      <div className='aspect-[2/3] bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse mb-2' />
-                      <div className='h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4' />
-                    </div>
-                  ))
-                : hotDuanju.map((duanju) => (
-                    <div
-                      key={duanju.id + duanju.source}
-                      className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                    >
-                      <VideoCard
-                        id={duanju.id}
-                        source={duanju.source}
-                        poster={duanju.poster}
-                        title={duanju.title}
-                        year={duanju.year}
-                        type='tv'
-                        from='search'
-                        source_name={duanju.source_name}
-                        episodes={duanju.episodes?.length}
-                        douban_id={duanju.douban_id}
-                        cmsData={{
-                          desc: duanju.desc,
-                          episodes: duanju.episodes,
-                          episodes_titles: duanju.episodes_titles,
-                        }}
-                      />
-                    </div>
-                  ))}
-            </ScrollableRow>
+            <div className={styles.row}>
+              <ScrollableRow bottomPadding='pb-4 sm:pb-6'>
+                {loading
+                  ? Array.from({ length: 8 }).map((_, index) => (
+                      <div key={index} className={styles.posterItem}>
+                        <div
+                          className={styles.skeletonPoster}
+                          aria-hidden='true'
+                        />
+                        <div
+                          className={styles.skeletonLine}
+                          aria-hidden='true'
+                        />
+                      </div>
+                    ))
+                  : hotDuanju.map((duanju) => (
+                      <div
+                        key={duanju.id + duanju.source}
+                        className={styles.posterItem}
+                      >
+                        <VideoCard
+                          id={duanju.id}
+                          source={duanju.source}
+                          poster={duanju.poster}
+                          title={duanju.title}
+                          year={duanju.year}
+                          type='tv'
+                          from='search'
+                          source_name={duanju.source_name}
+                          episodes={duanju.episodes?.length}
+                          douban_id={duanju.douban_id}
+                          cmsData={{
+                            desc: duanju.desc,
+                            episodes: duanju.episodes,
+                            episodes_titles: duanju.episodes_titles,
+                          }}
+                        />
+                      </div>
+                    ))}
+              </ScrollableRow>
+            </div>
           </section>
         );
 
       case 'bangumiCalendar':
         return (
-          <section key='bangumiCalendar' className='mb-8'>
-            <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+          <section
+            key='bangumiCalendar'
+            className={styles.section}
+            aria-labelledby='home-anime-title'
+            aria-busy={loading}
+          >
+            <div className={styles.sectionHeader}>
+              <h2 id='home-anime-title' className={styles.sectionTitle}>
                 新番放送
               </h2>
-              <Link
-                href='/douban?type=anime'
-                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-              >
+              <Link href='/douban?type=anime' className={styles.moreLink}>
                 查看更多
-                <ChevronRight className='w-4 h-4 ml-1' />
+                <ChevronRight className='ml-1 h-4 w-4' aria-hidden='true' />
               </Link>
             </div>
-            <ScrollableRow>
-              {loading
-                ? Array.from({ length: 8 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                    >
-                      <div className='relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-gray-200 animate-pulse dark:bg-gray-800'>
-                        <div className='absolute inset-0 bg-gray-300 dark:bg-gray-700'></div>
+            <div className={styles.row}>
+              <ScrollableRow bottomPadding='pb-4 sm:pb-6'>
+                {loading
+                  ? Array.from({ length: 8 }).map((_, index) => (
+                      <div key={index} className={styles.posterItem}>
+                        <div className='relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-gray-200 animate-pulse dark:bg-gray-800'>
+                          <div className='absolute inset-0 bg-gray-300 dark:bg-gray-700'></div>
+                        </div>
+                        <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
                       </div>
-                      <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
-                    </div>
-                  ))
-                : (() => {
-                    const today = new Date();
-                    const weekdays = [
-                      'Sun',
-                      'Mon',
-                      'Tue',
-                      'Wed',
-                      'Thu',
-                      'Fri',
-                      'Sat',
-                    ];
-                    const currentWeekday = weekdays[today.getDay()];
-                    const todayAnimes =
-                      bangumiCalendarData
-                        .find((item) => item.weekday.en === currentWeekday)
-                        ?.items.filter((anime) => anime.images) || [];
+                    ))
+                  : (() => {
+                      const today = new Date();
+                      const weekdays = [
+                        'Sun',
+                        'Mon',
+                        'Tue',
+                        'Wed',
+                        'Thu',
+                        'Fri',
+                        'Sat',
+                      ];
+                      const currentWeekday = weekdays[today.getDay()];
+                      const todayAnimes =
+                        bangumiCalendarData
+                          .find((item) => item.weekday.en === currentWeekday)
+                          ?.items.filter((anime) => anime.images) || [];
 
-                    return todayAnimes.map((anime, index) => (
-                      <div
-                        key={`${anime.id}-${index}`}
-                        className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                      >
-                        <VideoCard
-                          from='douban'
-                          title={anime.name_cn || anime.name}
-                          poster={
-                            anime.images?.large ||
-                            anime.images?.common ||
-                            anime.images?.medium ||
-                            anime.images?.small ||
-                            anime.images?.grid ||
-                            ''
-                          }
-                          douban_id={anime.id}
-                          rate={anime.rating?.score?.toFixed(1) || ''}
-                          year={anime.air_date?.split('-')?.[0] || ''}
-                          isBangumi={true}
-                        />
-                      </div>
-                    ));
-                  })()}
-            </ScrollableRow>
+                      if (todayAnimes.length === 0) {
+                        return (
+                          <HomeEmptyState message='今天暂无新番更新，可以前往动漫片库浏览。' />
+                        );
+                      }
+
+                      return todayAnimes.map((anime, index) => (
+                        <div
+                          key={`${anime.id}-${index}`}
+                          className={styles.posterItem}
+                        >
+                          <VideoCard
+                            from='douban'
+                            title={anime.name_cn || anime.name}
+                            poster={
+                              anime.images?.large ||
+                              anime.images?.common ||
+                              anime.images?.medium ||
+                              anime.images?.small ||
+                              anime.images?.grid ||
+                              ''
+                            }
+                            douban_id={anime.id}
+                            rate={anime.rating?.score?.toFixed(1) || ''}
+                            year={anime.air_date?.split('-')?.[0] || ''}
+                            isBangumi={true}
+                          />
+                        </div>
+                      ));
+                    })()}
+              </ScrollableRow>
+            </div>
           </section>
         );
 
       case 'hotTvShows':
         return (
-          <section key='hotTvShows' className='mb-8'>
-            <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+          <section
+            key='hotTvShows'
+            className={styles.section}
+            aria-labelledby='home-tv-title'
+            aria-busy={loading}
+          >
+            <div className={styles.sectionHeader}>
+              <h2 id='home-tv-title' className={styles.sectionTitle}>
                 热门剧集
               </h2>
-              <Link
-                href='/douban?type=tv'
-                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-              >
+              <Link href='/douban?type=tv' className={styles.moreLink}>
                 查看更多
-                <ChevronRight className='w-4 h-4 ml-1' />
+                <ChevronRight className='ml-1 h-4 w-4' aria-hidden='true' />
               </Link>
             </div>
-            <ScrollableRow>
-              {loading
-                ? Array.from({ length: 8 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                    >
-                      <div className='aspect-[2/3] bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse mb-2' />
-                      <div className='h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4' />
+            <div className={styles.row}>
+              <ScrollableRow bottomPadding='pb-4 sm:pb-6'>
+                {loading ? (
+                  Array.from({ length: 8 }).map((_, index) => (
+                    <div key={index} className={styles.posterItem}>
+                      <div
+                        className={styles.skeletonPoster}
+                        aria-hidden='true'
+                      />
+                      <div className={styles.skeletonLine} aria-hidden='true' />
                     </div>
                   ))
-                : hotTvShows.map((tvShow) => (
-                    <div
-                      key={tvShow.id}
-                      className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                    >
+                ) : hotTvShows.length === 0 ? (
+                  <HomeEmptyState message='暂无剧集推荐，稍后再来看看。' />
+                ) : (
+                  hotTvShows.map((tvShow) => (
+                    <div key={tvShow.id} className={styles.posterItem}>
                       <VideoCard
                         id={tvShow.id}
                         poster={tvShow.poster}
@@ -784,42 +554,47 @@ function HomeClient() {
                         douban_id={tvShow.id ? parseInt(tvShow.id) : undefined}
                       />
                     </div>
-                  ))}
-            </ScrollableRow>
+                  ))
+                )}
+              </ScrollableRow>
+            </div>
           </section>
         );
 
       case 'hotVarietyShows':
         return (
-          <section key='hotVarietyShows' className='mb-8'>
-            <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+          <section
+            key='hotVarietyShows'
+            className={styles.section}
+            aria-labelledby='home-variety-title'
+            aria-busy={loading}
+          >
+            <div className={styles.sectionHeader}>
+              <h2 id='home-variety-title' className={styles.sectionTitle}>
                 热门综艺
               </h2>
-              <Link
-                href='/douban?type=show'
-                className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-              >
+              <Link href='/douban?type=show' className={styles.moreLink}>
                 查看更多
-                <ChevronRight className='w-4 h-4 ml-1' />
+                <ChevronRight className='ml-1 h-4 w-4' aria-hidden='true' />
               </Link>
             </div>
-            <ScrollableRow>
-              {loading
-                ? Array.from({ length: 8 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                    >
-                      <div className='aspect-[2/3] bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse mb-2' />
-                      <div className='h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4' />
+            <div className={styles.row}>
+              <ScrollableRow bottomPadding='pb-4 sm:pb-6'>
+                {loading ? (
+                  Array.from({ length: 8 }).map((_, index) => (
+                    <div key={index} className={styles.posterItem}>
+                      <div
+                        className={styles.skeletonPoster}
+                        aria-hidden='true'
+                      />
+                      <div className={styles.skeletonLine} aria-hidden='true' />
                     </div>
                   ))
-                : hotVarietyShows.map((varietyShow) => (
-                    <div
-                      key={varietyShow.id}
-                      className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                    >
+                ) : hotVarietyShows.length === 0 ? (
+                  <HomeEmptyState message='暂无综艺推荐，稍后再来看看。' />
+                ) : (
+                  hotVarietyShows.map((varietyShow) => (
+                    <div key={varietyShow.id} className={styles.posterItem}>
                       <VideoCard
                         id={varietyShow.id}
                         poster={varietyShow.poster}
@@ -833,44 +608,54 @@ function HomeClient() {
                         }
                       />
                     </div>
-                  ))}
-            </ScrollableRow>
+                  ))
+                )}
+              </ScrollableRow>
+            </div>
           </section>
         );
 
       case 'upcomingContent':
         if (upcomingContent.length === 0) return null;
         return (
-          <section key='upcomingContent' className='mb-8'>
-            <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+          <section
+            key='upcomingContent'
+            className={styles.section}
+            aria-labelledby='home-upcoming-title'
+          >
+            <div className={styles.sectionHeader}>
+              <h2 id='home-upcoming-title' className={styles.sectionTitle}>
                 即将上映
               </h2>
             </div>
-            <ScrollableRow>
-              {upcomingContent.map((item) => (
-                <div
-                  key={`${item.media_type}-${item.id}`}
-                  className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-                >
-                  <VideoCard
-                    title={item.title}
-                    poster={processImageUrl(getTMDBImageUrl(item.poster_path))}
-                    year={item.release_date?.split('-')?.[0] || ''}
-                    rate={
-                      item.vote_average && item.vote_average > 0
-                        ? item.vote_average.toFixed(1)
-                        : ''
-                    }
-                    type={item.media_type === 'tv' ? 'tv' : 'movie'}
-                    from='douban'
-                    tmdb_id={item.id}
-                    releaseDate={item.release_date}
-                    isUpcoming={true}
-                  />
-                </div>
-              ))}
-            </ScrollableRow>
+            <div className={styles.row}>
+              <ScrollableRow bottomPadding='pb-4 sm:pb-6'>
+                {upcomingContent.map((item) => (
+                  <div
+                    key={`${item.media_type}-${item.id}`}
+                    className={styles.posterItem}
+                  >
+                    <VideoCard
+                      title={item.title}
+                      poster={processImageUrl(
+                        getTMDBImageUrl(item.poster_path)
+                      )}
+                      year={item.release_date?.split('-')?.[0] || ''}
+                      rate={
+                        item.vote_average && item.vote_average > 0
+                          ? item.vote_average.toFixed(1)
+                          : ''
+                      }
+                      type={item.media_type === 'tv' ? 'tv' : 'movie'}
+                      from='douban'
+                      tmdb_id={item.id}
+                      releaseDate={item.release_date}
+                      isUpcoming={true}
+                    />
+                  </div>
+                ))}
+              </ScrollableRow>
+            </div>
           </section>
         );
 
@@ -882,97 +667,36 @@ function HomeClient() {
   return (
     <PageLayout>
       <FireworksCanvas />
-      {/* TMDB 热门轮播图 */}
-      {homeBannerEnabled && (
-        <div className='w-full mb-4'>
-          <BannerCarousel delayLoad={true} />
-        </div>
-      )}
-
-      <div className='px-2 sm:px-10 pb-4 sm:pb-8 overflow-visible'>
-        <div className='max-w-[95%] mx-auto'>
-          {/* 首页内容 */}
-          <>
-            {/* 源站寻片和AI问片入口 */}
-            <div
-              className={`flex items-center justify-end gap-2 mb-4 ${
-                homeBannerEnabled ? '' : 'mt-[30px]'
-              }`}
-            >
-              <button
-                onClick={handleDirectPlay}
-                className='p-1.5 rounded-lg text-blue-500 hover:text-blue-600 transition-colors'
-                title='直链播放'
-              >
-                <LinkIcon size={18} />
-              </button>
-
-              {musicEnabled && (
-                <Link href='/music' prefetch={false}>
-                  <button
-                    className='p-1.5 rounded-lg text-green-500 hover:text-green-600 transition-colors'
-                    title='音乐视听'
-                  >
-                    <Music size={18} />
-                  </button>
-                </Link>
-              )}
-
-              {mangaEnabled && (
-                <Link href='/manga' prefetch={false}>
-                  <button
-                    className='p-1.5 rounded-lg text-emerald-500 hover:text-emerald-600 transition-colors'
-                    title='漫画展馆'
-                  >
-                    <BookOpen size={18} />
-                  </button>
-                </Link>
-              )}
-
-              {booksEnabled && (
-                <Link href='/books' prefetch={false}>
-                  <button
-                    className='p-1.5 rounded-lg text-amber-500 hover:text-amber-600 transition-colors'
-                    title='电子书馆'
-                  >
-                    <BookMarked size={18} />
-                  </button>
-                </Link>
-              )}
-
-              {/* 源站寻片入口 */}
-              {sourceSearchEnabled && (
-                <Link href='/source-search'>
-                  <button
-                    className='p-2 rounded-lg text-blue-500 hover:text-blue-600 transition-colors'
-                    title='源站寻片'
-                  >
-                    <ListVideo size={20} />
-                  </button>
-                </Link>
-              )}
-
-              {/* AI问片入口 */}
-              {aiEnabled && (
-                <button
-                  onClick={() => setShowAIChat(true)}
-                  className='p-2 rounded-lg text-purple-500 hover:text-purple-600 transition-colors'
-                  title='AI问片'
-                >
-                  <Bot size={20} />
-                </button>
-              )}
+      <div className={styles.page}>
+        <h1 className='sr-only'>影视发现与 AI 对话搜索</h1>
+        <div
+          className={dashboard.topGrid}
+          data-history={homeContinueWatchingEnabled}
+          data-banner={homeBannerEnabled}
+        >
+          {homeContinueWatchingEnabled && (
+            <ContinueWatching variant='dashboard' />
+          )}
+          <HomeAISearch
+            enabled={Boolean(aiEnabled)}
+            busy={aiStreaming}
+            isChatOpen={showAIChat}
+            onAsk={askFromHome}
+            onOpenHistory={() => setShowAIChat(true)}
+          />
+          {homeBannerEnabled && (
+            <div className={`home-hero-panel ${dashboard.heroPanel}`}>
+              <BannerCarousel delayLoad={true} variant='dashboard' />
             </div>
+          )}
+        </div>
 
-            {/* 继续观看 */}
-            {homeContinueWatchingEnabled && <ContinueWatching />}
-
-            {/* 根据配置动态渲染首页模块 */}
-            {homeModules
-              .filter((module) => module.enabled)
-              .sort((a, b) => a.order - b.order)
-              .map((module) => renderModule(module.id))}
-          </>
+        <div className={`home-content ${styles.content}`}>
+          {/* 保留观看记录开关，以及用户配置的模块顺序与可见性。 */}
+          {homeModules
+            .filter((module) => module.enabled)
+            .sort((a, b) => a.order - b.order)
+            .map((module) => renderModule(module.id))}
         </div>
       </div>
 
@@ -987,6 +711,8 @@ function HomeClient() {
           isOpen={showAIChat}
           onClose={() => setShowAIChat(false)}
           welcomeMessage={aiDefaultMessageNoVideo}
+          initialRequest={aiRequest}
+          onStreamingChange={setAiStreaming}
         />
       )}
 
@@ -1009,69 +735,6 @@ function HomeClient() {
           </div>
         </div>
       )}
-
-      {showDirectPlayDialog && (
-        <div
-          className='fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4'
-          onClick={() => setShowDirectPlayDialog(false)}
-        >
-          <div
-            className='bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-lg'
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className='flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700'>
-              <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100'>
-                直链播放
-              </h3>
-              <button
-                onClick={() => setShowDirectPlayDialog(false)}
-                className='p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors'
-                aria-label='关闭'
-              >
-                <span className='text-gray-600 dark:text-gray-400'>×</span>
-              </button>
-            </div>
-            <div className='p-4 space-y-4'>
-              <div className='text-sm text-gray-600 dark:text-gray-300'>
-                请输入可直接播放的视频链接。
-              </div>
-              {netdiskTempPlayEnabled && (
-                <div className='text-xs text-gray-500 dark:text-gray-400'>
-                  支持夸克、UC、百度、天翼、移动、123、115 网盘在线播放。
-                </div>
-              )}
-              <input
-                value={directPlayUrl}
-                onChange={(event) => setDirectPlayUrl(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    submitDirectPlay();
-                  }
-                }}
-                placeholder='https://example.com/video.m3u8'
-                className='w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
-              />
-              <div className='flex justify-end gap-2'>
-                <button
-                  onClick={() => setShowDirectPlayDialog(false)}
-                  className='px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors'
-                >
-                  取消
-                </button>
-                <button
-                  onClick={submitDirectPlay}
-                  disabled={!directPlayUrl.trim() || directPlaySubmitting}
-                  className='px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                >
-                  {directPlaySubmitting ? '处理中...' : '开始播放'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {toast && <Toast {...toast} />}
     </PageLayout>
   );
 }

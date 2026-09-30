@@ -89,7 +89,7 @@ function wrapResponse(
   const methodNames = ['json', 'text', 'arrayBuffer', 'buffer', 'blob', 'formData'];
 
   return new Proxy(target, {
-    get(inner, prop, receiver) {
+    get(inner, prop) {
       if (typeof prop === 'string' && methodNames.includes(prop)) {
         return (...args: unknown[]) => {
           const read = () => inner[prop](...args);
@@ -109,7 +109,9 @@ function wrapResponse(
           });
         };
       }
-      const value = Reflect.get(inner, prop, receiver);
+      // Native/Undici Response getters (ok/status/body/etc.) read private state.
+      // Use the original response as `this`; a Proxy lacks its private fields.
+      const value = Reflect.get(inner, prop, inner);
       return typeof value === 'function' ? value.bind(inner) : value;
     },
   });

@@ -3,6 +3,7 @@
 import {
   ChevronLeft,
   ChevronRight,
+  Pause,
   Play,
   Volume2,
   VolumeX,
@@ -17,18 +18,21 @@ import {
   useState,
 } from 'react';
 
+import dashboard from '@/components/home/HomeDashboard.module.css';
+
+import { getDoubanDetail } from '@/lib/douban.client';
 import {
   type TMDBItem,
   getGenreNames,
   getTMDBImageUrl,
 } from '@/lib/tmdb.client';
-import { getDoubanDetail } from '@/lib/douban.client';
 
 import ProxyImage from '@/components/ProxyImage';
 
 interface BannerCarouselProps {
   autoPlayInterval?: number; // 自动播放间隔（毫秒）
   delayLoad?: boolean; // 是否延迟加载（等页面加载完毕后再加载）
+  variant?: 'full' | 'dashboard';
 }
 
 type HomeBannerHeightScale = '1' | '1.5' | '2';
@@ -57,6 +61,7 @@ interface BannerItem extends TMDBItem {
 export default function BannerCarousel({
   autoPlayInterval = 5000,
   delayLoad = false,
+  variant = 'full',
 }: BannerCarouselProps) {
   const router = useRouter();
   const [items, setItems] = useState<BannerItem[]>([]);
@@ -64,6 +69,8 @@ export default function BannerCarousel({
   const [isLoading, setIsLoading] = useState(true);
   const [shouldLoad, setShouldLoad] = useState(!delayLoad); // 是否应该开始加载数据
   const [isPaused, setIsPaused] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocusWithin, setIsFocusWithin] = useState(false);
   const [skipNextAutoPlay, setSkipNextAutoPlay] = useState(false); // 跳过下一次自动播放
   const [isYouTubeAccessible, setIsYouTubeAccessible] = useState(false); // YouTube连通性（默认false，检查后再决定）
   const [enableTrailers, setEnableTrailers] = useState(false); // 是否启用预告片（默认关闭）
@@ -72,7 +79,8 @@ export default function BannerCarousel({
   const [isMuted, setIsMuted] = useState(true); // 视频是否静音（默认静音）
   const [bannerHeightScale, setBannerHeightScale] =
     useState<HomeBannerHeightScale>('1'); // 轮播图高度倍率
-  const [isMobileView, setIsMobileView] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const isMobileView = viewportWidth > 0 && viewportWidth < 768;
   const [mobileTitleFontSize, setMobileTitleFontSize] = useState(30);
   const videoRef = useRef<HTMLVideoElement>(null); // 视频元素引用
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map()); // 所有视频元素的引用
@@ -152,15 +160,21 @@ export default function BannerCarousel({
     };
   }, []);
 
-  // 检测移动端视口，用于 1x 高度下的标题自适应
+  // 尊重系统减少动态效果设置，仍允许用户手动切换推荐。
   useEffect(() => {
-    const updateIsMobileView = () => {
-      setIsMobileView(window.innerWidth < 768);
-    };
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const syncMotionPreference = () => setIsPaused(mediaQuery.matches);
+    syncMotionPreference();
+    mediaQuery.addEventListener('change', syncMotionPreference);
+    return () => mediaQuery.removeEventListener('change', syncMotionPreference);
+  }, []);
 
-    updateIsMobileView();
-    window.addEventListener('resize', updateIsMobileView);
-    return () => window.removeEventListener('resize', updateIsMobileView);
+  // 记录实际宽度，手机旋转或窗口缩窄时也重新计算长片名字号。
+  useEffect(() => {
+    const updateViewportWidth = () => setViewportWidth(window.innerWidth);
+    updateViewportWidth();
+    window.addEventListener('resize', updateViewportWidth);
+    return () => window.removeEventListener('resize', updateViewportWidth);
   }, []);
 
   // 手机界面且轮播图高度为 1x 时，仅在标题超过一行时自动缩小字号，不改变布局位置
@@ -169,7 +183,7 @@ export default function BannerCarousel({
     const titleTextElement = titleTextRef.current;
     if (!titleElement || !titleTextElement) return;
 
-    if (bannerHeightScale !== '1' || !isMobileView) {
+    if (variant === 'dashboard' || bannerHeightScale !== '1' || !isMobileView) {
       titleElement.style.fontSize = '';
       setMobileTitleFontSize(30);
       return;
@@ -193,7 +207,7 @@ export default function BannerCarousel({
     setMobileTitleFontSize(nextFontSize);
 
     return undefined;
-  }, [bannerHeightScale, currentTitle, isMobileView]);
+  }, [bannerHeightScale, currentTitle, isMobileView, viewportWidth, variant]);
 
   // 延迟加载：等待页面加载完毕后再开始加载轮播图数据
   useEffect(() => {
@@ -397,7 +411,7 @@ export default function BannerCarousel({
 
   // 自动播放
   useEffect(() => {
-    if (!items.length || isPaused) return;
+    if (items.length < 2 || isPaused || isHovered || isFocusWithin) return;
 
     const timer = setInterval(() => {
       // 如果设置了跳过标志，跳过这一次自动播放
@@ -410,7 +424,14 @@ export default function BannerCarousel({
     }, autoPlayInterval);
 
     return () => clearInterval(timer);
-  }, [items.length, isPaused, autoPlayInterval, skipNextAutoPlay]);
+  }, [
+    items.length,
+    isPaused,
+    isHovered,
+    isFocusWithin,
+    autoPlayInterval,
+    skipNextAutoPlay,
+  ]);
 
   const goToPrevious = useCallback(() => {
     isManualChange.current = true;
@@ -482,16 +503,36 @@ export default function BannerCarousel({
   if (isLoading || !shouldLoad) {
     return (
       <div
-        className={`relative w-full ${bannerHeightClassMap[bannerHeightScale]} bg-gradient-to-b from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 overflow-hidden flex items-center justify-center`}
+        className={`relative flex w-full items-center justify-center overflow-hidden bg-[#07182b] ${
+          variant === 'dashboard'
+            ? dashboard.banner
+            : bannerHeightClassMap[bannerHeightScale]
+        }`}
+        style={
+          variant === 'dashboard'
+            ? ({
+                '--banner-scale': Number(bannerHeightScale),
+              } as React.CSSProperties)
+            : undefined
+        }
+        role='status'
+        aria-label='正在加载热门推荐'
       >
         <Image
           src='/logo.png'
-          alt='MoonTVPlus'
-          width={120}
-          height={120}
-          className='opacity-50'
+          alt=''
+          width={96}
+          height={96}
+          className='opacity-30'
           priority
         />
+        <div
+          className='absolute bottom-14 left-4 right-4 space-y-3 sm:left-6 md:bottom-20 md:left-8 lg:left-12'
+          aria-hidden='true'
+        >
+          <div className='h-7 w-2/5 max-w-sm animate-pulse rounded-md bg-white/10 motion-reduce:animate-none md:h-12' />
+          <div className='h-4 w-3/5 max-w-lg animate-pulse rounded bg-white/10 motion-reduce:animate-none' />
+        </div>
       </div>
     );
   }
@@ -501,18 +542,46 @@ export default function BannerCarousel({
   }
 
   const currentItem = items[currentIndex];
+  const currentTags = currentItem.tags?.length
+    ? currentItem.tags
+    : Array.isArray(currentItem.genres) && currentItem.genres.length > 0
+    ? currentItem.genres
+    : getGenreNames(currentItem.genre_ids, 3);
+  const description = currentItem.overview || currentItem.subtitle;
 
   return (
     <div
-      className={`relative w-full ${bannerHeightClassMap[bannerHeightScale]} overflow-hidden group`}
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
+      className={`group relative w-full overflow-hidden bg-[#07182b] ${
+        variant === 'dashboard'
+          ? dashboard.banner
+          : `rounded-2xl ${bannerHeightClassMap[bannerHeightScale]}`
+      }`}
+      data-banner-variant={variant}
+      style={
+        variant === 'dashboard'
+          ? ({
+              '--banner-scale': Number(bannerHeightScale),
+            } as React.CSSProperties)
+          : undefined
+      }
+      role='region'
+      aria-roledescription='轮播图'
+      aria-label='热门推荐'
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocusCapture={() => setIsFocusWithin(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setIsFocusWithin(false);
+        }
+      }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      onClick={() => {
-        // 移动端点击整个轮播图跳转
-        if (window.innerWidth < 768) {
+      onClick={(event) => {
+        // 控制按钮不触发移动端整幅封面的播放跳转。
+        if ((event.target as Element).closest('button, a')) return;
+        if (variant === 'dashboard' || window.innerWidth < 768) {
           handlePlay(currentItem.title);
         }
       }}
@@ -522,7 +591,8 @@ export default function BannerCarousel({
         {items.map((item, index) => (
           <div
             key={item.id}
-            className={`absolute inset-0 transition-opacity duration-1000 ${
+            aria-hidden={index !== currentIndex}
+            className={`absolute inset-0 transition-opacity duration-700 motion-reduce:transition-none ${
               index === currentIndex ? 'opacity-100' : 'opacity-0'
             }`}
           >
@@ -549,6 +619,8 @@ export default function BannerCarousel({
               /* 显示YouTube视频 */
               <div className='absolute inset-0 overflow-hidden'>
                 <iframe
+                  title={`${item.title}预告片`}
+                  tabIndex={-1}
                   src={`https://www.youtube.com/embed/${item.video_key}?listType=playlist&autoplay=1&mute=1&controls=0&loop=1&playlist=${item.video_key}&modestbranding=1&rel=0&showinfo=0&vq=hd1080&hd=1&disablekb=1&fs=0&iv_load_policy=3`}
                   className='absolute top-1/2 left-1/2 pointer-events-none'
                   allow='autoplay; encrypted-media'
@@ -574,100 +646,148 @@ export default function BannerCarousel({
               />
             )}
             {/* 渐变遮罩 */}
-            <div className='absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent'></div>
-            <div className='absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent'></div>
+            {variant === 'dashboard' ? (
+              <div className={dashboard.bannerOverlay} />
+            ) : (
+              <>
+                <div className='absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent' />
+                <div className='absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent' />
+              </>
+            )}
           </div>
         ))}
       </div>
 
-      {/* 内容信息 */}
-      <div className='absolute inset-0 flex items-end p-8 md:p-12 pointer-events-none'>
-        <div className='max-w-2xl space-y-4'>
-          <h2
-            ref={titleRef}
-            className='text-3xl md:text-5xl font-bold text-white drop-shadow-lg'
-            style={
-              isMobileView && bannerHeightScale === '1'
-                ? { fontSize: `${mobileTitleFontSize}px` }
-                : undefined
-            }
-          >
-            <span ref={titleTextRef}>{currentItem.title}</span>
-          </h2>
-
-          <div className='flex items-center gap-2 md:gap-3 text-sm md:text-base text-white/90 flex-wrap'>
-            {currentItem.vote_average > 0 && (
-              <span className='px-2 py-1 bg-yellow-500 text-black font-semibold rounded'>
-                {currentItem.vote_average.toFixed(1)}
-              </span>
-            )}
-            {/* 显示标签：优先TX的tags，其次豆瓣的genres，最后TMDB的genre_ids */}
-            {currentItem.tags && currentItem.tags.length > 0
-              ? currentItem.tags.slice(0, 3).map((tag, index) => (
-                  <span
-                    key={index}
-                    className='px-2 py-1 bg-white/20 backdrop-blur-sm rounded text-sm'
-                  >
-                    {tag}
-                  </span>
-                ))
-              : currentItem.genres &&
-                Array.isArray(currentItem.genres) &&
-                currentItem.genres.length > 0
-              ? /* 显示豆瓣数据源的标签 */
-                currentItem.genres.slice(0, 3).map((genre, index) => (
-                  <span
-                    key={index}
-                    className='px-2 py-1 bg-white/20 backdrop-blur-sm rounded text-sm'
-                  >
-                    {genre}
-                  </span>
-                ))
-              : /* 显示TMDB数据源的类型标签 */
-                getGenreNames(currentItem.genre_ids, 3).map((genre) => (
-                  <span
-                    key={genre}
-                    className='px-2 py-1 bg-white/20 backdrop-blur-sm rounded text-sm'
-                  >
-                    {genre}
-                  </span>
-                ))}
-            {currentItem.release_date && (
-              <span>{currentItem.release_date}</span>
+      {variant === 'dashboard' ? (
+        <div className={dashboard.bannerContent}>
+          <div>
+            <h2 className={dashboard.bannerTitle}>
+              <button
+                type='button'
+                onClick={() => handlePlay(currentItem.title)}
+                aria-label={`播放${currentItem.title}`}
+              >
+                {currentItem.title}
+              </button>
+            </h2>
+            <div className={dashboard.bannerMeta}>
+              {currentItem.vote_average > 0 && (
+                <span
+                  data-rating='true'
+                  aria-label={`评分 ${currentItem.vote_average.toFixed(1)}`}
+                >
+                  {currentItem.vote_average.toFixed(1)}
+                </span>
+              )}
+              {currentTags.slice(0, 2).map((tag, index) => (
+                <span key={`${tag}-${index}`}>{tag}</span>
+              ))}
+              {currentItem.release_date && (
+                <time dateTime={currentItem.release_date}>
+                  {currentItem.release_date.slice(0, 4)}
+                </time>
+              )}
+            </div>
+            {description && (
+              <p className={dashboard.bannerDescription}>{description}</p>
             )}
           </div>
-
-          {/* PC端播放按钮 */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handlePlay(currentItem.title);
-            }}
-            className='hidden md:flex items-center gap-2 px-6 py-3 bg-gray-500/30 hover:bg-gray-500/50 backdrop-blur-sm text-white font-semibold rounded-lg transition-all pointer-events-auto'
-          >
-            <Play className='w-5 h-5 fill-white' />
-            立即播放
-          </button>
-
-          {currentItem.overview && (
-            <p className='text-sm md:text-base text-white/80 line-clamp-3 drop-shadow-md'>
-              {currentItem.overview}
-            </p>
-          )}
         </div>
-      </div>
+      ) : (
+        <div className='pointer-events-none absolute inset-0 flex items-end p-4 pb-14 sm:p-6 sm:pb-16 md:p-8 md:pb-20 lg:p-12 lg:pb-24'>
+          <div className='min-w-0 max-w-2xl space-y-2 md:space-y-3'>
+            <h2
+              ref={titleRef}
+              className='line-clamp-2 text-3xl font-bold leading-tight tracking-tight text-white drop-shadow-lg md:text-4xl lg:text-5xl'
+              style={
+                isMobileView && bannerHeightScale === '1'
+                  ? { fontSize: `${mobileTitleFontSize}px` }
+                  : undefined
+              }
+            >
+              <span ref={titleTextRef}>{currentItem.title}</span>
+            </h2>
 
-      {/* 左右切换按钮 - 只在桌面端显示 */}
+            <div className='flex min-w-0 items-center gap-2 overflow-hidden text-xs text-white/90 md:text-sm'>
+              {currentItem.vote_average > 0 && (
+                <span
+                  className='shrink-0 rounded-md bg-amber-300 px-2 py-1 font-semibold tabular-nums text-slate-950'
+                  aria-label={`评分 ${currentItem.vote_average.toFixed(1)}`}
+                >
+                  {currentItem.vote_average.toFixed(1)}
+                </span>
+              )}
+              {/* 保留 TX 标签、豆瓣类型、TMDB 类型的原有优先级。 */}
+              {currentTags.slice(0, 3).map((tag, index) => (
+                <span
+                  key={`${tag}-${index}`}
+                  title={tag}
+                  className='min-w-0 max-w-32 truncate rounded-md border border-white/15 bg-white/10 px-2 py-1'
+                >
+                  {tag}
+                </span>
+              ))}
+              {currentItem.release_date && (
+                <span className='hidden shrink-0 text-white/70 sm:inline'>
+                  {currentItem.release_date}
+                </span>
+              )}
+            </div>
+
+            {description && (
+              <p
+                className={`max-w-xl text-sm leading-relaxed text-white/80 drop-shadow-md md:text-base ${
+                  bannerHeightScale === '1'
+                    ? 'hidden md:line-clamp-2'
+                    : 'line-clamp-2'
+                }`}
+              >
+                {description}
+              </p>
+            )}
+
+            <button
+              type='button'
+              onClick={(event) => {
+                event.stopPropagation();
+                handlePlay(currentItem.title);
+              }}
+              className='pointer-events-auto inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none md:px-6'
+              aria-label={`播放${currentItem.title}`}
+            >
+              <Play
+                className='h-4 w-4 fill-current md:h-5 md:w-5'
+                aria-hidden='true'
+              />
+              立即播放
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 左右切换按钮 */}
       <button
         onClick={goToPrevious}
-        className='hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/30 hover:bg-black/60 text-white rounded-full items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300'
+        type='button'
+        disabled={items.length < 2}
+        className={
+          variant === 'dashboard'
+            ? `${dashboard.bannerArrow} ${dashboard.bannerPrevious}`
+            : 'absolute left-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 text-white opacity-0 transition-opacity duration-200 hover:bg-black/70 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:invisible group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none md:flex'
+        }
         aria-label='上一张'
       >
         <ChevronLeft className='w-8 h-8' />
       </button>
       <button
         onClick={goToNext}
-        className='hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/30 hover:bg-black/60 text-white rounded-full items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300'
+        type='button'
+        disabled={items.length < 2}
+        className={
+          variant === 'dashboard'
+            ? `${dashboard.bannerArrow} ${dashboard.bannerNext}`
+            : 'absolute right-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 text-white opacity-0 transition-opacity duration-200 hover:bg-black/70 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:invisible group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none md:flex'
+        }
         aria-label='下一张'
       >
         <ChevronRight className='w-8 h-8' />
@@ -677,7 +797,8 @@ export default function BannerCarousel({
       {currentItem.trailer_url && enableTrailers && (
         <button
           onClick={toggleMute}
-          className='absolute top-2 right-2 md:top-4 md:right-4 w-8 h-8 md:w-10 md:h-10 bg-black/30 hover:bg-black/60 text-white rounded-full flex items-center justify-center transition-all duration-300 z-10'
+          type='button'
+          className='absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/40 text-white transition-colors hover:bg-black/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:transition-none md:right-4 md:top-4'
           aria-label={isMuted ? '开启声音' : '关闭声音'}
         >
           {isMuted ? (
@@ -688,21 +809,93 @@ export default function BannerCarousel({
         </button>
       )}
 
-      {/* 指示器 */}
-      <div className='absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2'>
-        {items.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => goToSlide(index)}
-            className={`h-1.5 rounded-full transition-all duration-300 ${
-              index === currentIndex
-                ? 'w-8 bg-white'
-                : 'w-1.5 bg-white/50 hover:bg-white/80'
-            }`}
-            aria-label={`跳转到第 ${index + 1} 张`}
-          />
+      {/* 指示器保留足够的触摸区域；控制区点击不触发封面播放。 */}
+      {items.length > 1 &&
+        (variant === 'dashboard' ? (
+          <div
+            className={dashboard.bannerControls}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div aria-label='选择推荐'>
+              {items.map((item, index) => (
+                <button
+                  type='button'
+                  key={`${item.id}-${index}`}
+                  className={dashboard.bannerDot}
+                  onClick={() => goToSlide(index)}
+                  aria-label={`切换到${item.title}`}
+                  aria-current={index === currentIndex ? 'true' : undefined}
+                >
+                  <span />
+                </button>
+              ))}
+            </div>
+            <button
+              type='button'
+              className={dashboard.bannerPause}
+              onClick={() => setIsPaused((paused) => !paused)}
+              aria-label={isPaused ? '继续自动轮播' : '暂停自动轮播'}
+              aria-pressed={isPaused}
+            >
+              {isPaused ? (
+                <Play aria-hidden='true' />
+              ) : (
+                <Pause aria-hidden='true' />
+              )}
+            </button>
+          </div>
+        ) : (
+          <div
+            className='absolute inset-x-4 bottom-1 flex min-w-0 items-center justify-between gap-3 sm:inset-x-6 sm:bottom-3 md:inset-x-8 lg:inset-x-12'
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className='flex min-w-0 items-center gap-3'>
+              <span
+                className='hidden shrink-0 text-xs font-medium tabular-nums tracking-widest text-white/70 sm:block'
+                aria-hidden='true'
+              >
+                {String(currentIndex + 1).padStart(2, '0')} /{' '}
+                {String(items.length).padStart(2, '0')}
+              </span>
+              <div
+                className='flex min-w-0 items-center overflow-x-auto scrollbar-hide'
+                aria-label='选择推荐'
+              >
+                {items.map((item, index) => (
+                  <button
+                    type='button'
+                    key={`${item.id}-${index}`}
+                    onClick={() => goToSlide(index)}
+                    className='flex h-11 w-6 shrink-0 items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white'
+                    aria-label={`切换到${item.title}`}
+                    aria-current={index === currentIndex ? 'true' : undefined}
+                  >
+                    <span
+                      className={`h-1 w-4 rounded-full transition-opacity duration-200 motion-reduce:transition-none ${
+                        index === currentIndex
+                          ? 'bg-white'
+                          : 'bg-white/35 hover:bg-white/70'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              type='button'
+              onClick={() => setIsPaused((paused) => !paused)}
+              className='flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white transition-colors hover:bg-black/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:transition-none'
+              aria-label={isPaused ? '继续自动轮播' : '暂停自动轮播'}
+              aria-pressed={isPaused}
+            >
+              {isPaused ? (
+                <Play className='h-4 w-4' aria-hidden='true' />
+              ) : (
+                <Pause className='h-4 w-4' aria-hidden='true' />
+              )}
+            </button>
+          </div>
         ))}
-      </div>
     </div>
   );
 }

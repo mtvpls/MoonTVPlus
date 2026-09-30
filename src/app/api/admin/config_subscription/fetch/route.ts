@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
+import { parseConfigSubscriptionContent } from '@/lib/config-subscription';
 
 export const runtime = 'nodejs';
 
@@ -38,22 +39,13 @@ export async function POST(request: NextRequest) {
     }
 
     const configContent = await response.text();
-
-    // 对 configContent 进行 base58 解码
-    let decodedContent;
-    try {
-      const bs58 = (await import('bs58')).default;
-      const decodedBytes = bs58.decode(configContent);
-      decodedContent = new TextDecoder().decode(decodedBytes);
-    } catch (decodeError) {
-      console.warn('Base58 解码失败', decodeError);
-      throw decodeError;
-    }
+    const parsed = await parseConfigSubscriptionContent(configContent);
 
     return NextResponse.json({
       success: true,
-      configContent: decodedContent,
-      message: '配置拉取成功'
+      configContent: parsed.content,
+      format: parsed.format,
+      message: parsed.format === 'json' ? '原始 JSON 配置拉取成功' : 'Base58 配置拉取成功'
     });
 
   } catch (error) {

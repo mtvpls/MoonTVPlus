@@ -57,16 +57,39 @@ export class D1Storage implements IStorage {
   }
 
   private async ensureMangaShelfColumns(): Promise<void> {
-    const statements = [
-      'ALTER TABLE manga_shelf ADD COLUMN latest_chapter_id TEXT',
-      'ALTER TABLE manga_shelf ADD COLUMN latest_chapter_name TEXT',
-      'ALTER TABLE manga_shelf ADD COLUMN latest_chapter_count INTEGER',
-      'ALTER TABLE manga_shelf ADD COLUMN unread_chapter_count INTEGER',
-    ];
+    const columns = [
+      ['latest_chapter_id', 'TEXT'],
+      ['latest_chapter_name', 'TEXT'],
+      ['latest_chapter_count', 'INTEGER'],
+      ['unread_chapter_count', 'INTEGER'],
+    ] as const;
 
-    for (const statement of statements) {
+    let existingColumns: Set<string>;
+    try {
+      // PRAGMA table_info is supported by SQLite, Turso and Cloudflare D1.
+      const result = await this.db
+        .prepare('PRAGMA table_info(manga_shelf)')
+        .all<{ name?: string }>();
+      existingColumns = new Set(
+        (result.results || [])
+          .map((column) => column.name)
+          .filter((name): name is string => Boolean(name))
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/no such table|does not exist/i.test(message)) {
+        console.warn('D1Storage.ensureMangaShelfColumns warning:', err);
+      }
+      return;
+    }
+
+    for (const [name, type] of columns) {
+      if (existingColumns.has(name)) continue;
+
       try {
-        const result = await this.db.prepare(statement).run();
+        const result = await this.db
+          .prepare(`ALTER TABLE manga_shelf ADD COLUMN ${name} ${type}`)
+          .run();
         if (
           !result.success &&
           result.error &&

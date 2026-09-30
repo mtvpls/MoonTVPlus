@@ -8,25 +8,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 
-import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
-import { VideoContext } from '@/lib/ai-orchestrator';
-
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  error?: boolean;
-  retryMessage?: string;
-  /** 本回合执行过的工具调用（含参数与返回结果），随 history 回喂服务端 */
-  toolCalls?: Array<{
-    name: string;
-    key?: string;
-    args?: any;
-    result?: string;
-    ok?: boolean;
-  }>;
-  /** 较早对话被压缩后写回的摘要正文；存在时替换 toolCalls 随 history 回喂（避免下次请求上下文重新膨胀） */
-  compressedSummaries?: string[];
-}
+import {
+  type AIChatMessage as ChatMessage,
+  clearAIChatHistory,
+  getAIChatStorageKey,
+  getAIChatUsername,
+  readAIChatHistory,
+  writeAIChatHistory,
+} from '@/lib/ai-chat-history';
+import type { VideoContext } from '@/lib/ai-orchestrator';
+import { useAIChatUsername } from '@/hooks/useAIChatUsername';
 
 /** 工具链中的一个工具调用 */
 interface ToolChainItem {
@@ -46,6 +37,8 @@ interface AIChatPanelProps {
   onStreamingChange?: (isStreaming: boolean) => void;
   useDrawer?: boolean;
   drawerWidth?: string;
+  /** A homepage submission, consumed once. Omitted by all other entry points. */
+  initialRequest?: { id: number; text: string };
 }
 
 type MarkdownSegment =
@@ -241,7 +234,31 @@ const renderStrikethroughNodes = (children: React.ReactNode): React.ReactNode =>
   });
 };
 
-export default function AIChatPanel({
+export default function AIChatPanel(props: AIChatPanelProps) {
+  const username = useAIChatUsername();
+  const storageKey = getAIChatStorageKey(username, props.context);
+  const consumedInitialRequestRef = useRef<number | null>(null);
+  const requestId = props.initialRequest?.id;
+  const [requestScope, setRequestScope] = useState({ requestId, storageKey });
+  // A queued homepage prompt belongs to the identity/context that submitted it.
+  // Never replay it automatically after an account or video switch.
+  if (requestScope.requestId !== requestId) {
+    setRequestScope({ requestId, storageKey });
+  }
+  if (!username || !storageKey) return null;
+  return (
+    <AIChatSession
+      key={storageKey}
+      {...props}
+      username={username}
+      storageKey={storageKey}
+      initialRequest={requestScope.storageKey === storageKey ? props.initialRequest : undefined}
+      consumedInitialRequestRef={consumedInitialRequestRef}
+    />
+  );
+}
+
+function AIChatSession({
   isOpen,
   onClose,
   context,
@@ -249,33 +266,35 @@ export default function AIChatPanel({
   onStreamingChange,
   useDrawer = false,
   drawerWidth = 'w-full md:w-[25%]',
-}: AIChatPanelProps) {
+  initialRequest,
+  username,
+  storageKey,
+  consumedInitialRequestRef,
+}: AIChatPanelProps & {
+  username: string;
+  storageKey: string;
+  consumedInitialRequestRef: React.MutableRefObject<number | null>;
+}) {
   const pathname = usePathname();
 
-  // 使用 useMemo 稳定 storage key，只在实际内容变化时才改变
-  const storageKey = useMemo(() => {
-    if (context?.title) {
-      return `ai-chat-${context.title}-${context.year || ''}-${context.type || ''}`;
-    }
-    return 'ai-chat-general';
-  }, [context?.title, context?.year, context?.type]);
-
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: welcomeMessage },
-  ]);
+  // Keyed by owner + conversation: load before any save effect can run. Switching
+  // scope remounts this state instead of saving the old messages under a new key.
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const saved = readAIChatHistory(storageKey);
+    return saved.length ? saved : [{ role: 'assistant', content: welcomeMessage }];
+  });
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [currentUsername, setCurrentUsername] = useState('用户');
+  const currentUsername = username;
   // 工具链：每个工具调用一行，记录工具名、关键参数、状态（独立于消息，不写入 sessionStorage）
   const [toolChain, setToolChain] = useState<ToolChainItem[]>([]);
   // 工具链实时镜像，供流式结束固化到消息时读取最新状态（setState 是异步的）
   const toolChainRef = useRef<ToolChainItem[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const prevStorageKeyRef = useRef<string>(storageKey);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const hasLoadedRef = useRef(false);
+  const streamingCallbackRef = useRef(onStreamingChange);
   /** 本次请求服务端上下文压缩产生的摘要，流式结束后随本消息固化回喂 */
   const compressionSummariesRef = useRef<string[]>([]);
 
@@ -481,77 +500,23 @@ export default function AIChatPanel({
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    const authInfo = getAuthInfoFromBrowserCookie();
-    setCurrentUsername(authInfo?.username || '用户');
-  }, []);
-
   const userAvatarText = currentUsername.trim().charAt(0).toUpperCase() || '用';
 
-  // 从sessionStorage加载消息记录
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    writeAIChatHistory(storageKey, messages);
+  }, [messages, storageKey]);
 
-    // 如果已经加载过当前 storageKey，跳过
-    if (hasLoadedRef.current) return;
-
-    const savedMessages = sessionStorage.getItem(storageKey);
-
-    if (savedMessages) {
-      try {
-        const parsed = JSON.parse(savedMessages);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
-        }
-      } catch (error) {
-        console.error('加载聊天记录失败:', error);
-      }
-    }
-
-    // 标记为已加载
-    hasLoadedRef.current = true;
-  }, [storageKey]); // 当 storageKey 变化时重新加载
-
-  // 保存消息记录到sessionStorage
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      sessionStorage.setItem(storageKey, JSON.stringify(messages));
-    } catch (error) {
-      console.error('保存聊天记录失败:', error);
-    }
-  }, [messages, storageKey]); // 消息变化时保存
-
-  // 检测VideoContext变化，清除旧的聊天记录
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    if (prevStorageKeyRef.current !== storageKey) {
-      // 上下文变化了，取消正在进行的请求
-      if (abortControllerRef.current) {
-        console.log('视频上下文变化，取消正在进行的AI请求');
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-        setIsStreaming(false);
-      }
-
-      // 清除消息并重置为欢迎消息
-      console.log('视频上下文变化，清除聊天记录');
-      clearToolChain();
-      setMessages([{ role: 'assistant', content: welcomeMessage }]);
-
-      // 重置加载标记，允许加载新视频的聊天记录
-      hasLoadedRef.current = false;
-
-      prevStorageKeyRef.current = storageKey;
-    }
-  }, [storageKey, welcomeMessage]); // 监听 storageKey 变化
-
-  // 通知父组件 streaming 状态变化
-  useEffect(() => {
+    streamingCallbackRef.current = onStreamingChange;
     onStreamingChange?.(isStreaming);
   }, [isStreaming, onStreamingChange]);
+
+  useEffect(() => () => {
+    // Includes account changes, video changes and navigation away from the panel.
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    streamingCallbackRef.current?.(false);
+  }, []);
 
   // 自动聚焦输入框和防止背景滚动
   useEffect(() => {
@@ -586,11 +551,13 @@ export default function AIChatPanel({
     }
   }, [isOpen, useDrawer]);
 
-  const handleSendMessage = async (retryMessage?: string) => {
+  const handleSendMessage = async (retryMessage?: string, submittedMessage?: string) => {
     const isRetry = typeof retryMessage === 'string';
-    if (isStreaming || (!isRetry && !input.trim())) return;
-
-    const userMessage = isRetry ? retryMessage.trim() : input.trim();
+    const userMessage = isRetry ? retryMessage.trim() : (submittedMessage ?? input).trim();
+    if (
+      isStreaming || abortControllerRef.current || !userMessage ||
+      getAIChatUsername() !== username
+    ) return;
     const requestHistory = (isRetry ? messages.slice(0, -2) : messages).filter(
       (m) => m.role !== 'assistant' || m.content !== welcomeMessage
     );
@@ -613,6 +580,10 @@ export default function AIChatPanel({
     // 创建新的 AbortController
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    const isCurrentRequest = () =>
+      !abortController.signal.aborted &&
+      abortControllerRef.current === abortController &&
+      getAIChatUsername() === username;
 
     try {
       const response = await fetch('/api/ai/chat', {
@@ -628,6 +599,7 @@ export default function AIChatPanel({
         signal: abortController.signal,
       });
 
+      if (!isCurrentRequest()) return;
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
      const errorMsg = errorData.error || errorData.details || `请求失败 (${response.status})`;
@@ -650,8 +622,12 @@ export default function AIChatPanel({
         let streamError = '';
         let buffer = ''; // 缓冲区，用于保存不完整的行
 
-        while (true) {
+        for (;;) {
           const { done, value } = await reader.read();
+          if (!isCurrentRequest()) {
+            void reader.cancel().catch(() => undefined);
+            return;
+          }
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
@@ -786,6 +762,7 @@ export default function AIChatPanel({
       } else {
         // 处理非流式响应
         const data = await response.json();
+        if (!isCurrentRequest()) return;
         if (data.error) throw new Error(String(data.error));
         const content = data.content || '';
 
@@ -813,8 +790,7 @@ export default function AIChatPanel({
       }
     } catch (error) {
       // 如果是主动取消的请求（切换视频或其他原因），不显示错误
-      if ((error as Error).name === 'AbortError') {
-        console.log('请求已取消');
+      if (!isCurrentRequest() || (error as Error).name === 'AbortError') {
         return;
       }
 
@@ -832,12 +808,23 @@ export default function AIChatPanel({
         return newMessages;
       });
     } finally {
-      setIsStreaming(false);
-      // 流式/非流式结束后，实时工具链已固化到消息，这里清空 live 链
-      clearToolChain();
-      abortControllerRef.current = null;
+      // A cancelled old request must not reset a newer request's state.
+      if (abortControllerRef.current === abortController) {
+        setIsStreaming(false);
+        clearToolChain();
+        abortControllerRef.current = null;
+      }
     }
   };
+
+  // Use the existing request / streaming path; a new homepage prompt is NOT a retry.
+  const sendMessageRef = useRef(handleSendMessage);
+  useEffect(() => { sendMessageRef.current = handleSendMessage; });
+  useEffect(() => {
+    if (!isOpen || isStreaming || !initialRequest?.text.trim() || consumedInitialRequestRef.current === initialRequest.id) return;
+    consumedInitialRequestRef.current = initialRequest.id;
+    void sendMessageRef.current(undefined, initialRequest.text);
+  }, [initialRequest, isOpen, isStreaming, consumedInitialRequestRef]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -850,14 +837,17 @@ export default function AIChatPanel({
   const handleClearContext = () => {
     if (typeof window === 'undefined') return;
 
-    // 清除sessionStorage
-    sessionStorage.removeItem(storageKey);
+    if (getAIChatUsername() !== username) return;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsStreaming(false);
+    compressionSummariesRef.current = [];
+    clearAIChatHistory(storageKey);
 
     // 重置消息为欢迎消息
     clearToolChain();
     setMessages([{ role: 'assistant', content: welcomeMessage }]);
 
-    console.log('已清空聊天上下文');
   };
 
   const modalContent = useDrawer ? (
@@ -892,6 +882,7 @@ export default function AIChatPanel({
           </div>
           <button
             onClick={onClose}
+            aria-label='关闭 AI 对话'
             className='rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 flex-shrink-0'
           >
             <X size={20} />
@@ -1103,6 +1094,7 @@ export default function AIChatPanel({
           </div>
           <button
             onClick={onClose}
+            aria-label='关闭 AI 对话'
             className='rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 flex-shrink-0'
           >
          <X size={20} />

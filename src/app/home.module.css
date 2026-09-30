@@ -1,0 +1,194 @@
+/* Homepage-only styling: leave shared navigation and other routes untouched. */
+.page {
+  --home-text: #182c40;
+  --home-muted: #526578;
+  --home-border: rgba(43, 68, 91, 0.14);
+  --home-surface: rgba(255, 255, 255, 0.72);
+  --home-hover: rgba(43, 68, 91, 0.06);
+  --home-skeleton: rgba(43, 68, 91, 0.09);
+  --home-accent: #047857;
+  --home-bg: #edf3f7;
+  --home-history-surface: linear-gradient(135deg, #fbfdff, #e9f0f6);
+  --home-ai-surface: radial-gradient(
+      ellipse at 100% 0%,
+      #d3e4f6,
+      transparent 65%
+    ),
+    #f3f8fc;
+  --home-inset: rgba(63, 101, 137, 0.07);
+  --home-subtle-inset: rgba(63, 101, 137, 0.04);
+  --home-soft-accent: #377c7d;
+  --home-composer-border: rgba(46, 133, 132, 0.28);
+  --home-track: rgba(72, 96, 123, 0.2);
+
+  width: 100%;
+  max-width: 1920px;
+  min-height: calc(100dvh - 64px);
+  margin-inline: auto;
+  padding: 16px 22px 32px;
+  background: var(--home-bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  color: var(--home-text);
+}
+
+:global(.dark) .page {
+  --home-text: #edf4fb;
+  --home-muted: #a4b5c6;
+  --home-border: rgba(194, 214, 234, 0.12);
+  --home-surface: rgba(8, 26, 45, 0.75);
+  --home-hover: rgba(194, 214, 234, 0.08);
+  --home-skeleton: rgba(194, 214, 234, 0.09);
+  --home-accent: #20e4b2;
+  --home-bg: #050e19;
+  --home-history-surface: linear-gradient(125deg, #141b26, #171e29);
+  --home-ai-surface: radial-gradient(
+      ellipse at 100% 0%,
+      #273d5d,
+      transparent 64%
+    ),
+    linear-gradient(135deg, #101f37, #061b2d);
+  --home-inset: rgba(153, 181, 211, 0.09);
+  --home-subtle-inset: rgba(153, 181, 211, 0.045);
+  --home-soft-accent: #95c5ce;
+  --home-composer-border: rgba(75, 151, 157, 0.34);
+  --home-track: rgba(195, 208, 228, 0.17);
+}
+
+.content {
+  min-width: 0;
+}
+
+.moreLink:focus-visible {
+  outline: 2px solid var(--home-accent);
+  outline-offset: 3px;
+}
+
+.section {
+  min-width: 0;
+  margin-bottom: 24px;
+}
+
+.sectionHeader {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--home-border);
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--home-text);
+  font-size: clamp(1.125rem, 1rem + 0.35vw, 1.375rem);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+}
+
+.moreLink {
+  display: inline-flex;
+  min-height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 8px;
+  border-radius: 8px;
+  color: var(--home-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  transition: color 160ms ease;
+}
+
+.moreLink:hover {
+  color: var(--home-accent);
+}
+
+/* Offset only the homepage rows' existing inner gutters. */
+.row {
+  margin-inline: -16px;
+}
+
+/* Keep ScrollableRow's arrow wrappers inside the homepage gutters.
+   The shared component otherwise offsets them 4.5rem beyond its edges. */
+.row > div > :global(.absolute) > div {
+  left: 0 !important;
+  right: 0 !important;
+}
+
+.posterItem {
+  width: 112px;
+  min-width: 112px;
+  flex-shrink: 0;
+}
+
+.skeletonPoster,
+.skeletonLine {
+  background: var(--home-skeleton);
+  animation: home-pulse 1.8s ease-in-out infinite;
+}
+
+.skeletonPoster {
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  margin-bottom: 10px;
+  border-radius: 12px;
+}
+
+.skeletonLine {
+  width: 75%;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.emptyState {
+  width: 100%;
+  padding: 24px 0;
+  color: var(--home-muted);
+  font-size: 0.875rem;
+  line-height: 1.75;
+}
+
+@keyframes home-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (min-width: 640px) {
+  .page {
+    padding: 16px 22px 40px;
+  }
+
+  .row {
+    margin-inline: -24px;
+  }
+
+  .posterItem {
+    width: 176px;
+    min-width: 176px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moreLink {
+    transition: none;
+  }
+
+  .skeletonPoster,
+  .skeletonLine {
+    animation: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .page {
+    padding: 14px 14px 28px;
+  }
+  .row {
+    margin-inline: -14px;
+  }
+}
