@@ -72,17 +72,13 @@ jobs:
           echo "WATCH_ROOM_EXTERNAL_SERVER_AUTH=${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_AUTH }}" >> $GITHUB_ENV
           echo "WATCH_ROOM_EXTERNAL_SERVER_URL=${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_URL }}" >> $GITHUB_ENV
           echo "WATCH_ROOM_SERVER_TYPE=${{ secrets.WATCH_ROOM_SERVER_TYPE }}" >> $GITHUB_ENV
-
       - name: Configure D1 Database in wrangler.toml
         run: |
           STORAGE_TYPE="${{ secrets.NEXT_PUBLIC_STORAGE_TYPE }}"
-
           if [ "$STORAGE_TYPE" != "d1" ]; then
             echo "Storage type is not d1 (current: $STORAGE_TYPE), removing D1 database configuration"
-            # Remove the entire [[d1_databases]] section including the comment
             sed -i '/^# D1 数据库绑定$/,/^database_id = .*$/d' wrangler.toml
-            # Also remove any remaining [[d1_databases]] block
-            sed -i '/^\[\[d1_databases\]\]$/,/^$/{ /^\[\[d1_databases\]\]$/d; /^binding = /d; /^database_name = /d; /^database_id = /d; }' wrangler.toml
+            sed -i '/^$$\[d1_databases$$\]$/,/^$/{ /^$$\[d1_databases$$\]$/d; /^binding = /d; /^database_name = /d; /^database_id = /d; }' wrangler.toml
             echo "D1 configuration removed from wrangler.toml"
           elif [ -n "${{ secrets.D1_DATABASE_ID }}" ]; then
             sed -i 's/REPLACE_WITH_YOUR_D1_DATABASE_ID/${{ secrets.D1_DATABASE_ID }}/g' wrangler.toml
@@ -91,10 +87,8 @@ jobs:
             echo "⚠️ Storage type is d1 but D1_DATABASE_ID secret not set"
             exit 1
           fi
-
       - name: Update wrangler.toml with environment variables
         run: |
-          # Function to append variable to wrangler.toml if it has a value
           append_var() {
             local var_name=$1
             local var_value=$2
@@ -102,8 +96,6 @@ jobs:
               echo "$var_name = \"$var_value\"" >> wrangler.toml
             fi
           }
-
-          # Append all environment variables to wrangler.toml
           append_var "NEXT_PUBLIC_STORAGE_TYPE" "${{ secrets.NEXT_PUBLIC_STORAGE_TYPE }}"
           append_var "NEXT_PUBLIC_SITE_NAME" "${{ secrets.NEXT_PUBLIC_SITE_NAME }}"
           append_var "NEXT_PUBLIC_SEARCH_MAX_PAGE" "${{ secrets.NEXT_PUBLIC_SEARCH_MAX_PAGE }}"
@@ -140,12 +132,27 @@ jobs:
           append_var WATCH_ROOM_EXTERNAL_SERVER_AUTH "${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_AUTH }}"
           append_var WATCH_ROOM_EXTERNAL_SERVER_URL "${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_URL }}"
           append_var WATCH_ROOM_SERVER_TYPE "${{ secrets.WATCH_ROOM_SERVER_TYPE }}"
-          
+
           echo "Updated wrangler.toml:"
           cat wrangler.toml
+      # 修复：next build 在 7GB 免费 runner 上被 OOM 杀掉（"The operation was canceled"）。
+      # 加 8G swap 扩展可用内存，并把 Node 堆上限提到 6G，避免构建进程被系统 kill。
+      # 修复：ubuntu-latest runner 上 fallocate 常报 "Text file busy"（/swapfile 已被占用或 FS 不支持 fallocate）。
+      # 先 swapoff+删掉可能存在的旧 swap，再用 dd 建 8G（dd 不依赖 fallocate，兼容性最好）。
+      - name: Add swap space for build
+        run: |
+          sudo swapoff /swapfile 2>/dev/null || true
+          sudo rm -f /swapfile
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=8192 status=progress
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "Swap status:"; swapon --show
 
       - name: Build for Cloudflare
         run: pnpm run build:cloudflare
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Install Wrangler
         run: pnpm add -g wrangler@4.60.0
@@ -153,36 +160,31 @@ jobs:
       - name: Run D1 Database Migrations
         run: |
           STORAGE_TYPE="${{ secrets.NEXT_PUBLIC_STORAGE_TYPE }}"
-
           if [ "$STORAGE_TYPE" != "d1" ]; then
             echo "Storage type is not d1 (current: $STORAGE_TYPE), skipping D1 migrations"
             exit 0
           fi
-
           if [ -z "${{ secrets.D1_DATABASE_ID }}" ]; then
             echo "D1_DATABASE_ID not set, skipping migrations"
             exit 0
           fi
-
           echo "Running D1 database migrations..."
-
           for migration_file in ./migrations/*.sql; do
             if [ -f "$migration_file" ]; then
               echo "Executing migration: $(basename $migration_file)"
               wrangler d1 execute moontvplus --remote --file="$migration_file" || echo "⚠️ Migration may have been skipped (already applied)"
             fi
           done
-
           echo "✅ Migrations completed"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      # 修复：原 cloudflare/wrangler-action@v3 配 packageManager: pnpm 会跑 `pnpm exec wrangler deploy`，
+      # 但 wrangler 是全局安装的（pnpm add -g），不在本地 node_modules/.bin，pnpm exec 找不到 → exit 1。
+      # 改为直接调用全局 wrangler（已在 PATH 上，与上面 d1 execute 同款），彻底绕开 action 的 exec 逻辑。
       - name: Deploy to Cloudflare
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
-          packageManager: pnpm
-          wranglerVersion: "4.60.0"
+        run: wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
