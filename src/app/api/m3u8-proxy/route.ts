@@ -10,6 +10,9 @@ const UA =
 
 function corsHeaders(headers: Headers): Headers {
   const h = new Headers(headers);
+  // fetch 已自动解压 body，删除压缩/长度头防止客户端重复解压或长度不匹配
+  h.delete('content-encoding');
+  h.delete('content-length');
   h.set('Access-Control-Allow-Origin', '*');
   h.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   return h;
