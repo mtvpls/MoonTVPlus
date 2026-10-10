@@ -84,9 +84,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ error: '重定向次数超限' }, { status: 502 });
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 502 }
-    );
+    const name = (error as Error)?.name;
+    console.error('[m3u8-proxy] 代理失败:', error);
+    if (name === 'TimeoutError') {
+      return NextResponse.json({ error: '上游请求超时' }, { status: 504 });
+    }
+    return NextResponse.json({ error: '代理请求失败' }, { status: 502 });
   }
 }
