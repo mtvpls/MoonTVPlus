@@ -80,6 +80,7 @@ import {
   FEATURE_PERMISSION_OPTIONS,
 } from '@/lib/feature-permissions';
 import { MAIN_SOURCE_NAME } from '@/lib/openlist-sources';
+import { getWebSearchProvider } from '@/lib/web-search-config';
 
 import AnimeSubscriptionComponent from '@/components/AnimeSubscriptionComponent';
 import CorrectDialog from '@/components/CorrectDialog';
@@ -16836,8 +16837,8 @@ const AIConfigComponent = ({
   // 联网搜索配置
   const [enableWebSearch, setEnableWebSearch] = useState(false);
   const [webSearchProvider, setWebSearchProvider] = useState<
-    'tavily' | 'serper' | 'serpapi' | 'bing'
-  >('tavily');
+    'parallel' | 'tavily' | 'serper' | 'serpapi' | 'bing'
+  >('parallel');
   const [tavilyApiKey, setTavilyApiKey] = useState('');
   const [serperApiKey, setSerperApiKey] = useState('');
   const [serpApiKey, setSerpApiKey] = useState('');
@@ -16885,7 +16886,7 @@ const AIConfigComponent = ({
       setCustomModel(config.AIConfig.CustomModel || '');
       setDecisionCustomModel(config.AIConfig.DecisionCustomModel || '');
       setEnableWebSearch(config.AIConfig.EnableWebSearch || false);
-      setWebSearchProvider(config.AIConfig.WebSearchProvider || 'tavily');
+      setWebSearchProvider(getWebSearchProvider(config.AIConfig));
       setTavilyApiKey(config.AIConfig.TavilyApiKey || '');
       setSerperApiKey(config.AIConfig.SerperApiKey || '');
       setSerpApiKey(config.AIConfig.SerpApiKey || '');
@@ -17358,12 +17359,19 @@ const AIConfigComponent = ({
                 onChange={(e) => setWebSearchProvider(e.target.value as any)}
                 className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
               >
-                <option value='tavily'>Tavily (推荐)</option>
+                <option value='parallel'>Parallel Search MCP（免费，无需 API Key）</option>
+                <option value='tavily'>Tavily</option>
                 <option value='serper'>Serper.dev</option>
                 <option value='serpapi'>SerpAPI</option>
                 <option value='bing'>Bing RSS（免费，无需 API Key）</option>
               </select>
             </div>
+
+            {webSearchProvider === 'parallel' && (
+              <p className='text-xs text-gray-500 dark:text-gray-400'>
+                使用 Parallel Search MCP 搜索（Fast 模式）并提取网页内容，无需注册或 API Key。搜索词和抓取链接会发送至 Parallel。
+              </p>
+            )}
 
             {webSearchProvider === 'tavily' && (
               <div>
