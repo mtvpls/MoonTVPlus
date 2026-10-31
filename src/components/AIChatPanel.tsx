@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
+import { useSearchSession } from '@/hooks/use-search-session';
 import { Bot, Loader2, RefreshCw, Send, Sparkles, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -259,6 +260,8 @@ export default function AIChatPanel({
     }
     return 'ai-chat-general';
   }, [context?.title, context?.year, context?.type]);
+
+  const { getSessionId, resetSession } = useSearchSession(storageKey);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: welcomeMessage },
@@ -538,6 +541,8 @@ export default function AIChatPanel({
 
       // 清除消息并重置为欢迎消息
       console.log('视频上下文变化，清除聊天记录');
+      // 消息历史已清空，重返同一影片也应开启新的搜索会话。
+      resetSession();
       clearToolChain();
       setMessages([{ role: 'assistant', content: welcomeMessage }]);
 
@@ -546,7 +551,7 @@ export default function AIChatPanel({
 
       prevStorageKeyRef.current = storageKey;
     }
-  }, [storageKey, welcomeMessage]); // 监听 storageKey 变化
+  }, [storageKey, welcomeMessage, resetSession]); // 监听 storageKey 变化
 
   // 通知父组件 streaming 状态变化
   useEffect(() => {
@@ -624,6 +629,7 @@ export default function AIChatPanel({
           message: userMessage,
           context,
           history: requestHistory,
+          searchSessionId: getSessionId(),
         }),
         signal: abortController.signal,
       });
@@ -852,6 +858,7 @@ export default function AIChatPanel({
 
     // 清除sessionStorage
     sessionStorage.removeItem(storageKey);
+    resetSession();
 
     // 重置消息为欢迎消息
     clearToolChain();

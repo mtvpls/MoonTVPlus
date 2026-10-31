@@ -1,3 +1,5 @@
+import { callParallelSearch, createSearchContext } from '@/lib/parallel-search';
+import { getWebSearchProvider } from '@/lib/web-search-config';
 // AI评论生成核心逻辑
 
 import {
@@ -43,7 +45,7 @@ interface GenerateCommentsParams {
     MaxContext?: number;
     CompressThreshold?: number;
     EnableWebSearch?: boolean;
-    WebSearchProvider?: 'tavily' | 'serper' | 'serpapi' | 'bing';
+    WebSearchProvider?: 'parallel' | 'tavily' | 'serper' | 'serpapi' | 'bing';
     TavilyApiKey?: string;
     SerperApiKey?: string;
     SerpApiKey?: string;
@@ -259,9 +261,12 @@ async function searchMovieInfo(
   }
 
   try {
-    const provider = aiConfig.WebSearchProvider || 'tavily';
+    const provider = getWebSearchProvider(aiConfig);
     let searchResults = '';
 
+    if (provider === 'parallel') {
+      return (await callParallelSearch('web_search', { objective: movieName + ' 影评 评价', search_queries: [movieName + ' 影评 评价'] }, createSearchContext())).slice(0, 1000);
+    }
     if (provider === 'tavily' && aiConfig.TavilyApiKey) {
       const response = await fetch('https://api.tavily.com/search', {
         method: 'POST',

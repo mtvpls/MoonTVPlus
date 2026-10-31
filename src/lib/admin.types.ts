@@ -266,7 +266,7 @@ export interface AdminConfig {
     DecisionCustomModel?: string;
     // 联网搜索配置
     EnableWebSearch: boolean; // 是否启用联网搜索
-    WebSearchProvider?: 'tavily' | 'serper' | 'serpapi' | 'bing'; // 搜索服务提供商
+    WebSearchProvider?: 'parallel' | 'tavily' | 'serper' | 'serpapi' | 'bing'; // 搜索服务提供商
     TavilyApiKey?: string; // Tavily API密钥
     SerperApiKey?: string; // Serper.dev API密钥
     SerpApiKey?: string; // SerpAPI密钥
