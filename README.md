@@ -511,6 +511,8 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 | ENABLE_TVBOX_SUBSCRIBE                   | 是否启用 TVBOX 订阅功能                                      | true/false                  | false                                                        |
 | TVBOX_SUBSCRIBE_TOKEN                    | TVBOX 订阅 API 访问 Token，如启用TVBOX功能必须设置该项       | 任意字符串                  | (空)                                                         |
 | TVBOX_BLOCKED_SOURCES                    | TVBOX 订阅屏蔽源列表（多个源用逗号分隔，匹配视频源的 key）   | 逗号分隔的源 key            | (空)                                                         |
+| TVBOX_BRIDGE_URL                         | TVBox 桥接服务地址；后台启用桥接且桥接地址留空时使用          | HTTP/HTTPS URL              | (空)                                                         |
+| TVBOX_BRIDGE_TOKEN                       | TVBox 桥接认证 Token；后台 Token 留空时使用                 | 任意字符串                  | (空)                                                         |
 | WATCH_ROOM_ENABLED                       | 是否启用观影室功能（vercel部署不支持该功能，可使用外部服务器） | true/false                  | false                                                        |
 | WATCH_ROOM_SERVER_TYPE                   | 观影室服务器类型                                             | internal/external           | internal                                                     |
 | WATCH_ROOM_EXTERNAL_SERVER_URL           | 外部观影室服务器地址（当 SERVER_TYPE 为 external 时必填）    | WebSocket URL               | (空)                                                         |

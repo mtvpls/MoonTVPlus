@@ -67,6 +67,7 @@ import {
   normalizeScriptSources,
   parseScriptSourceValue,
 } from '@/lib/source-script';
+import { parseTVBoxBridgeSourceValue } from '@/lib/tvbox-bridge.shared';
 
 export const runtime = 'nodejs';
 
@@ -231,6 +232,63 @@ export async function GET(request: NextRequest) {
         detailId: id,
         result: detailExecution.result,
       });
+
+      return NextResponse.json(normalized);
+    } catch (error) {
+      return NextResponse.json(
+        { error: (error as Error).message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // TVBox 桥接源：一个 site 就是一张卡，sources[] 全部当作线路放进 lines[]
+  const bridgeSiteKey = parseTVBoxBridgeSourceValue(sourceCode);
+  if (bridgeSiteKey) {
+    try {
+      const { getTVBoxBridgeEndpoint, resolveTVBoxBridgeSites, getTVBoxBridgeDetail, normalizeTVBoxBridgeDetailResult } =
+        await import('@/lib/tvbox-bridge.server');
+
+      const sites = await resolveTVBoxBridgeSites(
+        authInfo.username,
+        specialOnly
+      );
+      const site = sites.find((item) => item.siteKey === bridgeSiteKey);
+      if (!site) {
+        return NextResponse.json(
+          { error: '该 TVBox 源不可用或已被停用' },
+          { status: 403 }
+        );
+      }
+
+      const endpoint = await getTVBoxBridgeEndpoint();
+      if (!endpoint) {
+        return NextResponse.json(
+          { error: 'TVBox 桥接未启用' },
+          { status: 503 }
+        );
+      }
+
+      const detail = await getTVBoxBridgeDetail(endpoint, site.siteKey, id);
+      const normalized = normalizeTVBoxBridgeDetailResult({
+        source: sourceCode,
+        site,
+        detailId: id,
+        result: detail,
+        specialOnly,
+      });
+
+      // 请求里指定了线路就按它展开剧集：换线路后回填卡片的详情
+      // 不能拿默认的第一条线路覆盖（否则选中的线路会被顶回第一条）
+      const requestedLine = searchParams.get('line');
+      const requested = requestedLine
+        ? normalized.lines?.find((line) => line.name === requestedLine)
+        : undefined;
+      if (requested) {
+        normalized.activeLine = requested.name;
+        normalized.episodes = requested.episodes;
+        normalized.episodes_titles = requested.episodes_titles;
+      }
 
       return NextResponse.json(normalized);
     } catch (error) {

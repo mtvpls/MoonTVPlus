@@ -116,6 +116,7 @@ export interface AdminConfig {
   };
   SpecialSourceApis?: string[]; // 特殊源 key 列表，默认对普通入口隐藏
   ClientAdSourceApis?: string[]; // 客户端去广告源 key 列表：MoonTVPlus APP / OrionTV 请求 source-detail 时 m3u8 套 proxy-m3u8
+  VideoSourceOrder?: string[]; // 视频源管理中的统一排序，包含 tvbox:<siteKey>
   SourceConfig: {
     key: string;
     name: string;
@@ -404,6 +405,27 @@ export interface AdminConfig {
     registrationEnabled?: boolean; // 是否启用 Telegram 注册
     notificationsEnabled?: boolean; // 是否启用 Telegram 通知
     defaultNotifications?: boolean; // 新绑定用户默认开启通知
+  };
+  TVBoxBridgeConfig?: {
+    Enabled: boolean; // 是否启用 TVBox 桥接
+    BaseUrl: string; // 桥接地址，如 http://127.0.0.1:8787
+    Token: string; // 桥接 Token，仅服务端使用
+    // 已加载的配置地址（用于管理面板回显；桥接侧已持久化快照）
+    ConfigUrl?: string;
+    // 多仓：已选定的具体仓库地址
+    SelectedDepotUrl?: string;
+    // 已发现的站点及视频源管理设置（key 为桥接 site.key）
+    Sites?: Array<{
+      key: string;
+      name: string;
+      enabled: boolean;
+      weight?: number;
+      api?: string;
+      unsupported?: boolean;
+      searchable?: number;
+    }>;
+    // 本地文件类来源屏蔽名单（site.key）
+    BlockedLocalSites?: string[];
   };
   MusicConfig?: {
     Enabled?: boolean; // 启用音乐功能

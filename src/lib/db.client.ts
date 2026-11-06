@@ -53,6 +53,8 @@ export interface PlayRecord {
   is_anime?: boolean;
   /** 是否短剧（短剧竖屏页写入；普通播放页按 CMS type_name/class 判断） */
   is_duanju?: boolean;
+  /** 线路（仅 tvbox 这类多线路源写入）：下次播放同一视频从这条线路续播 */
+  line?: string;
 }
 
 // ---- 收藏类型 ----
