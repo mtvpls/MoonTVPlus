@@ -3,6 +3,18 @@ import { MangaReadRecord, MangaShelfItem } from './manga.types';
 import { BookReadRecord, BookShelfItem } from './book.types';
 import type { TVBoxBridgeLine } from './tvbox-bridge.shared';
 
+// 播放源测速结果，失败和不支持测速同样作为终态缓存。
+export interface SourceVideoInfo {
+  quality: string;
+  loadSpeed: string;
+  pingTime: number;
+  bitrate: string;
+  hasError?: boolean;
+  errorType?: 'timeout' | 'unreachable';
+  unsupported?: boolean;
+  reason?: string;
+}
+
 // 播放记录数据结构
 export interface PlayRecord {
   title: string;

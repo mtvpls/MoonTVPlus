@@ -18,6 +18,18 @@ export const TVBOX_BRIDGE_MAX_TEST_LINES = 5;
 /** 优选阶段最多参与测速的 tvbox 源数量（进入播放后的线路测速不受此限制） */
 export const TVBOX_BRIDGE_MAX_SEARCH_SOURCES = 10;
 
+export const TVBOX_BRIDGE_PROBE_BATCH_SIZE = 100;
+
+export interface TVBoxBridgeProbeItem {
+  key: string;
+  flag: string;
+  id: string;
+}
+
+export type TVBoxBridgeProbeResult =
+  | { ok: true; url: string; mediaType: string }
+  | { ok: false; unsupported?: boolean; reason?: string; error?: string };
+
 /**
  * 管理面板用的只读视图类型（与 tvbox-bridge.server 的接口结构一致）。
  * 放这里是为了让客户端组件不必 import 服务端模块。

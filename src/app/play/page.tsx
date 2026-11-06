@@ -80,7 +80,12 @@ import {
   restoreTVBoxBridgePlaybackLine,
 } from '@/lib/tvbox-bridge.playback';
 import {
+  probeTVBoxBridgePlaybackLines,
+  resolveTVBoxBridgePlaybackUrl,
+} from '@/lib/tvbox-bridge.client';
+import {
   buildSourceTestKey,
+  getActiveTVBoxBridgeLine,
   getTVBoxBridgeLines,
   isTVBoxBridgeSource,
   resolveEpisodeIndexForLine,
@@ -107,8 +112,8 @@ import {
   CUSTOM_SUBTITLE_ACCEPT,
 } from '@/lib/subtitle-converter';
 import { getTMDBImageUrl } from '@/lib/tmdb.search';
-import { DanmakuFilterConfig, EpisodeFilterConfig, SearchResult } from '@/lib/types';
-import { base58Decode, getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
+import { DanmakuFilterConfig, EpisodeFilterConfig, SearchResult, SourceVideoInfo } from '@/lib/types';
+import { base58Decode, getVideoResolutionFromM3u8, processImageUrl, SpeedTestError } from '@/lib/utils';
 import {
   isDuanjuTypeName,
   isDuanjuVerticalDisabled,
@@ -2463,7 +2468,7 @@ function PlayPageClient() {
 
   // 保存优选时的测速结果，避免EpisodeSelector重复测速
   const [precomputedVideoInfo, setPrecomputedVideoInfo] = useState<
-    Map<string, { quality: string; loadSpeed: string; pingTime: number; bitrate: string }>
+    Map<string, SourceVideoInfo>
   >(new Map());
 
   // 当前源的视频信息（用于标题旁边显示）
@@ -2564,7 +2569,7 @@ function PlayPageClient() {
   // 播放进度保存相关
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSaveTimeRef = useRef<number>(0);
-  const lastSavedPlayTimeRef = useRef<number | null>(null);
+  const lastSavedPlayRecordKeyRef = useRef<string | null>(null);
 
   // 下集预缓存相关
   const nextEpisodePreCacheTriggeredRef = useRef<boolean>(false);
@@ -3245,8 +3250,18 @@ function PlayPageClient() {
   };
 
   // 获取当前源的视频信息（分辨率和码率）
-  const fetchCurrentSourceVideoInfo = async () => {
+  const fetchCurrentSourceVideoInfo = async (force = false) => {
     if (!detail || !detail.episodes || detail.episodes.length === 0) {
+      return;
+    }
+
+    const cachedInfo = precomputedVideoInfo.get(buildSourceTestKey(
+      detail.source,
+      detail.id,
+      getActiveTVBoxBridgeLine(detail)?.name
+    ));
+    if (!force && cachedInfo) {
+      setCurrentSourceVideoInfo(cachedInfo.hasError || cachedInfo.unsupported ? null : cachedInfo);
       return;
     }
 
@@ -3256,7 +3271,12 @@ function PlayPageClient() {
       return;
     }
     if (episodeUrl.startsWith('/api/tvbox-bridge/play')) {
-      episodeUrl = appendSpecialSourceParam(episodeUrl);
+      try {
+        episodeUrl = (await resolveTVBoxBridgePlaybackUrl(episodeUrl)).url;
+      } catch {
+        setCurrentSourceVideoInfo(null);
+        return;
+      }
     }
 
     // openlist 的 lazy 播放地址或已确认的单文件直链（如 mkv），解析前无法探测分辨率（内部 hls.js XHR 还会触发 CORS 误报），跳过
@@ -3303,13 +3323,13 @@ function PlayPageClient() {
     scope: 'sources' | 'current-source-lines' = 'sources'
   ): Promise<SearchResult> => {
     const allCurrentSourceLines = scope === 'current-source-lines';
-    if (sources.length === 1 && !allCurrentSourceLines) return sources[0];
+    if (sources.length === 1 && !allCurrentSourceLines && !isTVBoxBridgeSource(sources[0].source)) return sources[0];
 
     type SourceTestResult = {
       source: SearchResult;
       /** 参与测速的线路名（tvbox 源才有） */
       line?: string;
-      testResult: { quality: string; loadSpeed: string; pingTime: number; bitrate: string };
+      testResult: SourceVideoInfo;
     };
     type MaybeSourceTestResult = SourceTestResult | null;
 
@@ -3411,15 +3431,7 @@ function PlayPageClient() {
     const finalizeSelection = (
       completedResults: MaybeSourceTestResult[]
     ): SearchResult => {
-      const newVideoInfoMap = new Map<
-        string,
-        {
-          quality: string;
-          loadSpeed: string;
-          pingTime: number;
-          bitrate: string;
-        }
-      >();
+      const newVideoInfoMap = new Map<string, SourceVideoInfo>();
       completedResults.forEach((result) => {
         if (!result) return;
         newVideoInfoMap.set(
@@ -3430,8 +3442,9 @@ function PlayPageClient() {
       setPrecomputedVideoInfo(newVideoInfoMap);
 
       const successfulResults = completedResults.filter(
-        Boolean
-      ) as SourceTestResult[];
+        (result): result is SourceTestResult =>
+          !!result && !result.testResult.hasError && !result.testResult.unsupported
+      );
 
       if (successfulResults.length === 0) {
         console.warn(
@@ -3506,10 +3519,26 @@ function PlayPageClient() {
       return winner.source;
     };
 
+    const testEpisodeUrl = (entry: { source: SearchResult; line?: string }) => {
+      const episodes = entry.line
+        ? getTVBoxBridgeLines(entry.source).find((line) => line.name === entry.line)?.episodes
+        : entry.source.episodes;
+      return episodes?.[episodes.length > 1 ? 1 : 0] || '';
+    };
+    const bridgeProbeResults = await probeTVBoxBridgePlaybackLines(testEntries.map(testEpisodeUrl));
+
     const testSingleSource = async (
       entry: { source: SearchResult; line?: string }
     ): Promise<MaybeSourceTestResult> => {
       const { source, line } = entry;
+      const failedResult = (info: Partial<SourceVideoInfo> = {}): SourceTestResult => ({
+        source,
+        line,
+        testResult: {
+          quality: '错误', loadSpeed: '未知', pingTime: 0, bitrate: '未知',
+          hasError: true, errorType: 'unreachable', ...info,
+        },
+      });
       try {
         // 线路的播放地址在 lines[].episodes 里；非 tvbox 源用自身的 episodes
         const lineInfo = line
@@ -3518,7 +3547,7 @@ function PlayPageClient() {
         const episodes = lineInfo ? lineInfo.episodes : source.episodes;
         if (!episodes || episodes.length === 0) {
           console.warn(`播放源 ${source.source_name} 没有可用的播放地址`);
-          return null;
+          return failedResult({ reason: '无剧集' });
         }
 
         let episodeUrl =
@@ -3534,19 +3563,21 @@ function PlayPageClient() {
           episodeUrl = `/api/proxy/vod/m3u8?url=${encodeURIComponent(episodeUrl)}&source=${encodeURIComponent(source.source)}`;
         }
 
-        // 桥接懒解析地址：先换到真实播放地址再探测（否则测的是本地接口）
+        // 桥接线路已经批量解析；逐条下载真实媒体分片测速。
         if (episodeUrl.startsWith('/api/tvbox-bridge/play')) {
-          const separator = episodeUrl.includes('?') ? '&' : '?';
-          const response = await fetch(
-            appendSpecialSourceParam(`${episodeUrl}${separator}format=json`)
-          );
-          if (!response.ok) return null;
-          const data = await response.json();
-          if (!data?.url) return null;
-          episodeUrl = data.url as string;
+          const result = bridgeProbeResults.get(testEpisodeUrl(entry));
+          if (!result?.ok) {
+            return failedResult(result?.unsupported
+              ? { hasError: false, unsupported: true, reason: result.reason }
+              : { reason: result?.error || '获取媒体流地址失败' });
+          }
+          episodeUrl = result.url;
         }
 
-        const testResult = await getVideoResolutionFromM3u8(episodeUrl);
+        const testResult = await getVideoResolutionFromM3u8(
+          episodeUrl,
+          isTVBoxBridgeSource(source.source) ? 10000 : 6000
+        );
 
         return {
           source,
@@ -3554,7 +3585,7 @@ function PlayPageClient() {
           testResult,
         };
       } catch (error) {
-        return null;
+        return failedResult({ errorType: error instanceof SpeedTestError ? error.type : 'unreachable' });
       }
     };
 
@@ -3649,7 +3680,7 @@ function PlayPageClient() {
 
               if (topPriorityKeys.has(sourceKey)) {
                 topCompletedCount += 1;
-                if (result) {
+                if (result && !result.testResult.hasError && !result.testResult.unsupported) {
                   topSuccessCount += 1;
                 }
               }
@@ -4470,8 +4501,9 @@ function PlayPageClient() {
           ? appendSpecialSourceParam(`${newUrl}${separator}format=json`)
           : `${newUrl}${separator}format=json`;
 
-        const response = await fetch(fetchUrl);
-        const data = await response.json();
+        const data = isTVBoxLazyPlayUrl
+          ? await resolveTVBoxBridgePlaybackUrl(newUrl)
+          : await (await fetch(fetchUrl)).json();
         if (requestSeq !== videoUrlRequestSeqRef.current) {
           return;
         }
@@ -4526,6 +4558,12 @@ function PlayPageClient() {
         console.error('获取播放链接失败:', error);
         setVideoQualities([]);
         currentXiaoyaUrlRef.current = ''; // 获取失败，清空
+        if (isTVBoxLazyPlayUrl) {
+          videoErrorRetryRef.current = () => updateVideoUrl(detailData, episodeIndex);
+          setIsVideoLoading(false);
+          setVideoError(error instanceof Error ? error.message : '获取播放链接失败');
+          return;
+        }
       }
     } else {
       // 非小雅/openlist 源，清空清晰度列表
@@ -5388,6 +5426,33 @@ function PlayPageClient() {
     }
   };
 
+  // 线路选定就写记录，不等媒体开始播放；缓冲/解析失败也不会丢掉线路选择。
+  const persistTVBoxPlaybackLine = async (selected: SearchResult, episodeIndex: number) => {
+    const line = getActiveTVBoxBridgeLine(selected)?.name;
+    if (!line) return;
+    try {
+      const records = await getAllPlayRecords();
+      const existing = records[generateStorageKey(selected.source, selected.id)];
+      const sameEpisode = existing?.index === episodeIndex + 1;
+      await savePlayRecord(selected.source, selected.id, {
+        ...existing,
+        title: selected.title || videoTitleRef.current,
+        source_name: selected.source_name || '',
+        year: selected.year || '',
+        cover: selected.poster || '',
+        index: episodeIndex + 1,
+        total_episodes: selected.episodes.length,
+        play_time: sameEpisode ? existing.play_time : 0,
+        total_time: sameEpisode ? existing.total_time : 0,
+        save_time: Date.now(),
+        search_title: searchTitle,
+        line,
+      });
+    } catch (error) {
+      console.warn('[Play] 保存选定线路失败:', error);
+    }
+  };
+
   // 当集数索引变化时自动更新视频地址
   useEffect(() => {
     updateVideoUrl(detail, currentEpisodeIndex);
@@ -6104,6 +6169,8 @@ function PlayPageClient() {
         console.error('读取播放记录失败:', err);
       }
 
+      await persistTVBoxPlaybackLine(detailData, currentEpisodeIndexRef.current);
+
       // 短暂延迟让用户看到完成状态
       setTimeout(() => {
         setLoading(false);
@@ -6488,6 +6555,7 @@ function PlayPageClient() {
             : item
         )
       );
+      await persistTVBoxPlaybackLine(newDetail, targetIndex);
     } catch (err) {
       // 换源失败只影响播放器；保留详情、URL 和换源面板，并重试失败的目标源。
       isSourceChangingRef.current = false;
@@ -7555,7 +7623,11 @@ function PlayPageClient() {
       return;
     }
 
-    if (lastSavedPlayTimeRef.current === playTime) {
+    const saveKey = JSON.stringify([
+      currentSourceRef.current, currentIdRef.current, currentEpisodeIndexRef.current,
+      getActiveTVBoxBridgeLine(detailRef.current)?.name, playTime,
+    ]);
+    if (lastSavedPlayRecordKeyRef.current === saveKey) {
       return;
     }
 
@@ -7589,10 +7661,10 @@ function PlayPageClient() {
             detailRef.current?.type_name || detailRef.current?.class || ''
           ) || undefined,
         // 记住线路，下次续播还从这条线路进
-        line: detailRef.current?.activeLine || undefined,
+        line: getActiveTVBoxBridgeLine(detailRef.current)?.name,
       });
 
-      lastSavedPlayTimeRef.current = playTime;
+      lastSavedPlayRecordKeyRef.current = saveKey;
       lastSaveTimeRef.current = Date.now();
       console.log('播放进度已保存:', {
         title: videoTitleRef.current,
@@ -12380,9 +12452,9 @@ function PlayPageClient() {
                     )}
                     {detail?.source_name && (
                       <span
-                        className={`relative group cursor-pointer border px-2 py-[1px] rounded ${detail.source === 'xiaoya' ? 'border-blue-500' : isNetdiskSource(detail.source) ? 'border-purple-500' : detail.source === 'openlist' || detail.source === 'emby' || detail.source?.startsWith('emby_') ? 'border-yellow-500' : 'border-gray-500/60'
+                        className={`relative group cursor-pointer border px-2 py-[1px] rounded ${detail.source === 'xiaoya' ? 'border-blue-500' : isNetdiskSource(detail.source) ? 'border-purple-500' : detail.source === 'openlist' || detail.source === 'emby' || detail.source?.startsWith('emby_') ? 'border-yellow-500' : isTVBoxBridgeSource(detail.source) ? 'border-cyan-500' : 'border-gray-500/60'
                           }`}
-                        onClick={fetchCurrentSourceVideoInfo}
+                        onClick={() => fetchCurrentSourceVideoInfo(true)}
                       >
                         {detail.source_name}
                         {/* 视频信息悬浮提示 */}

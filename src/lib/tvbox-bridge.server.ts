@@ -299,16 +299,25 @@ export async function searchTVBoxBridgeSite(
 /**
  * 解析播放地址。flag 是线路名（/api/detail 的 sources[].name）。
  */
+const bridgePlayRequests = new Map<string, Promise<TVBoxBridgePlayResult>>();
+
 export async function getTVBoxBridgePlay(
   endpoint: TVBoxBridgeEndpoint,
   key: string,
   flag: string,
   id: string
 ): Promise<TVBoxBridgePlayResult> {
-  return bridgeJson<TVBoxBridgePlayResult>(endpoint, '/api/play', {
+  const requestKey = JSON.stringify([endpoint.baseUrl, endpoint.token, key, flag, id]);
+  const running = bridgePlayRequests.get(requestKey);
+  if (running) return running;
+  const request = bridgeJson<TVBoxBridgePlayResult>(endpoint, '/api/play', {
     method: 'POST',
     body: JSON.stringify({ key, flag, id }),
+  }).finally(() => {
+    bridgePlayRequests.delete(requestKey);
   });
+  bridgePlayRequests.set(requestKey, request);
+  return request;
 }
 
 /** 网盘凭据状态（不返回凭据本身） */

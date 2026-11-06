@@ -26,6 +26,8 @@ import { isEpisodeHiddenByFilter } from '@/lib/episode-filter';
 import { loadAllLocalEpisodeProgressRecords } from '@/lib/episode-progress';
 import { isNetdiskSource } from '@/lib/netdisk/source';
 import { appendSpecialSourceParam } from '@/lib/special-source.client';
+import { probeTVBoxBridgePlaybackLines } from '@/lib/tvbox-bridge.client';
+import type { TVBoxBridgeProbeResult } from '@/lib/tvbox-bridge.shared';
 import {
   buildSourceTestKey,
   getActiveTVBoxBridgeLine,
@@ -34,7 +36,7 @@ import {
   parseTVBoxBridgePlayUrl,
   buildTVBoxBridgeSourceValue,
 } from '@/lib/tvbox-bridge.shared';
-import { EpisodeFilterConfig,SearchResult } from '@/lib/types';
+import { EpisodeFilterConfig,SearchResult, SourceVideoInfo } from '@/lib/types';
 import { getVideoResolutionFromM3u8, SpeedTestError } from '@/lib/utils';
 import type { SpeedTestErrorType } from '@/lib/utils';
 
@@ -265,17 +267,7 @@ const EpisodeListItem: React.FC<EpisodeListItemProps> = ({
 };
 
 // 定义视频信息类型
-interface VideoInfo {
-  quality: string;
-  loadSpeed: string;
-  pingTime: number;
-  bitrate: string; // 视频码率
-  hasError?: boolean; // 添加错误状态标识
-  errorType?: SpeedTestErrorType; // 失败类型：超时 / 无法访问
-  /** 线路本身没法测（直播 / 需要二次解析），不是故障 */
-  unsupported?: boolean;
-  reason?: string;
-}
+type VideoInfo = SourceVideoInfo;
 
 interface EpisodeSelectorProps {
   /** 总集数 */
@@ -460,7 +452,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
   // 存储每个源的视频信息
   const [videoInfoMap, setVideoInfoMap] = useState<Map<string, VideoInfo>>(
-    new Map()
+    () => new Map(precomputedVideoInfo)
   );
   // 存储正在重新测试的源
   const [retestingSources, setRetestingSources] = useState<Set<string>>(
@@ -543,7 +535,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   }, [clearEpisodeNamePopupTimer]);
 
   // 使用 ref 来避免闭包问题
-  const videoInfoMapRef = useRef<Map<string, VideoInfo>>(new Map());
+  const videoInfoMapRef = useRef<Map<string, VideoInfo>>(videoInfoMap);
   const sourceTestTasksRef = useRef<Map<string, Promise<void>>>(new Map());
 
   useEffect(() => {
@@ -810,7 +802,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
    */
   const resolveSpeedTestUrl = useCallback(
     async (
-      episodeUrl: string
+      episodeUrl: string,
+      preResolved?: TVBoxBridgeProbeResult
     ): Promise<
       | { kind: 'url'; url: string }
       | { kind: 'unsupported'; reason?: string }
@@ -819,25 +812,12 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       const play = parseTVBoxBridgePlayUrl(episodeUrl);
       if (!play) return { kind: 'url', url: episodeUrl };
       try {
-        const params = new URLSearchParams({
-          key: play.siteKey,
-          flag: play.flag,
-          id: play.id,
-        });
-        if (
-          new URL(episodeUrl, window.location.origin).searchParams.get('special') ===
-          '1'
-        ) {
-          params.set('special', '1');
-        }
-        const response = await fetch(
-          appendSpecialSourceParam(`/api/tvbox-bridge/probe?${params}`)
-        );
-        const data = await response.json().catch(() => null);
-        if (data?.unsupported) {
+        const data = preResolved ??
+          (await probeTVBoxBridgePlaybackLines([episodeUrl])).get(episodeUrl);
+        if (data && !data.ok && data.unsupported) {
           return { kind: 'unsupported', reason: data.reason };
         }
-        if (!response.ok || !data?.ok) return { kind: 'failed' };
+        if (!data?.ok) return { kind: 'failed' };
         if (typeof data.url !== 'string' || !data.url) return { kind: 'failed' };
         return { kind: 'url', url: data.url };
       } catch {
@@ -857,7 +837,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
    */
   const probeStream = useCallback(
     async (
-      episodeUrl: string
+      episodeUrl: string,
+      preResolved?: TVBoxBridgeProbeResult
     ): Promise<Awaited<ReturnType<typeof getVideoResolutionFromM3u8>>> => {
       if (!parseTVBoxBridgePlayUrl(episodeUrl)) {
         return getVideoResolutionFromM3u8(episodeUrl, speedTestTimeout);
@@ -870,7 +851,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       });
       let resolved: Awaited<ReturnType<typeof resolveSpeedTestUrl>> | null;
       try {
-        resolved = await Promise.race([resolveSpeedTestUrl(episodeUrl), timeout]);
+        resolved = await Promise.race([resolveSpeedTestUrl(episodeUrl, preResolved), timeout]);
       } finally {
         clearTimeout(timer);
       }
@@ -893,7 +874,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   );
 
   // 详情已由 testSource 展开，这里只探测对应线路的地址。
-  const getVideoInfo = useCallback(async (source: SearchResult, line?: string) => {
+  const getVideoInfo = useCallback(async (source: SearchResult, line?: string, preResolved?: TVBoxBridgeProbeResult) => {
     // tvbox 源按线路分别测速，key 里带线路名；其他源保持「源-id」
     const sourceKey = buildSourceTestKey(source.source, source.id, line);
 
@@ -937,7 +918,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     };
 
     try {
-      const info = await probeStream(episodeUrl);
+      const info = await probeStream(episodeUrl, preResolved);
       videoInfoMapRef.current.set(sourceKey, info);
       setVideoInfoMap((prev) => new Map(prev).set(sourceKey, info));
     } catch (error) {
@@ -1092,12 +1073,19 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         const entries = getSourceTestEntries(testable).filter(
           (entry) => !videoInfoMapRef.current.has(entry.key)
         );
+        const episodeUrlForEntry = (entry: { line?: string }) => {
+          const episodes = entry.line
+            ? getTVBoxBridgeLines(testable).find((line) => line.name === entry.line)?.episodes
+            : testable.episodes;
+          return episodes?.[episodes.length > 1 ? 1 : 0] || '';
+        };
+        const probeResults = await probeTVBoxBridgePlaybackLines(entries.map(episodeUrlForEntry));
         const concurrency = 2;
         for (let start = 0; start < entries.length; start += concurrency) {
           await Promise.all(
             entries
               .slice(start, start + concurrency)
-              .map((entry) => getVideoInfo(testable, entry.line))
+              .map((entry) => getVideoInfo(testable, entry.line, probeResults.get(episodeUrlForEntry(entry))))
           );
         }
       })();
@@ -1216,7 +1204,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
       const pendingSources = await pickPendingSources(availableSources);
 
-      if (cancelled || pendingSources.length === 0) return;
+      if (cancelled) return;
+      if (pendingSources.length === 0) {
+        setInitialTestingCompleted(true);
+        return;
+      }
 
       const batchSize = 5;
 
@@ -1915,6 +1907,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                             <span title={source.source_name} className={`min-w-0 truncate text-xs px-2 py-1 border rounded ${sourcePillTextClass} ${
                               source.source === 'xiaoya' ? 'border-blue-500' : isNetdiskSource(source.source) ? 'border-purple-500' : source.source === 'openlist' || source.source === 'emby' || source.source?.startsWith('emby_')
                            ? 'border-yellow-500'
+                                : isTVBoxBridgeSource(source.source) ? 'border-cyan-500'
                                 : 'border-gray-500/60'
                       }`}>
                               {source.source_name}

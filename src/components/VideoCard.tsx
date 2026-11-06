@@ -40,6 +40,7 @@ import { getBangumiSubjectUrl } from '@/lib/bangumi.client';
 import { isNetdiskSource } from '@/lib/netdisk/source';
 import { isDuanjuVerticalDisabled } from '@/lib/duanju.client';
 import { appendSpecialSourceParam } from '@/lib/special-source.client';
+import { isTVBoxBridgeSource } from '@/lib/tvbox-bridge.shared';
 import {
   base58Decode,
   clearBangumiImageFallbackCacheIfFailed,
@@ -81,6 +82,8 @@ export interface VideoCardProps {
     | 'tmdb'
     | 'source-search';
   currentEpisode?: number;
+  /** 继续观看时沿用记录中的 TVBox 线路。 */
+  line?: string;
   douban_id?: number;
   tmdb_id?: number;
   onDelete?: () => void;
@@ -130,6 +133,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       year,
       from,
       currentEpisode,
+      line,
       douban_id,
       tmdb_id,
       onDelete,
@@ -414,6 +418,9 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       [from, actualSource, actualId, onDelete]
     );
 
+    const savedLineParam = from === 'playrecord' && actualSource?.startsWith('tvbox:') && line
+      ? `&line=${encodeURIComponent(line)}`
+      : '';
     const handleClick = useCallback(() => {
       // 即将上映的电影：单击显示上映倒计时提示，不跳转
       if (isUpcoming) {
@@ -482,7 +489,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
             actualQuery
               ? `&stitle=${encodeURIComponent(actualQuery.trim())}`
               : ''
-          }${actualSearchType ? `&stype=${actualSearchType}` : ''}`
+          }${actualSearchType ? `&stype=${actualSearchType}` : ''}${savedLineParam}`
         );
 
         if (isCurrentlyOnPlayPage) {
@@ -509,6 +516,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       onBeforeNavigate,
       isDuanju,
       isInWatchRoom,
+      savedLineParam,
     ]);
 
     // 新标签页播放处理函数
@@ -558,7 +566,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
             actualQuery
               ? `&stitle=${encodeURIComponent(actualQuery.trim())}`
               : ''
-          }${actualSearchType ? `&stype=${actualSearchType}` : ''}`
+          }${actualSearchType ? `&stype=${actualSearchType}` : ''}${savedLineParam}`
         );
         window.open(url, '_blank');
       }
@@ -576,6 +584,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       onBeforeNavigate,
       isDuanju,
       isInWatchRoom,
+      savedLineParam,
     ]);
 
     // 检查搜索结果的收藏状态
@@ -1534,6 +1543,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
                         ? 'border-yellow-500'
                         : origin === 'live'
                         ? 'border-red-500'
+                        : isTVBoxBridgeSource(actualSource)
+                        ? 'border-cyan-500'
                         : 'border-white/60'
                     }`}
                     style={
@@ -1955,6 +1966,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
                                     actualSource === 'emby' ||
                                     actualSource?.startsWith('emby_')
                                   ? 'border-yellow-500'
+                                  : isTVBoxBridgeSource(actualSource)
+                                  ? 'border-cyan-500'
                                   : 'border-white/60'
                               }`}
                               style={

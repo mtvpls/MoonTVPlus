@@ -102,8 +102,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const previous = source.startsWith('tvbox:') && !record.line
+      ? await db.getPlayRecord(authInfo.username, source, id)
+      : null;
     const finalRecord = {
       ...record,
+      line: record.line || previous?.line,
       save_time: record.save_time ?? Date.now(),
     } as PlayRecord;
 

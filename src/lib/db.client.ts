@@ -948,6 +948,10 @@ export async function savePlayRecord(
   record: PlayRecord
 ): Promise<void> {
   const key = generateStorageKey(source, id);
+  if (source.startsWith('tvbox:') && !record.line) {
+    const previous = getCachedPlayRecordsSnapshotRaw()[key];
+    if (previous?.line) record = { ...record, line: previous.line };
+  }
 
   // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
@@ -1000,6 +1004,9 @@ export async function savePlayRecord(
 
   try {
     const allRecords = await getAllPlayRecordsRaw();
+    if (source.startsWith('tvbox:') && !record.line && allRecords[key]?.line) {
+      record = { ...record, line: allRecords[key].line };
+    }
     allRecords[key] = record;
     localStorage.setItem(PLAY_RECORDS_KEY, JSON.stringify(allRecords));
     window.dispatchEvent(
