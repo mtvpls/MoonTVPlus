@@ -234,6 +234,35 @@ export async function listTVBoxBridgeSites(
   return Array.isArray(data.sites) ? data.sites : [];
 }
 
+/** 只读当前订阅的直播源，不初始化代理或重新加载订阅。 */
+export async function listTVBoxBridgeLives(
+  endpoint: TVBoxBridgeEndpoint
+): Promise<{ configUrl: string; lives: unknown[] }> {
+  return bridgeJson(endpoint, '/api/lives', {
+    signal: AbortSignal.timeout(15000),
+  });
+}
+
+export async function fetchTVBoxBridgeLiveResource(
+  endpoint: TVBoxBridgeEndpoint,
+  path: '/api/live/proxy' | '/api/stream' | '/api/img',
+  params: URLSearchParams,
+  init?: RequestInit
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 240000);
+  try {
+    return await bridgeFetch(endpoint, `${path}?${params}`, {
+      ...init,
+      redirect: 'manual',
+      signal: init?.signal || controller.signal,
+    });
+  } finally {
+    // 240 秒限制用于载荷初始化和响应等待；收到媒体后允许持续直播。
+    clearTimeout(timer);
+  }
+}
+
 /** 预热 Spider 站点（首次约 1 分钟）。仅在管理面板手动触发。 */
 export async function loadTVBoxBridgeSite(
   endpoint: TVBoxBridgeEndpoint,
@@ -534,7 +563,9 @@ export async function* streamTVBoxBridgeSearch(
   } finally {
     try {
       reader.releaseLock();
-    } catch {}
+    } catch {
+      // 流关闭后释放锁失败可以忽略。
+    }
   }
 }
 

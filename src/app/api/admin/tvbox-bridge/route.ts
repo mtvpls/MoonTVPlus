@@ -21,6 +21,10 @@ import {
   isTVBoxBridgeLocalSite,
   TVBoxBridgeSiteInfo,
 } from '@/lib/tvbox-bridge.shared';
+import {
+  clearTVBoxLiveSources,
+  syncTVBoxLiveSources,
+} from '@/lib/tvbox-live.server';
 import { normalizeApiBaseUrl } from '@/lib/url';
 
 export const runtime = 'nodejs';
@@ -237,6 +241,7 @@ export async function POST(request: NextRequest) {
       if (result.kind === 'depot') {
         // 多仓：先选仓，等选定具体仓库后再写 ConfigUrl
         await patchBridgeConfig({ ConfigUrl: url, SelectedDepotUrl: '' });
+        await clearTVBoxLiveSources();
         return NextResponse.json({ success: true, result });
       }
 
@@ -248,8 +253,13 @@ export async function POST(request: NextRequest) {
         SelectedDepotUrl: '',
         ...catalog,
       });
-
-      return NextResponse.json({ success: true, result });
+      let liveSyncError: string | undefined;
+      try {
+        await syncTVBoxLiveSources(true);
+      } catch (error) {
+        liveSyncError = (error as Error).message;
+      }
+      return NextResponse.json({ success: true, result, liveSyncError });
     }
 
     if (action === 'depot-pick') {
@@ -273,7 +283,13 @@ export async function POST(request: NextRequest) {
         SelectedDepotUrl: url,
         ...catalog,
       });
-      return NextResponse.json({ success: true, result });
+      let liveSyncError: string | undefined;
+      try {
+        await syncTVBoxLiveSources(true);
+      } catch (error) {
+        liveSyncError = (error as Error).message;
+      }
+      return NextResponse.json({ success: true, result, liveSyncError });
     }
 
     // 预热单个站点（首次约 1 分钟）。仅供手动操作，不做自动调用。

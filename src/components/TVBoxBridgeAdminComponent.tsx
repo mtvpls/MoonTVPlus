@@ -296,7 +296,8 @@ export default function TVBoxBridgeAdminComponent({
         notify('这是多仓配置，请选择一个仓库', 'info');
       } else {
         setDepot(null);
-        notify(`配置已加载：${data.result?.siteCount ?? 0} 个站点`, 'success');
+        notify(`配置已加载：${data.result?.siteCount ?? 0} 个站点，${data.result?.liveCount ?? 0} 个直播源`, 'success');
+        if (data.liveSyncError) notify(`直播源读取失败：${data.liveSyncError}`, 'error');
       }
       await refreshConfig();
       await fetchBridge(true);
@@ -319,7 +320,8 @@ export default function TVBoxBridgeAdminComponent({
       if (!response.ok) throw new Error(data.error || '载入仓库失败');
       setDepot(null);
       setConfigUrl(url);
-      notify(`仓库已载入：${data.result?.siteCount ?? 0} 个站点`, 'success');
+      notify(`仓库已载入：${data.result?.siteCount ?? 0} 个站点，${data.result?.liveCount ?? 0} 个直播源`, 'success');
+      if (data.liveSyncError) notify(`直播源读取失败：${data.liveSyncError}`, 'error');
       await refreshConfig();
       await fetchBridge(true);
     } catch (error) {

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { deleteFavorite, isFavorited, saveFavorite } from '@/lib/db.client';
+import { TVBOX_LIVE_RELAY_PATH } from '@/lib/tvbox-live.shared';
 
 import TVNativeVideo from '@/components/tv/player/TVNativeVideo';
 import TVVirtualRemote from '@/components/tv/TVVirtualRemote';
@@ -37,6 +38,7 @@ function loadTVVolumeState() {
 
 function getLogoUrl(logo?: string, source?: string) {
   if (!logo) return '';
+  if (logo.startsWith(`${TVBOX_LIVE_RELAY_PATH}?`)) return logo;
   const sourceParam = source ? `&source=${encodeURIComponent(source)}` : '';
   return `/api/proxy/logo?url=${encodeURIComponent(logo)}${sourceParam}`;
 }
@@ -52,7 +54,7 @@ function getUrlSourceType(rawUrl: string): TVPlayerSourceType | 'unknown' {
 
 async function resolveLiveUrl(rawUrl: string, source?: LiveSource | null): Promise<{ url: string; type: TVPlayerSourceType }> {
   const proxyMode = source?.proxyMode || 'full';
-  const sourceType = getUrlSourceType(rawUrl);
+  const sourceType = rawUrl.startsWith(`${TVBOX_LIVE_RELAY_PATH}?`) ? 'unknown' : getUrlSourceType(rawUrl);
 
   if (sourceType === 'm3u8') {
     return {
@@ -79,7 +81,7 @@ async function resolveLiveUrl(rawUrl: string, source?: LiveSource | null): Promi
   if (precheck?.type === 'm3u8') {
     return {
       type: 'm3u8',
-      url: proxyMode === 'direct'
+      url: rawUrl.startsWith(`${TVBOX_LIVE_RELAY_PATH}?`) || proxyMode === 'direct'
         ? rawUrl
         : `/api/proxy/m3u8?url=${encodeURIComponent(rawUrl)}&moontv-source=${encodeURIComponent(source.key)}${proxyMode === 'm3u8-only' ? '&allowCORS=true' : ''}`,
     };

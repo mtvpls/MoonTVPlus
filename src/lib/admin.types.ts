@@ -145,6 +145,12 @@ export interface AdminConfig {
     channelNumber?: number;
     disabled?: boolean;
     proxyMode?: 'full' | 'm3u8-only' | 'direct'; // 代理模式：full=全量代理，m3u8-only=仅代理m3u8，direct=直连
+    tvbox?: {
+      configUrl: string;
+      index: number;
+      revision: string;
+      channels?: unknown[]; // TVBox 订阅内嵌的频道分组
+    };
   }[];
   WebLiveConfig?: {
     key: string;

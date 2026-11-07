@@ -484,6 +484,7 @@ interface LiveDataSource {
   disabled?: boolean;
   from: 'config' | 'custom';
   proxyMode?: 'full' | 'm3u8-only' | 'direct'; // 代理模式
+  tvbox?: NonNullable<AdminConfig['LiveConfig']>[number]['tvbox'];
 }
 
 // 自定义分类数据类型
@@ -18181,11 +18182,12 @@ const LiveSourceConfig = ({
         }
 
         // 刷新成功后重新获取配置
+        const data = await response.json();
         await refreshConfig();
         showAlert({
           type: 'success',
           title: '刷新成功',
-          message: '直播源已刷新',
+          message: data.message || '直播源已刷新',
           timer: 2000,
         });
       } catch (err) {
@@ -18293,6 +18295,7 @@ const LiveSourceConfig = ({
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100'>
           {liveSource.name}
+          {liveSource.tvbox && <span className='ml-2 text-xs text-blue-600 dark:text-blue-400'>TVBox</span>}
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100'>
           {liveSource.key}
@@ -18368,7 +18371,7 @@ const LiveSourceConfig = ({
           >
             {!liveSource.disabled ? '禁用' : '启用'}
           </button>
-          {liveSource.from !== 'config' && (
+          {!liveSource.tvbox && liveSource.from !== 'config' && (
             <>
               <button
                 onClick={() => setEditingLiveSource(liveSource)}
@@ -18442,11 +18445,18 @@ const LiveSourceConfig = ({
             </button>
           </div>
         </div>
-        <div className='flex items-center justify-between'>
+        <div className='flex flex-wrap items-center justify-between gap-2'>
           <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
             直播源列表
           </h4>
-          <div className='flex items-center space-x-2'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <button
+              onClick={() => withLoading('syncTVBoxLives', () => callLiveSourceApi({ action: 'sync-tvbox' })).catch(() => undefined)}
+              disabled={!config.TVBoxBridgeConfig?.Enabled || isLoading('syncTVBoxLives')}
+              className={`px-3 py-1.5 text-sm ${!config.TVBoxBridgeConfig?.Enabled || isLoading('syncTVBoxLives') ? buttonStyles.disabled : buttonStyles.primary}`}
+            >
+              {isLoading('syncTVBoxLives') ? '读取中...' : '读取 TVBox 直播源'}
+            </button>
             <button
               onClick={handleRefreshLiveSources}
               disabled={isRefreshing || isLoading('refreshLiveSources')}
@@ -18472,6 +18482,9 @@ const LiveSourceConfig = ({
             </button>
           </div>
         </div>
+        <p className='text-xs text-gray-500 dark:text-gray-400'>
+          启用 TVBox 桥接并加载订阅后，直播源会自动加入此列表。普通列表直接读取，本机代理源通过桥接获取；首次加载代理源可能需要几分钟。
+        </p>
       </div>
 
       {showAddForm && (

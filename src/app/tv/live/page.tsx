@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Favorite, getAllFavorites, getAllPlayRecords, PlayRecord } from '@/lib/db.client';
+import { TVBOX_LIVE_RELAY_PATH } from '@/lib/tvbox-live.shared';
 
 import TVLayout from '@/components/tv/TVLayout';
 
@@ -16,6 +17,7 @@ const TV_LIVE_LAST_CHANNEL_KEY = 'tv_live_last_channel';
 
 function getLogoUrl(logo?: string, source?: string) {
   if (!logo) return '';
+  if (logo.startsWith(`${TVBOX_LIVE_RELAY_PATH}?`)) return logo;
   if (logo.startsWith('/api/proxy/logo')) return logo;
   const sourceParam = source ? `&source=${encodeURIComponent(source)}` : '';
   return `/api/proxy/logo?url=${encodeURIComponent(logo)}${sourceParam}`;

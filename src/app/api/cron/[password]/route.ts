@@ -24,6 +24,7 @@ import { MangaChapter, MangaShelfItem } from '@/lib/manga.types';
 import { startOpenListRefresh } from '@/lib/openlist-refresh';
 import { getSuwayomiConfig, loginWithSimpleAuth, SuwayomiClient } from '@/lib/suwayomi.client';
 import { SearchResult } from '@/lib/types';
+import { syncTVBoxLiveSources } from '@/lib/tvbox-live.server';
 
 export const runtime = 'nodejs';
 const MAX_INLINE_MANGA_COVERS = 3;
@@ -254,9 +255,12 @@ async function refreshAllLiveChannels() {
     return;
   }
 
+  try { await syncTVBoxLiveSources(true); } catch (error) {
+    console.warn('同步 TVBox 直播源失败:', error);
+  }
   // 并发刷新所有启用的直播源
   const refreshPromises = (config.LiveConfig || [])
-    .filter(liveInfo => !liveInfo.disabled)
+    .filter(liveInfo => !liveInfo.disabled && (!liveInfo.tvbox || config.TVBoxBridgeConfig?.Enabled))
     .map(async (liveInfo) => {
       try {
         const nums = await refreshLiveChannels(liveInfo);
