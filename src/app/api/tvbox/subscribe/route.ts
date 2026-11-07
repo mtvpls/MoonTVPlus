@@ -1,11 +1,16 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable no-console */
 
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAvailableApiSites, getConfig } from '@/lib/config';
-import { db } from '@/lib/db';
 import { getCachedLiveChannels } from '@/lib/live';
 import { hasFeaturePermission } from '@/lib/permissions';
+import { isTVBoxBridgeSource } from '@/lib/tvbox-bridge.shared';
+import {
+  authorizeTVBoxSubscription,
+  getTVBoxSubscriptionBaseUrl,
+  getTVBoxSubscriptionOriginalConfig,
+} from '@/lib/tvbox-subscription.server';
 
 export const runtime = 'nodejs';
 
@@ -15,88 +20,84 @@ export const runtime = 'nodejs';
  * 支持全局token（管理员）和用户token（普通用户）
  */
 export async function GET(request: NextRequest) {
-  // 检查是否开启订阅功能
-  const enableSubscribe = process.env.ENABLE_TVBOX_SUBSCRIBE === 'true';
-  if (!enableSubscribe) {
-    return NextResponse.json(
-      { error: '订阅功能未开启' },
-      { status: 403 }
-    );
-  }
-
-  // 验证token
   const searchParams = request.nextUrl.searchParams;
-  const token = searchParams.get('token');
-  const globalToken = process.env.TVBOX_SUBSCRIBE_TOKEN;
+  const requestToken = searchParams.get('token');
   const adFilter = searchParams.get('adFilter') === 'true'; // 获取去广告参数
   const yellowFilter = searchParams.get('yellowFilter') === 'true';
-
-  if (!token) {
-    return NextResponse.json(
-      { error: '缺少订阅token' },
-      { status: 401 }
-    );
+  const auth = await authorizeTVBoxSubscription(requestToken);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
-
-  // 判断是全局token还是用户token
-  let username: string | undefined;
-  let isGlobalToken = false;
-
-  if (globalToken && token === globalToken) {
-    // 全局token（管理员订阅）
-    isGlobalToken = true;
-    console.log('使用全局token访问TVBox订阅');
-  } else {
-    // 用户token，查询用户名
-    username = await db.getUsernameByTvboxToken(token) || undefined;
-    if (!username) {
-      return NextResponse.json(
-        { error: '无效的订阅token' },
-        { status: 401 }
-      );
-    }
-
-    // 检查用户是否被封禁
-    const userInfo = await db.getUserInfoV2(username);
-    if (userInfo?.banned) {
-      return NextResponse.json(
-        { error: '用户已被封禁' },
-        { status: 403 }
-      );
-    }
-
-    console.log(`用户 ${username} 访问TVBox订阅`);
-  }
+  const { token, username, isGlobalToken } = auth;
 
   try {
     // 获取配置
     const config = await getConfig();
+    const baseUrl = getTVBoxSubscriptionBaseUrl(request);
+    const responseHeaders = {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    };
+    const bridgeOnly = searchParams.get('source') === 'bridge';
+
+    // 子仓不再携带多仓开关，避免 TVBox 反复读到多仓清单。
+    if (searchParams.get('includeTVBox') === 'true' && !bridgeOnly) {
+      const originalParams = new URLSearchParams(searchParams);
+      originalParams.delete('includeTVBox');
+      originalParams.delete('source');
+      const bridgeParams = new URLSearchParams(originalParams);
+      bridgeParams.set('source', 'bridge');
+      return NextResponse.json(
+        {
+          urls: [
+            {
+              name: config.SiteConfig?.SiteName || 'MoonTVPlus',
+              url: `${baseUrl}/api/tvbox/subscribe?${originalParams}`,
+            },
+            {
+              name: 'TVBox 桥接',
+              url: `${baseUrl}/api/tvbox/subscribe?${bridgeParams}`,
+            },
+          ],
+        },
+        { headers: responseHeaders }
+      );
+    }
+
+    if (bridgeOnly) {
+      const originalConfig = await getTVBoxSubscriptionOriginalConfig(
+        config,
+        username
+      );
+      return NextResponse.json(originalConfig, { headers: responseHeaders });
+    }
 
     // 获取视频源
     // 全局token返回所有源，用户token返回该用户有权限的源
-    const apiSites = await getAvailableApiSites(username);
+    const apiSites = (await getAvailableApiSites(username)).filter(
+      (site) => !isTVBoxBridgeSource(site.key)
+    );
 
     // 获取直播源
-    const canAccessLive = isGlobalToken || !username
-      ? true
-      : await hasFeaturePermission(username, 'live');
+    const canAccessLive =
+      isGlobalToken || !username
+        ? true
+        : await hasFeaturePermission(username, 'live');
     const liveConfig = canAccessLive
-      ? config.LiveConfig?.filter(live => !live.disabled) || []
+      ? config.LiveConfig?.filter(
+          (live) =>
+            !live.disabled && !live.tvbox && !live.key.startsWith('tvbox-live:')
+        ) || []
       : [];
 
-    // 获取当前请求的 origin，用于构建代理链接
-    // 优先级：SITE_BASE 环境变量 > origin 参数 > 从请求头构建
-    let baseUrl = process.env.SITE_BASE || searchParams.get('origin');
-
-    if (!baseUrl) {
-      // 从请求头中获取 Host 和协议
-      const host = request.headers.get('host') || request.headers.get('x-forwarded-host');
-      const proto = request.headers.get('x-forwarded-proto') ||
-                    (host?.includes('localhost') || host?.includes('127.0.0.1') ? 'http' : 'https');
-      baseUrl = `${proto}://${host}`;
-    }
-
-    console.log('TVBOX 订阅 baseUrl:', baseUrl, 'adFilter:', adFilter, 'yellowFilter:', yellowFilter);
+    console.log(
+      'TVBOX 订阅 baseUrl:',
+      baseUrl,
+      'adFilter:',
+      adFilter,
+      'yellowFilter:',
+      yellowFilter
+    );
 
     // 检查是否配置了 OpenList
     const hasOpenList = !!(
@@ -111,23 +112,31 @@ export async function GET(request: NextRequest) {
     const embySources = await embyManager.getEnabledSources();
 
     // 构建 OpenList 站点配置
-    const openlistSites = hasOpenList ? [{
-      key: 'openlist',
-      name: '私人影库',
-      type: 1,
-      api: `${baseUrl}/api/openlist/cms-proxy/${encodeURIComponent(token)}`,
-      searchable: 1,
-      quickSearch: 1,
-      filterable: 1,
-      ext: '',
-    }] : [];
+    const openlistSites = hasOpenList
+      ? [
+          {
+            key: 'openlist',
+            name: '私人影库',
+            type: 1,
+            api: `${baseUrl}/api/openlist/cms-proxy/${encodeURIComponent(
+              token
+            )}`,
+            searchable: 1,
+            quickSearch: 1,
+            filterable: 1,
+            ext: '',
+          },
+        ]
+      : [];
 
     // 构建 Emby 站点配置（为每个启用的Emby源生成独立站点）
-    const embySites = embySources.map(source => ({
+    const embySites = embySources.map((source) => ({
       key: `emby_${source.key}`,
       name: source.name || 'Emby媒体库',
       type: 1,
-      api: `${baseUrl}/api/emby/cms-proxy/${encodeURIComponent(token)}?embyKey=${source.key}`,
+      api: `${baseUrl}/api/emby/cms-proxy/${encodeURIComponent(
+        token
+      )}?embyKey=${source.key}`,
       searchable: 1,
       quickSearch: 1,
       filterable: 1,
@@ -145,19 +154,22 @@ export async function GET(request: NextRequest) {
       sites: [
         ...openlistSites,
         ...embySites,
-        ...apiSites.map(site => ({
+        ...apiSites.map((site) => ({
           key: site.key,
           name: site.name,
           type: 1,
           // 开启去广告或黄色过滤时使用 CMS 代理
-          api: (adFilter || yellowFilter)
-            ? `${baseUrl}/api/cms-proxy?api=${encodeURIComponent(site.api)}${adFilter ? '&adFilter=true' : ''}${yellowFilter ? '&yellowFilter=true' : ''}`
-            : site.api,
+          api:
+            adFilter || yellowFilter
+              ? `${baseUrl}/api/cms-proxy?api=${encodeURIComponent(site.api)}${
+                  adFilter ? '&adFilter=true' : ''
+                }${yellowFilter ? '&yellowFilter=true' : ''}`
+              : site.api,
           searchable: 1,
           quickSearch: 1,
           filterable: 1,
           ext: site.detail || '',
-        }))
+        })),
       ],
 
       // 直播源
@@ -169,7 +181,7 @@ export async function GET(request: NextRequest) {
               name: live.name,
               type: 0,
               url: live.url,
-              epg: live.epg || (liveChannels?.epgUrl || ''),
+              epg: live.epg || liveChannels?.epgUrl || '',
               logo: '',
             };
           } catch (error) {
@@ -197,21 +209,20 @@ export async function GET(request: NextRequest) {
 
     // 获取屏蔽源列表并过滤
     const blockedSources = process.env.TVBOX_BLOCKED_SOURCES
-      ? process.env.TVBOX_BLOCKED_SOURCES.split(',').map(s => s.trim()).filter(Boolean)
+      ? process.env.TVBOX_BLOCKED_SOURCES.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [];
 
     if (blockedSources.length > 0) {
       tvboxSubscription.sites = tvboxSubscription.sites.filter(
-        site => !blockedSources.includes(site.key)
+        (site) => !blockedSources.includes(site.key)
       );
       console.log('TVBOX 订阅已屏蔽源:', blockedSources);
     }
 
     return NextResponse.json(tvboxSubscription, {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-      },
+      headers: responseHeaders,
     });
   } catch (error) {
     console.error('生成TVBOX订阅失败:', error);
