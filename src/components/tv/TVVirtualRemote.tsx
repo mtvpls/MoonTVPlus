@@ -130,12 +130,16 @@ function getTopNavigationElements() {
 
 function getContentFocusableElements() {
   const scopedElements = getScopedFocusableElements();
-  if (scopedElements) return scopedElements;
+  if (scopedElements)
+    return scopedElements.filter(
+      (element) => element.dataset.tvFocusExplicit !== 'true'
+    );
 
   return Array.from(document.querySelectorAll<HTMLElement>(focusableSelector))
     .filter((element) => !element.closest('header'))
     .filter((element) => !element.closest('[data-tv-remote]'))
     .filter((element) => !element.closest('[data-tv-no-focus="true"]'))
+    .filter((element) => element.dataset.tvFocusExplicit !== 'true')
     .filter(isVisible);
 }
 
@@ -207,6 +211,10 @@ function moveHorizontalRowFocus(
     row.querySelectorAll<HTMLElement>(focusableSelector)
   )
     .filter((element) => !element.closest('[data-tv-no-focus="true"]'))
+    .filter(
+      (element) =>
+        element === active || element.dataset.tvFocusExplicit !== 'true'
+    )
     .filter(isVisible);
   const currentIndex = rowElements.indexOf(active);
   if (currentIndex === -1) return false;
@@ -270,8 +278,21 @@ function moveSpatialFocus(
       : null;
 
   if (!active || !elements.includes(active)) {
-    focusElement(elements[0]);
+    const first = elements.find(
+      (element) => element.dataset.tvFocusExplicit !== 'true'
+    );
+    if (first) focusElement(first);
     return;
+  }
+
+  // 页面指定的相邻按钮优先于按距离选择，避免跳过偏离当前列的操作。
+  const targetSelector = active.getAttribute(`data-tv-focus-${direction}`);
+  if (targetSelector) {
+    const target = document.querySelector<HTMLElement>(targetSelector);
+    if (target && elements.includes(target)) {
+      focusElement(target);
+      return;
+    }
   }
 
   if (
@@ -314,7 +335,8 @@ function moveSpatialFocus(
   const candidates: Array<{ element: HTMLElement; score: number }> = [];
 
   for (const element of elements) {
-    if (element === active) continue;
+    if (element === active || element.dataset.tvFocusExplicit === 'true')
+      continue;
     const rect = element.getBoundingClientRect();
     const tx = rect.left + rect.width / 2;
     const ty = rect.top + rect.height / 2;
@@ -455,6 +477,9 @@ export default function TVVirtualRemote() {
       }
 
       if (event.defaultPrevented) return;
+
+      // 观看记录菜单自行处理方向、确认和返回，避免焦点跳到菜单外。
+      if (document.querySelector('[data-tv-record-menu]')) return;
 
       if (
         event.key === 'ArrowUp' ||

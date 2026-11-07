@@ -34,6 +34,7 @@ import {
   useState,
 } from 'react';
 
+import { isAnimeCategoryText } from '@/lib/anime-keyword-expr';
 import {
   convertDanmakuFormat,
   getDanmakuById,
@@ -43,8 +44,8 @@ import {
   saveDanmakuDisplayState,
   searchAnime,
 } from '@/lib/danmaku/api';
-import { isAnimeCategoryText } from '@/lib/anime-keyword-expr';
 import {
+  type PlayRecord,
   deleteFavorite,
   generateStorageKey,
   getAllPlayRecords,
@@ -54,13 +55,26 @@ import {
   savePlayRecord,
 } from '@/lib/db.client';
 import { loadTVPlayerUpDownAction } from '@/lib/tv-preferences';
-import { SearchResult } from '@/lib/types';
+import {
+  mergeTVBoxBridgePlaybackSources,
+  restoreTVBoxBridgePlaybackLine,
+} from '@/lib/tvbox-bridge.playback';
+import {
+  getActiveTVBoxBridgeLine,
+  getTVBoxBridgeLines,
+  isTVBoxBridgeSource,
+  resolveEpisodeIndexForLine,
+} from '@/lib/tvbox-bridge.shared';
+import type { SearchResult } from '@/lib/types';
 
 import TVNativeVideo from '@/components/tv/player/TVNativeVideo';
 import {
+  type TVEpisodePlayback,
   fetchTVDetail,
+  fetchTVSourceDetail,
   formatTVTime,
-  resolveTVEpisodeUrl,
+  getTVErrorMessage,
+  resolveTVEpisodePlayback,
 } from '@/components/tv/player/utils';
 import TVVirtualRemote from '@/components/tv/TVVirtualRemote';
 
@@ -74,7 +88,12 @@ const TV_MUTED_KEY = 'tv_player_muted';
 const REMOTE_KEY_DEDUPE_MS = 350;
 const TV_EPISODE_GRID_COLUMNS = 4;
 
-const TV_EPISODE_FOCUS_GROUPS = ['sources', 'pages', 'episodes'] as const;
+const TV_EPISODE_FOCUS_GROUPS = [
+  'sources',
+  'lines',
+  'pages',
+  'episodes',
+] as const;
 type TVEpisodeFocusGroup = (typeof TV_EPISODE_FOCUS_GROUPS)[number];
 type TVEpisodeFocusDirection = 'up' | 'down' | 'left' | 'right';
 
@@ -227,7 +246,7 @@ function getEpisodePanelGroupElements(
 ) {
   return Array.from(
     panel.querySelectorAll<HTMLElement>(
-      `[data-tv-episode-focus-group="${group}"]`
+      `[data-tv-episode-focus-group="${group}"]:not([disabled])`
     )
   );
 }
@@ -362,54 +381,29 @@ function moveFocusWithinEpisodePanel(
         : index + TV_EPISODE_GRID_COLUMNS;
 
     if (nextIndex >= 0 && nextIndex < elements.length) {
-      target = elements[nextIndex] || activeElement;
-    } else if (direction === 'up') {
-      target =
-        getClosestByHorizontalCenter(
-          getEpisodePanelGroupElements(panel, 'pages'),
-          activeElement
-        ) ||
-        getClosestByHorizontalCenter(
-          getEpisodePanelGroupElements(panel, 'sources'),
-          activeElement
-        ) ||
-        activeElement;
+      focusEpisodePanelElement(elements[nextIndex]);
+      return;
     }
-
-    focusEpisodePanelElement(target);
-    return;
   }
 
-  if (group === 'pages') {
-    target =
-      direction === 'up'
-        ? getClosestByHorizontalCenter(
-            getEpisodePanelGroupElements(panel, 'sources'),
-            activeElement
-          ) || activeElement
-        : getSelectedEpisodePanelButton(panel, episodeIndex) ||
-          getClosestByHorizontalCenter(
-            getEpisodePanelGroupElements(panel, 'episodes'),
-            activeElement
-          ) ||
-          activeElement;
-    focusEpisodePanelElement(target);
-    return;
+  const delta = direction === 'down' ? 1 : -1;
+  for (
+    let groupIndex = TV_EPISODE_FOCUS_GROUPS.indexOf(group) + delta;
+    groupIndex >= 0 && groupIndex < TV_EPISODE_FOCUS_GROUPS.length;
+    groupIndex += delta
+  ) {
+    const nextGroup = TV_EPISODE_FOCUS_GROUPS[groupIndex];
+    const nextElements = getEpisodePanelGroupElements(panel, nextGroup);
+    const nextTarget =
+      (nextGroup === 'episodes'
+        ? getSelectedEpisodePanelButton(panel, episodeIndex)
+        : null) || getClosestByHorizontalCenter(nextElements, activeElement);
+    if (nextTarget) {
+      target = nextTarget;
+      break;
+    }
   }
 
-  target =
-    direction === 'down'
-      ? getClosestByHorizontalCenter(
-          getEpisodePanelGroupElements(panel, 'pages'),
-          activeElement
-        ) ||
-        getSelectedEpisodePanelButton(panel, episodeIndex) ||
-        getClosestByHorizontalCenter(
-          getEpisodePanelGroupElements(panel, 'episodes'),
-          activeElement
-        ) ||
-        activeElement
-      : activeElement;
   focusEpisodePanelElement(target);
 }
 
@@ -419,7 +413,8 @@ function TVPlayClient() {
   const [detail, setDetail] = useState<SearchResult | null>(null);
   const [sources, setSources] = useState<SearchResult[]>([]);
   const [episodeIndex, setEpisodeIndex] = useState(0);
-  const [videoUrl, setVideoUrl] = useState('');
+  const [playback, setPlayback] = useState<TVEpisodePlayback | null>(null);
+  const videoUrl = playback?.url || '';
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState('');
@@ -500,12 +495,15 @@ function TVPlayClient() {
   const lastDanmakuTimeRef = useRef(0);
   const skippedIntroRef = useRef('');
   const skippedOutroRef = useRef('');
+  const manualPlaybackParamsRef = useRef<string | null>(null);
+  const progressSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const lastSavedRef = useRef<{
     source: string;
     id: string;
     index: number;
     playTime: number;
     totalTime: number;
+    line?: string;
   } | null>(null);
 
   const source = searchParams.get('source');
@@ -513,74 +511,124 @@ function TVPlayClient() {
   const title = searchParams.get('title');
   const fileName = searchParams.get('fileName');
   const initialIndex = Number(searchParams.get('index') || '0');
+  const explicitIndex = searchParams.has('index');
+  const requestedLine = searchParams.get('line');
+  const year = searchParams.get('year');
+  const stype = searchParams.get('stype');
+  const searchQuery = searchParams.get('q');
+  const playbackParams = searchParams.toString();
+  const bridgeLines = getTVBoxBridgeLines(detail || {});
+  const activeBridgeLine = getActiveTVBoxBridgeLine(detail || {});
 
   useEffect(() => {
+    // 手动切源/线路已经更新详情，URL 同步后无需再加载默认线路。
+    if (manualPlaybackParamsRef.current === playbackParams) {
+      manualPlaybackParamsRef.current = null;
+      return;
+    }
+    manualPlaybackParamsRef.current = null;
     let alive = true;
     setLoading(true);
     setError('');
-    fetchTVDetail({ source, id, title, fileName })
-      .then((data) => {
+    setDetail(null);
+    setPlayback(null);
+    fetchTVDetail({
+      source,
+      id,
+      title,
+      fileName,
+      line: requestedLine,
+      year,
+      stype,
+      searchQuery,
+    })
+      .then(async (data) => {
         if (!alive) return;
-        setDetail(data.detail);
-        setSources(data.sources);
-        const maxIndex = Math.max(0, (data.detail.episodes?.length || 1) - 1);
-        const explicitIndex = searchParams.has('index');
-        const safeIndex = Math.max(
-          0,
-          Math.min(
-            initialIndex || data.detail.initialEpisodeIndex || 0,
-            maxIndex
-          )
-        );
-        if (!explicitIndex && data.detail.source && data.detail.id) {
-          getAllPlayRecords()
-            .then((records) => {
-              if (!alive) return;
-              const record =
-                records[generateStorageKey(data.detail.source, data.detail.id)];
-              if (record?.index) {
-                const rememberedIndex = Math.max(
-                  0,
-                  Math.min(maxIndex, record.index - 1)
-                );
-                setEpisodeIndex(rememberedIndex);
-                setStartTime(record.play_time > 1 ? record.play_time : 0);
-              }
-            })
-            .catch(() => undefined);
-        } else {
-          setStartTime(0);
+        let record: PlayRecord | undefined;
+        try {
+          const records = await getAllPlayRecords();
+          record =
+            records[generateStorageKey(data.detail.source, data.detail.id)];
+        } catch {
+          // 播放记录不可用时使用请求指定的线路与集数。
         }
+        const selectedDetail = await restoreTVBoxBridgePlaybackLine(
+          data.detail,
+          requestedLine,
+          async () => record?.line
+        );
+        if (!alive) return;
+        const desiredIndex = explicitIndex
+          ? initialIndex
+          : record?.index
+          ? record.index - 1
+          : selectedDetail.initialEpisodeIndex || 0;
+        const safeIndex = resolveEpisodeIndexForLine(
+          selectedDetail.episodes.length,
+          Number.isFinite(desiredIndex) ? desiredIndex : 0
+        );
+        setDetail(selectedDetail);
+        setSources(
+          mergeTVBoxBridgePlaybackSources(data.sources, selectedDetail)
+        );
         setEpisodeIndex(safeIndex);
+        setEpisodePage(Math.floor(safeIndex / 30));
+        setStartTime(
+          !explicitIndex &&
+            record?.index === safeIndex + 1 &&
+            record.play_time > 1
+            ? record.play_time
+            : 0
+        );
       })
       .catch(
         (err) =>
           alive &&
-          setError(err instanceof Error ? err.message : '加载播放信息失败')
+          setError(getTVErrorMessage(err, '加载播放信息失败，请稍后重试'))
       )
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [source, id, title, fileName, initialIndex]);
+  }, [
+    source,
+    id,
+    title,
+    fileName,
+    initialIndex,
+    explicitIndex,
+    requestedLine,
+    year,
+    stype,
+    searchQuery,
+    playbackParams,
+  ]);
 
   useEffect(() => {
     let alive = true;
     async function resolve() {
-      if (!detail?.episodes?.[episodeIndex]) return;
-      setResolving(true);
-      setVideoUrl('');
+      setPlayback(null);
+      if (loading || !detail) return;
+      setError('');
       setPlaybackError(false);
+      timeRef.current = { current: startTime, duration: 0 };
+      setTime(timeRef.current);
+      if (!detail.episodes?.[episodeIndex]) {
+        setResolving(false);
+        setError('该线路没有可播放的剧集');
+        return;
+      }
+      setResolving(true);
       try {
-        const url = await resolveTVEpisodeUrl(
+        const result = await resolveTVEpisodePlayback(
           detail.episodes[episodeIndex],
           detail.source,
           detail.proxyMode
         );
-        if (alive) setVideoUrl(url);
+        if (alive) setPlayback(result);
       } catch (err) {
         if (alive)
-          setError(err instanceof Error ? err.message : '获取播放地址失败');
+          setError(getTVErrorMessage(err, '获取播放地址失败，请尝试其他线路'));
       } finally {
         if (alive) setResolving(false);
       }
@@ -589,7 +637,7 @@ function TVPlayClient() {
     return () => {
       alive = false;
     };
-  }, [detail, episodeIndex, retryNonce]);
+  }, [detail, episodeIndex, retryNonce, loading, startTime]);
 
   const episodeTitle = useMemo(
     () =>
@@ -763,8 +811,8 @@ function TVPlayClient() {
         '[data-tv-player-root] video'
       );
       if (!video) return;
-      const episodeKey = `${detail?.source || ''}-${
-        detail?.id || ''
+      const episodeKey = `${detail?.source || ''}-${detail?.id || ''}-${
+        detail?.activeLine || ''
       }-${episodeIndex}`;
       const intro = Math.max(0, skipConfig.intro_time || 0);
       if (
@@ -794,13 +842,18 @@ function TVPlayClient() {
   );
 
   useEffect(() => {
-    if (!detail) return;
-    const saveProgress = () => {
-      const playTime = Math.floor(timeRef.current.current || 0);
-      const totalTime = Math.floor(timeRef.current.duration || 0);
+    if (loading || !detail) return;
+    const line = getActiveTVBoxBridgeLine(detail)?.name;
+    const saveProgress = (saveLine = false) => {
+      const playTime = Number.isFinite(timeRef.current.current)
+        ? Math.floor(timeRef.current.current || 0)
+        : 0;
+      const totalTime = Number.isFinite(timeRef.current.duration)
+        ? Math.floor(timeRef.current.duration || 0)
+        : 0;
 
       // 参考 /play：无有效进度时不保存；同一秒/同一集重复触发不保存，避免网络里刷 /api/playrecords。
-      if (playTime <= 0 && totalTime <= 0) return;
+      if (!saveLine && playTime <= 0 && totalTime <= 0) return;
 
       const last = lastSavedRef.current;
       if (
@@ -808,6 +861,7 @@ function TVPlayClient() {
         last.source === detail.source &&
         last.id === detail.id &&
         last.index === episodeIndex + 1 &&
+        last.line === line &&
         last.playTime === playTime &&
         last.totalTime === totalTime
       ) {
@@ -820,9 +874,10 @@ function TVPlayClient() {
         index: episodeIndex + 1,
         playTime,
         totalTime,
+        line,
       };
 
-      savePlayRecord(detail.source, detail.id, {
+      const record: PlayRecord = {
         title: detail.title,
         source_name: detail.source_name,
         year: detail.year || '',
@@ -834,9 +889,15 @@ function TVPlayClient() {
         save_time: Date.now(),
         search_title: title || detail.title,
         is_anime: isAnimeCategoryText(detail.type_name, detail.class),
-      }).catch(() => undefined);
+        line,
+      };
+      // 旧线路的清理保存先完成，避免覆盖刚选中的线路记录。
+      progressSaveQueueRef.current = progressSaveQueueRef.current
+        .then(() => savePlayRecord(detail.source, detail.id, record))
+        .catch(() => undefined);
     };
 
+    if (line) saveProgress(true);
     const timer = window.setInterval(() => {
       saveProgress();
     }, 20000);
@@ -844,7 +905,7 @@ function TVPlayClient() {
       window.clearInterval(timer);
       saveProgress();
     };
-  }, [detail, episodeIndex, title]);
+  }, [detail, episodeIndex, title, startTime, loading]);
 
   const showSeekOverlay = (
     current: number,
@@ -974,6 +1035,63 @@ function TVPlayClient() {
     };
   }, [revealPanel, showDanmakuSettings, showEpisodes, showPanel]);
 
+  const updatePlaybackUrl = (target: SearchResult, index: number) => {
+    const nextUrl = new URL(window.location.href);
+    const previousParams = nextUrl.searchParams.toString();
+    if (
+      nextUrl.searchParams.get('source') !== target.source ||
+      nextUrl.searchParams.get('id') !== target.id
+    ) {
+      nextUrl.searchParams.delete('fileName');
+    }
+    nextUrl.searchParams.set('source', target.source);
+    nextUrl.searchParams.set('id', target.id);
+    nextUrl.searchParams.set('title', title || target.title);
+    const line = getActiveTVBoxBridgeLine(target)?.name;
+    if (line) nextUrl.searchParams.set('line', line);
+    else nextUrl.searchParams.delete('line');
+    if (nextUrl.searchParams.has('index'))
+      nextUrl.searchParams.set('index', String(index));
+    const nextParams = nextUrl.searchParams.toString();
+    if (nextParams === previousParams) return;
+    manualPlaybackParamsRef.current = nextParams;
+    // Next.js 会保留内部 history 状态，并把外部 URL 更新同步到 useSearchParams。
+    window.history.replaceState(null, '', nextUrl.toString());
+  };
+
+  const switchLine = (name: string) => {
+    if (!detail || activeBridgeLine?.name === name) return;
+    const line = bridgeLines.find((item) => item.name === name);
+    if (!line?.episodes.length) return;
+    const nextDetail: SearchResult = {
+      ...detail,
+      activeLine: line.name,
+      episodes: line.episodes,
+      episodes_titles: line.episodes_titles,
+      vod_total: line.episodes.length,
+    };
+    const targetIndex = resolveEpisodeIndexForLine(
+      line.episodes.length,
+      episodeIndex
+    );
+    const video = document.querySelector<HTMLVideoElement>(
+      '[data-tv-player-root] video'
+    );
+    const currentTime = video?.currentTime || timeRef.current.current || 0;
+    setStartTime(targetIndex === episodeIndex ? currentTime : 0);
+    setEpisodeIndex(targetIndex);
+    setEpisodePage(Math.floor(targetIndex / 30));
+    setDetail(nextDetail);
+    setSources((current) =>
+      mergeTVBoxBridgePlaybackSources(current, nextDetail)
+    );
+    setPlayback(null);
+    setError('');
+    setPlaybackError(false);
+    revealPanel();
+    updatePlaybackUrl(nextDetail, targetIndex);
+  };
+
   const switchSource = async (item: SearchResult) => {
     if (!detail) return;
     if (detail.source === item.source && detail.id === item.id) return;
@@ -981,35 +1099,48 @@ function TVPlayClient() {
     setShowEpisodes(false);
     setLoading(true);
     setIsBuffering(false);
+    setError('');
     try {
       let next = item;
-      if (!item.episodes?.length) {
-        const data = await fetchTVDetail({
+      if (
+        !item.episodes?.length ||
+        (isTVBoxBridgeSource(item.source) &&
+          getTVBoxBridgeLines(item).length === 0)
+      ) {
+        next = await fetchTVSourceDetail({
           source: item.source,
           id: item.id,
           title: item.title,
         });
-        next = data.detail;
       }
-      const maxIndex = Math.max(0, (next.episodes?.length || 1) - 1);
-      let targetIndex = Math.max(0, Math.min(episodeIndex, maxIndex));
-      let targetStartTime = 0;
+      let record: PlayRecord | undefined;
       try {
         const records = await getAllPlayRecords();
-        const record = records[generateStorageKey(next.source, next.id)];
-        if (record?.index) {
-          targetIndex = Math.max(0, Math.min(maxIndex, record.index - 1));
-          targetStartTime = record.play_time > 1 ? record.play_time : 0;
-        }
+        record = records[generateStorageKey(next.source, next.id)];
       } catch {
         // 读取播放记录失败时保留当前集数，避免切源失败。
       }
+      next = await restoreTVBoxBridgePlaybackLine(
+        next,
+        null,
+        async () => record?.line
+      );
+      const targetIndex = resolveEpisodeIndexForLine(
+        next.episodes.length,
+        record?.index ? record.index - 1 : episodeIndex
+      );
+      const targetStartTime =
+        record?.index === targetIndex + 1 && record.play_time > 1
+          ? record.play_time
+          : 0;
       setDetail(next);
+      setSources((current) => mergeTVBoxBridgePlaybackSources(current, next));
       setEpisodeIndex(targetIndex);
       setStartTime(targetStartTime);
       setEpisodePage(Math.floor(targetIndex / 30));
+      updatePlaybackUrl(next, targetIndex);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '切换播放源失败');
+      setError(getTVErrorMessage(err, '切换播放源失败，请尝试其他源'));
     } finally {
       setLoading(false);
     }
@@ -1269,7 +1400,7 @@ function TVPlayClient() {
     );
   }
 
-  if (error || !detail) {
+  if (!detail) {
     return (
       <main className='fixed inset-0 flex items-center justify-center bg-black p-10 text-center text-white'>
         <section
@@ -1329,6 +1460,8 @@ function TVPlayClient() {
         <TVNativeVideo
           key={`${videoUrl}-${retryNonce}`}
           url={videoUrl}
+          sourceType={playback?.sourceType}
+          live={playback?.live}
           poster={detail.poster}
           title={detail.title}
           onTime={onTime}
@@ -1386,7 +1519,7 @@ function TVPlayClient() {
         </div>
       )}
 
-      {playbackError && (
+      {(playbackError || error) && !resolving && (
         <div
           role='alert'
           className='absolute inset-0 z-30 flex items-center justify-center bg-black/72 p-8 text-white backdrop-blur-sm'
@@ -1395,12 +1528,15 @@ function TVPlayClient() {
             <AlertTriangle className='mx-auto mb-5 h-14 w-14 text-amber-300' />
             <h2 className='text-4xl font-black'>当前视频加载失败</h2>
             <p className='mt-3 text-2xl text-slate-300'>
-              可以重试当前地址，或打开选集与线路面板切换播放源。
+              {error ||
+                '可以重试当前地址，或打开选集与线路面板切换播放源或线路。'}
             </p>
             <div className='mt-8 flex justify-center gap-4'>
               <button
                 onClick={() => {
                   setPlaybackError(false);
+                  setError('');
+                  setStartTime(timeRef.current.current);
                   setRetryNonce((v) => v + 1);
                 }}
                 className='tv-focusable flex cursor-pointer items-center gap-3 rounded-2xl bg-rose-600 px-7 py-4 text-2xl font-black outline-none focus:ring-4 focus:ring-rose-300'
@@ -1411,13 +1547,14 @@ function TVPlayClient() {
               <button
                 onClick={() => {
                   setPlaybackError(false);
+                  setError('');
                   setShowPanel(true);
                   setShowEpisodes(true);
                 }}
                 className='tv-focusable flex cursor-pointer items-center gap-3 rounded-2xl bg-white/10 px-7 py-4 text-2xl font-black outline-none focus:ring-4 focus:ring-white/40'
               >
                 <ListVideo className='h-7 w-7' />
-                换源/选集
+                换源/线路/选集
               </button>
             </div>
           </section>
@@ -1649,6 +1786,32 @@ function TVPlayClient() {
               )}
             </div>
           </div>
+          {bridgeLines.length > 0 && (
+            <div className='mb-6'>
+              <div className='mb-2 text-xl font-black text-slate-300'>
+                播放线路
+              </div>
+              <div className='flex gap-3 overflow-x-auto px-2 py-3 [scrollbar-width:none]'>
+                {bridgeLines.map((line, index) => (
+                  <button
+                    key={`${line.name}-${index}`}
+                    onClick={() => switchLine(line.name)}
+                    disabled={line.episodes.length === 0}
+                    aria-pressed={activeBridgeLine?.name === line.name}
+                    data-tv-player-control
+                    data-tv-episode-focus-group='lines'
+                    className={`tv-focusable shrink-0 cursor-pointer rounded-2xl px-5 py-3 text-xl font-bold outline-none focus:ring-4 focus:ring-rose-300 disabled:cursor-default disabled:opacity-40 ${
+                      activeBridgeLine?.name === line.name
+                        ? 'bg-rose-600'
+                        : 'bg-white/10'
+                    }`}
+                  >
+                    {line.name} · {line.episodes.length} 集
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {episodePages > 1 && (
             <div className='mb-5 flex gap-3 overflow-x-auto px-2 py-2 [scrollbar-width:none]'>
               {Array.from({ length: episodePages }, (_, page) => (

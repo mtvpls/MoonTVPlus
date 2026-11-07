@@ -32,9 +32,11 @@ const navItems = [
 export default function TVLayout({
   children,
   showNav = true,
+  fullBleed = false,
 }: {
   children: ReactNode;
   showNav?: boolean;
+  fullBleed?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -61,7 +63,8 @@ export default function TVLayout({
               const active =
                 item.href === '/tv'
                   ? pathname === '/tv'
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  : pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
               return (
                 <Link
@@ -82,7 +85,13 @@ export default function TVLayout({
           </nav>
         </header>
       )}
-      <div className={`relative z-10 px-8 pb-16 ${showNav ? 'pt-32' : 'pt-16'}`}>{children}</div>
+      <div
+        className={`relative z-10 ${
+          fullBleed ? '' : `px-8 pb-16 ${showNav ? 'pt-32' : 'pt-16'}`
+        }`}
+      >
+        {children}
+      </div>
       <TVVirtualRemote />
     </main>
   );
