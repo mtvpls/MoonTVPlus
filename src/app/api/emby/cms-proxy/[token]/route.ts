@@ -9,7 +9,6 @@ import {
   getTVBoxCMSBaseUrl,
   getTVBoxCMSImageUrl,
   getTVBoxCMSPage,
-  TVBOX_CMS_LIBRARY_CLASSES,
   TVBOX_CMS_PAGE_SIZE,
 } from '@/lib/tvbox-cms';
 
@@ -125,12 +124,33 @@ async function handleSearch(
   request: NextRequest
 ) {
   const page = getTVBoxCMSPage(request.nextUrl.searchParams);
-  const category = request.nextUrl.searchParams.get('t') || '0';
-  const itemTypes =
-    category === '1' ? 'Movie' : category === '2' ? 'Series' : 'Movie,Series';
+  const category = request.nextUrl.searchParams.get('t') || '';
+  const views = (await client.getUserViews()).filter(
+    (view) =>
+      !view.CollectionType ||
+      view.CollectionType === 'movies' ||
+      view.CollectionType === 'tvshows'
+  );
+  const categories = views.map((view) => ({
+    type_id: view.Id,
+    type_name: view.Name,
+  }));
+  if (category && !views.some((view) => view.Id === category)) {
+    return NextResponse.json({
+      code: 1,
+      msg: '数据列表',
+      class: categories,
+      page,
+      pagecount: 0,
+      limit: TVBOX_CMS_PAGE_SIZE,
+      total: 0,
+      list: [],
+    });
+  }
   const result = await client.getItems({
     searchTerm: query || undefined,
-    IncludeItemTypes: itemTypes,
+    ParentId: category || undefined,
+    IncludeItemTypes: 'Movie,Series',
     Recursive: true,
     Fields: 'Overview,ProductionYear',
     SortBy: 'SortName',
@@ -149,14 +169,15 @@ async function handleSearch(
     vod_remarks: item.Type === 'Movie' ? '电影' : '剧集',
     vod_year: item.ProductionYear?.toString() || '',
     vod_content: item.Overview || '',
-    type_name: item.Type === 'Movie' ? '电影' : '电视剧',
-    type_id: item.Type === 'Movie' ? '1' : '2',
+    type_name:
+      views.find((view) => view.Id === (category || item.ParentId))?.Name || '',
+    type_id: category || item.ParentId || '',
   }));
 
   return NextResponse.json({
     code: 1,
     msg: '数据列表',
-    class: TVBOX_CMS_LIBRARY_CLASSES,
+    class: categories,
     page,
     pagecount: Math.ceil(result.TotalRecordCount / TVBOX_CMS_PAGE_SIZE),
     limit: TVBOX_CMS_PAGE_SIZE,
@@ -176,6 +197,7 @@ async function handleDetail(
   request: NextRequest
 ) {
   const item = await client.getItem(itemId);
+  const views = await client.getUserViews();
 
   // 获取当前请求的 baseUrl
   const baseUrl = getTVBoxCMSBaseUrl(request);
@@ -229,8 +251,8 @@ async function handleDetail(
         vod_remarks: item.Type === 'Movie' ? '电影' : '剧集',
         vod_year: item.ProductionYear?.toString() || '',
         vod_content: item.Overview || '',
-        type_name: item.Type === 'Movie' ? '电影' : '电视剧',
-        type_id: item.Type === 'Movie' ? '1' : '2',
+        type_name: views.find((view) => view.Id === item.ParentId)?.Name || '',
+        type_id: item.ParentId || '',
         vod_play_url: vodPlayUrl,
         vod_play_from: 'Emby',
       },

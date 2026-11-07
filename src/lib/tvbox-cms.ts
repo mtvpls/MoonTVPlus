@@ -1,11 +1,5 @@
 import type { NextRequest } from 'next/server';
 
-export const TVBOX_CMS_LIBRARY_CLASSES = [
-  { type_id: '0', type_name: '全部' },
-  { type_id: '1', type_name: '电影' },
-  { type_id: '2', type_name: '电视剧' },
-];
-
 export const TVBOX_CMS_PAGE_SIZE = 20;
 
 export function getTVBoxCMSPage(searchParams: URLSearchParams): number {
