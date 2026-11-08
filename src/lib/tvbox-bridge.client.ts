@@ -79,7 +79,9 @@ export function resolveTVBoxBridgePlaybackUrl(
 
 /** 一批线路一次往返，单条失败不会丢掉其他线路的解析结果。 */
 export async function probeTVBoxBridgePlaybackLines(
-  episodeUrls: string[]
+  episodeUrls: string[],
+  signal?: AbortSignal,
+  timeoutMs?: number
 ): Promise<Map<string, TVBoxBridgeProbeResult>> {
   const results = new Map<string, TVBoxBridgeProbeResult>();
   const groups = new Map<
@@ -112,10 +114,22 @@ export async function probeTVBoxBridgePlaybackLines(
     ) {
       const batch = entries.slice(start, start + TVBOX_BRIDGE_PROBE_BATCH_SIZE);
       let probes: TVBoxBridgeProbeResult[];
+      const controller = new AbortController();
+      let timedOut = false;
+      const timeout = timeoutMs === undefined
+        ? undefined
+        : setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+          }, timeoutMs);
+      const onAbort = () => controller.abort();
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) controller.abort();
       try {
         const response = await fetch(
           `/api/tvbox-bridge/probe${special ? '?special=1' : ''}`,
           {
+            signal: controller.signal,
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -135,8 +149,16 @@ export async function probeTVBoxBridgePlaybackLines(
       } catch (error) {
         probes = batch.map(() => ({
           ok: false,
-          error: (error as Error).message,
+          error: timedOut
+            ? `线路解析超时（${timeoutMs}ms）`
+            : signal?.aborted
+              ? '线路解析已取消'
+              : error instanceof Error ? error.message : String(error),
+          errorType: timedOut ? 'timeout' : 'unreachable',
         }));
+      } finally {
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', onAbort);
       }
       batch.forEach(([key, entry], index) => {
         const probe = probes[index];

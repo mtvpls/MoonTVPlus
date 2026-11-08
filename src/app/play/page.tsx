@@ -298,6 +298,11 @@ const VIDEO_LOAD_STEPS: LoadingStep[] = [
   { label: '播放', icon: <Play /> },
 ];
 
+function printLinePreferenceLog(event: string, data: Record<string, unknown>) {
+  // 电视浏览器和部分日志面板会把额外的对象参数转成 [object Object]。
+  console.log(`[线路优选] ${event} ${JSON.stringify(data)}`);
+}
+
 function PlayPageClient() {
   const LOCAL_TRANSCODER_BASE_URL = 'http://localhost:19080';
   const router = useRouter();
@@ -347,6 +352,7 @@ function PlayPageClient() {
     id: searchParams.get('id'),
     prefer: searchParams.get('prefer'),
     line: searchParams.get('line'),
+    reload: searchParams.get('_reload'),
   }));
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<SearchResult | null>(null);
@@ -1036,17 +1042,23 @@ function PlayPageClient() {
     const urlTitle = searchParams.get('title') || '';
     const reloadParam = searchParams.get('_reload');
 
-    // 只在有 _reload 参数且标题变化时才重新加载页面
-    // 这样可以避免初始化、API返回、房间同步等场景的误触发
-    // 只有用户主动点击推荐时才会添加 _reload 参数
-    if (reloadParam && urlTitle && urlTitle !== videoTitle && !isSourceChangingRef.current) {
+    // 当前入口的 _reload 已经生效；详情回填标题时不能再次触发它。
+    // 初始化期间 URL 更新通过路由 transition 同步，旧参数也不能触发重载。
+    if (
+      !loading &&
+      reloadParam &&
+      reloadParam !== initialLoadParams.reload &&
+      urlTitle &&
+      urlTitle !== videoTitle &&
+      !isSourceChangingRef.current
+    ) {
       console.log('[PlayPage] User clicked recommendation, reloading page');
       window.location.reload();
     }
 
     // 重置换源标记
     isSourceChangingRef.current = false;
-  }, [searchParams, videoTitle]);
+  }, [searchParams, videoTitle, loading, initialLoadParams.reload]);
 
   const currentSourceRef = useRef(currentSource);
   const currentIdRef = useRef(currentId);
@@ -3309,7 +3321,7 @@ function PlayPageClient() {
     }
 
     try {
-      const info = await getVideoResolutionFromM3u8(episodeUrl, 4000);
+      const info = await getVideoResolutionFromM3u8(episodeUrl, 6000);
       setCurrentSourceVideoInfo(info);
     } catch (error) {
       console.error('获取视频信息失败:', error);
@@ -3323,6 +3335,37 @@ function PlayPageClient() {
     scope: 'sources' | 'current-source-lines' = 'sources'
   ): Promise<SearchResult> => {
     const allCurrentSourceLines = scope === 'current-source-lines';
+    const quickCurrentSourceLines =
+      allCurrentSourceLines && preferStrategy === 'fast';
+    const preferenceStartedAt = performance.now();
+    const logLines = allCurrentSourceLines || sources.some((source) =>
+      isTVBoxBridgeSource(source.source)
+    );
+    const logLinePreference = (event: string, data: Record<string, unknown>) => {
+      if (!logLines) return;
+      printLinePreferenceLog(event, {
+        总耗时ms: Math.round(performance.now() - preferenceStartedAt),
+        ...data,
+      });
+    };
+    const startedTestKeys = new Set<string>();
+    logLinePreference('开始', {
+      范围: allCurrentSourceLines ? '当前源线路' : '多源及线路',
+      策略: preferStrategy,
+      评分偏好: preferMode,
+      原线路: sources[0]?.activeLine,
+      线路解析超时ms: quickCurrentSourceLines ? 15000 : undefined,
+      媒体测速超时ms: 6000,
+      来源: sources.map((source) => ({
+        source: source.source,
+        id: source.id,
+        名称: source.source_name,
+      })),
+    });
+    if (allCurrentSourceLines && getTVBoxBridgeLines(sources[0]).length <= 1) {
+      logLinePreference('跳过', { 原因: '没有可比较的多条线路' });
+      return sources[0];
+    }
     if (sources.length === 1 && !allCurrentSourceLines && !isTVBoxBridgeSource(sources[0].source)) return sources[0];
 
     type SourceTestResult = {
@@ -3405,7 +3448,7 @@ function PlayPageClient() {
     /**
      * 测速条目：tvbox 源是「一源一卡 + 卡内多线路」，
      * 多源优选时每个 tvbox 源只测前 TVBOX_BRIDGE_MAX_TEST_LINES 条线路，
-     * 且最多 TVBOX_BRIDGE_MAX_SEARCH_SOURCES 个 tvbox 源参与；单源线路优选测全部线路。
+     * 且最多 TVBOX_BRIDGE_MAX_SEARCH_SOURCES 个 tvbox 源参与；单源不限线路数，等待各线路完成测速。
      */
     const testEntries = (() => {
       const entries: Array<{ source: SearchResult; line?: string }> = [];
@@ -3427,6 +3470,15 @@ function PlayPageClient() {
       });
       return entries;
     })();
+    logLinePreference('参与测速的线路', {
+      数量: testEntries.length,
+      线路: testEntries.map(({ source, line }) => ({
+        source: source.source,
+        id: source.id,
+        名称: source.source_name,
+        线路: line,
+      })),
+    });
 
     const finalizeSelection = (
       completedResults: MaybeSourceTestResult[]
@@ -3445,11 +3497,52 @@ function PlayPageClient() {
         (result): result is SourceTestResult =>
           !!result && !result.testResult.hasError && !result.testResult.unsupported
       );
+      const logSummary = (scores = new Map<string, number>()) => {
+        if (!logLines) return;
+        const resultsByKey = new Map(
+          completedResults.filter((result): result is SourceTestResult => !!result)
+            .map((result) => [
+              buildSourceTestKey(result.source.source, result.source.id, result.line),
+              result.testResult,
+            ])
+        );
+        logLinePreference('结果汇总', {
+          参与数量: testEntries.length,
+          完成数量: resultsByKey.size,
+          成功数量: successfulResults.length,
+        });
+        const rows = testEntries.map(({ source, line }) => {
+          const key = buildSourceTestKey(source.source, source.id, line);
+          const info = resultsByKey.get(key);
+          return {
+            source: source.source,
+            id: source.id,
+            线路: line || '默认',
+            状态: !info
+              ? startedTestKeys.has(key) ? '未完成' : '未开始'
+              : info.unsupported ? '不支持测速' : info.hasError ? '失败' : '成功',
+            原因: info?.reason || info?.errorType || '',
+            速度: info?.loadSpeed,
+            分辨率: info?.quality,
+            延迟ms: info?.pingTime,
+            评分: scores.get(key),
+          };
+        });
+        logLinePreference('结果明细', { 线路: rows });
+        console.table(rows);
+      };
 
       if (successfulResults.length === 0) {
+        logSummary();
+        logLinePreference('回退到原线路', {
+          原因: '没有测通的线路',
+          source: sortedByWeight[0].source,
+          id: sortedByWeight[0].id,
+          线路: getActiveTVBoxBridgeLine(sortedByWeight[0])?.name,
+        });
         console.warn(
           allCurrentSourceLines
-            ? '当前源所有线路测速都失败，保留原线路'
+            ? '当前源线路未测通，保留原线路'
             : '所有播放源测速都失败，按权重排序'
         );
         return sortedByWeight[0];
@@ -3490,6 +3583,10 @@ function PlayPageClient() {
       }));
 
       resultsWithScore.sort((a, b) => b.score - a.score);
+      logSummary(new Map(resultsWithScore.map((result) => [
+        buildSourceTestKey(result.source.source, result.source.id, result.line),
+        result.score,
+      ])));
 
       console.log('播放源评分排序结果:');
       resultsWithScore.forEach((result, index) => {
@@ -3504,6 +3601,15 @@ function PlayPageClient() {
       // 命中的是某条线路时，把该线路的剧集与选中标记一起带回去
       // （否则播放地址还是第一条线路的，与测速结果对不上）
       const winner = resultsWithScore[0];
+      logLinePreference('最终选中', {
+        source: winner.source.source,
+        id: winner.source.id,
+        线路: winner.line || getActiveTVBoxBridgeLine(winner.source)?.name,
+        评分: winner.score,
+        速度: winner.testResult.loadSpeed,
+        分辨率: winner.testResult.quality,
+        延迟ms: winner.testResult.pingTime,
+      });
       if (winner.line && isTVBoxBridgeSource(winner.source.source)) {
         const winnerLine = getTVBoxBridgeLines(winner.source).find(
           (item) => item.name === winner.line
@@ -3523,22 +3629,58 @@ function PlayPageClient() {
       const episodes = entry.line
         ? getTVBoxBridgeLines(entry.source).find((line) => line.name === entry.line)?.episodes
         : entry.source.episodes;
-      return episodes?.[episodes.length > 1 ? 1 : 0] || '';
+      const index = allCurrentSourceLines
+        ? resolveEpisodeIndexForLine(
+            episodes?.length || 0,
+            currentEpisodeIndexRef.current
+          )
+        : episodes && episodes.length > 1
+          ? 1
+          : 0;
+      return episodes?.[index] || '';
     };
-    const bridgeProbeResults = await probeTVBoxBridgePlaybackLines(testEntries.map(testEpisodeUrl));
+    // 快速线路优选边解析边测速，避免一条慢线路阻塞已解析完成的线路。
+    const batchParseStartedAt = performance.now();
+    if (!quickCurrentSourceLines) {
+      logLinePreference('批量解析开始', { 数量: testEntries.length });
+    }
+    const bridgeProbeResults = quickCurrentSourceLines
+      ? new Map()
+      : await probeTVBoxBridgePlaybackLines(testEntries.map(testEpisodeUrl));
+    if (!quickCurrentSourceLines) {
+      logLinePreference('批量解析完成', {
+        解析耗时ms: Math.round(performance.now() - batchParseStartedAt),
+        解析成功数量: Array.from(bridgeProbeResults.values()).filter((result) => result.ok).length,
+      });
+    }
 
     const testSingleSource = async (
-      entry: { source: SearchResult; line?: string }
+      entry: { source: SearchResult; line?: string },
+      signal?: AbortSignal
     ): Promise<MaybeSourceTestResult> => {
       const { source, line } = entry;
-      const failedResult = (info: Partial<SourceVideoInfo> = {}): SourceTestResult => ({
-        source,
-        line,
-        testResult: {
-          quality: '错误', loadSpeed: '未知', pingTime: 0, bitrate: '未知',
-          hasError: true, errorType: 'unreachable', ...info,
-        },
-      });
+      const testStartedAt = performance.now();
+      const testContext = { source: source.source, id: source.id, 线路: line };
+      let testPhase = '准备';
+      startedTestKeys.add(buildSourceTestKey(source.source, source.id, line));
+      logLinePreference('线路任务开始', testContext);
+      const failedResult = (info: Partial<SourceVideoInfo> = {}): SourceTestResult => {
+        logLinePreference(signal?.aborted ? '取消未完成任务' : '线路未测通', {
+          ...testContext,
+          阶段: testPhase,
+          线路耗时ms: Math.round(performance.now() - testStartedAt),
+          原因: info.reason || info.errorType || '无法访问',
+          不支持测速: !!info.unsupported,
+        });
+        return {
+          source,
+          line,
+          testResult: {
+            quality: '错误', loadSpeed: '未知', pingTime: 0, bitrate: '未知',
+            hasError: true, errorType: 'unreachable', ...info,
+          },
+        };
+      };
       try {
         // 线路的播放地址在 lines[].episodes 里；非 tvbox 源用自身的 episodes
         const lineInfo = line
@@ -3550,8 +3692,8 @@ function PlayPageClient() {
           return failedResult({ reason: '无剧集' });
         }
 
-        let episodeUrl =
-          episodes.length > 1 ? episodes[1] : episodes[0];
+        let episodeUrl = testEpisodeUrl(entry);
+        let resolvedMediaType: string | undefined;
 
         const isM3u8 = episodeUrl.toLowerCase().includes('.m3u') || !episodeUrl.toLowerCase().match(/\.(mp4|flv|webm|mkv|avi|mov)(\?.*)?$/);
         if (source.source === 'directplay' && isM3u8) {
@@ -3563,21 +3705,67 @@ function PlayPageClient() {
           episodeUrl = `/api/proxy/vod/m3u8?url=${encodeURIComponent(episodeUrl)}&source=${encodeURIComponent(source.source)}`;
         }
 
-        // 桥接线路已经批量解析；逐条下载真实媒体分片测速。
+        // 解析后下载真实媒体分片测速；快速优选不等待其他线路的解析。
         if (episodeUrl.startsWith('/api/tvbox-bridge/play')) {
-          const result = bridgeProbeResults.get(testEpisodeUrl(entry));
+          testPhase = '线路解析';
+          const parseStartedAt = performance.now();
+          logLinePreference('线路解析开始', {
+            ...testContext,
+            已批量解析: !quickCurrentSourceLines,
+          });
+          const result = quickCurrentSourceLines
+            ? (await probeTVBoxBridgePlaybackLines([episodeUrl], signal, 15000)).get(
+                episodeUrl
+              )
+            : bridgeProbeResults.get(testEpisodeUrl(entry));
           if (!result?.ok) {
             return failedResult(result?.unsupported
               ? { hasError: false, unsupported: true, reason: result.reason }
-              : { reason: result?.error || '获取媒体流地址失败' });
+              : { errorType: result?.errorType || 'unreachable', reason: result?.error || '获取媒体流地址失败' });
           }
           episodeUrl = result.url;
+          resolvedMediaType = result.mediaType;
+          logLinePreference('线路解析完成', {
+            ...testContext,
+            解析耗时ms: Math.round(performance.now() - parseStartedAt),
+            媒体类型: result.mediaType,
+          });
         }
 
-        const testResult = await getVideoResolutionFromM3u8(
-          episodeUrl,
-          isTVBoxBridgeSource(source.source) ? 10000 : 6000
-        );
+        testPhase = '媒体测速';
+        const mediaTimeoutMs = 6000;
+        const mediaStartedAt = performance.now();
+        const mediaAddress = new URL(episodeUrl, window.location.origin);
+        logLinePreference('媒体测速开始', {
+          ...testContext,
+          测速函数: 'getVideoResolutionFromM3u8',
+          超时ms: mediaTimeoutMs,
+          媒体类型: resolvedMediaType,
+          协议: mediaAddress.protocol,
+          域名: mediaAddress.host,
+          源代理开关: !!source.proxyMode,
+          地址类型: mediaAddress.pathname.endsWith('/api/stream')
+            ? '桥接流代理'
+            : mediaAddress.pathname.startsWith('/api/proxy')
+              ? '站点播放代理'
+              : '媒体直连',
+          页面协议: window.location.protocol,
+        });
+        const testResult = await getVideoResolutionFromM3u8(episodeUrl, mediaTimeoutMs, signal);
+        logLinePreference('媒体测速完成', {
+          ...testContext,
+          测速耗时ms: Math.round(performance.now() - mediaStartedAt),
+          线路耗时ms: Math.round(performance.now() - testStartedAt),
+          速度: testResult.loadSpeed,
+          分辨率: testResult.quality,
+          延迟ms: testResult.pingTime,
+          码率: testResult.bitrate,
+        });
+
+        // 只拿到元数据还没有下载样本，不能当作线路测速成功。
+        if (isTVBoxBridgeSource(source.source) && testResult.loadSpeed === '未知') {
+          return failedResult({ errorType: 'timeout', reason: '未取得下载样本' });
+        }
 
         return {
           source,
@@ -3585,7 +3773,15 @@ function PlayPageClient() {
           testResult,
         };
       } catch (error) {
-        return failedResult({ errorType: error instanceof SpeedTestError ? error.type : 'unreachable' });
+        logLinePreference('线路任务异常', {
+          ...testContext,
+          阶段: testPhase,
+          异常: error instanceof Error ? error.message : String(error),
+        });
+        return failedResult({
+          errorType: error instanceof SpeedTestError ? error.type : 'unreachable',
+          reason: error instanceof Error ? error.message : String(error),
+        });
       }
     };
 
@@ -6015,12 +6211,25 @@ function PlayPageClient() {
       );
 
       // 先恢复记录作为测速失败时的回退，再优选当前源全部线路，避免记录覆盖优选结果。
-      if (
+      const preferCurrentLines =
         shouldPreferCurrentTVBoxLines &&
         detailData.source === initialLoadParams.source &&
         detailData.id === initialLoadParams.id &&
-        getTVBoxBridgeLines(detailData).length > 0
-      ) {
+        getTVBoxBridgeLines(detailData).length > 0;
+      if (isTVBoxBridgeSource(detailData.source)) {
+        printLinePreferenceLog('入口判断', {
+          source: detailData.source,
+          id: detailData.id,
+          优选开关: optimizationEnabled,
+          策略: preferStrategy,
+          入口指定线路: initialLoadParams.line,
+          入口多源优选: initialLoadParams.prefer === 'true',
+          恢复的线路: detailData.activeLine,
+          可用线路: getTVBoxBridgeLines(detailData).map((line) => line.name),
+          执行当前源线路优选: preferCurrentLines,
+        });
+      }
+      if (preferCurrentLines) {
         setLoadingStage('preferring');
         setLoadingMessage('⚡ 正在优选当前源的播放线路...');
         detailData = await preferBestSource([detailData], 'current-source-lines');
@@ -6170,6 +6379,14 @@ function PlayPageClient() {
       }
 
       await persistTVBoxPlaybackLine(detailData, currentEpisodeIndexRef.current);
+      if (isTVBoxBridgeSource(detailData.source)) {
+        printLinePreferenceLog('播放线路已应用', {
+          source: detailData.source,
+          id: detailData.id,
+          线路: detailData.activeLine,
+          集数: currentEpisodeIndexRef.current + 1,
+        });
+      }
 
       // 短暂延迟让用户看到完成状态
       setTimeout(() => {
@@ -6201,6 +6418,9 @@ function PlayPageClient() {
 
   // 监听 URL 参数变化，处理换源和换视频（用于房员跟随房主操作）
   useEffect(() => {
+    // 初始化负责发布优选结果并回填 URL，完成前不把旧 URL 当作换源请求。
+    if (loading) return;
+
     const urlSource = normalizeNetdiskSource(searchParams.get('source'));
     const urlId = searchParams.get('id');
 
@@ -6250,7 +6470,7 @@ function PlayPageClient() {
         window.location.reload();
       }
     }
-  }, [searchParams, currentSource, currentId, availableSources, currentEpisodeIndex]);
+  }, [searchParams, currentSource, currentId, availableSources, currentEpisodeIndex, loading]);
 
   // 监听 detail 和 currentEpisodeIndex 变化，自动获取视频信息
   useEffect(() => {

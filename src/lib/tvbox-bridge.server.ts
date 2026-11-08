@@ -342,6 +342,8 @@ export async function getTVBoxBridgePlay(
   const request = bridgeJson<TVBoxBridgePlayResult>(endpoint, '/api/play', {
     method: 'POST',
     body: JSON.stringify({ key, flag, id }),
+    // 挂起的解析也必须退出并清理共用请求，避免后续播放/重测永远复用未完成任务。
+    signal: AbortSignal.timeout(15000),
   }).finally(() => {
     bridgePlayRequests.delete(requestKey);
   });

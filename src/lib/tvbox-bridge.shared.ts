@@ -28,7 +28,13 @@ export interface TVBoxBridgeProbeItem {
 
 export type TVBoxBridgeProbeResult =
   | { ok: true; url: string; mediaType: string }
-  | { ok: false; unsupported?: boolean; reason?: string; error?: string };
+  | {
+      ok: false;
+      unsupported?: boolean;
+      reason?: string;
+      error?: string;
+      errorType?: 'timeout' | 'unreachable';
+    };
 
 /**
  * 管理面板用的只读视图类型（与 tvbox-bridge.server 的接口结构一致）。

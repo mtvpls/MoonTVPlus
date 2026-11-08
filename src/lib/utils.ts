@@ -703,7 +703,8 @@ export class SpeedTestError extends Error {
  */
 export async function getVideoResolutionFromM3u8(
   m3u8Url: string,
-  timeoutMs = 6000
+  timeoutMs = 6000,
+  signal?: AbortSignal
 ): Promise<{
   quality: string; // 如720p、1080p等
   loadSpeed: string; // 自动转换为KB/s或MB/s
@@ -712,6 +713,7 @@ export async function getVideoResolutionFromM3u8(
 }> {
   try {
     const { default: Hls, FetchLoader } = await import('hls.js');
+    if (signal?.aborted) throw new DOMException('测速已取消', 'AbortError');
 
     // 直接使用m3u8 URL作为视频源，避免CORS问题
     return new Promise((resolve, reject) => {
@@ -722,9 +724,15 @@ export async function getVideoResolutionFromM3u8(
       // 测量网络延迟（ping时间） - 使用m3u8 URL而不是ts文件
       const pingStart = performance.now();
       let pingTime = 0;
+      const pingController = new AbortController();
 
       // 测量ping时间（使用m3u8 URL）
-      fetch(m3u8Url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' })
+      fetch(m3u8Url, {
+        method: 'HEAD',
+        mode: 'no-cors',
+        cache: 'no-store',
+        signal: pingController.signal,
+      })
         .then(() => {
           pingTime = performance.now() - pingStart;
         })
@@ -743,9 +751,26 @@ export async function getVideoResolutionFromM3u8(
       let hasSpeedCalculated = false;
       let hasMetadataLoaded = false;
       let estimatedBitrate = 0; // 估算的码率（bps）
+      let settled = false;
+      let samplingTimeout: ReturnType<typeof setTimeout> | undefined;
+      const cleanup = () => {
+        settled = true;
+        clearTimeout(timeout);
+        clearTimeout(samplingTimeout);
+        signal?.removeEventListener('abort', onAbort);
+        pingController.abort();
+        hls.destroy();
+        video.remove();
+      };
+      const onAbort = () => {
+        if (settled) return;
+        cleanup();
+        reject(new DOMException('测速已取消', 'AbortError'));
+      };
 
       // 提取核心返回逻辑供 resolve 和 timeout 共同调用
       const resolveCurrentState = () => {
+        if (settled) return;
         const width = video.videoWidth;
         const quality =
           width >= 3840
@@ -769,8 +794,7 @@ export async function getVideoResolutionFromM3u8(
               : `${Math.round(estimatedBitrate / 1000)} Kbps`
             : '未知';
 
-        hls.destroy();
-        video.remove();
+        cleanup();
 
         resolve({
           quality,
@@ -785,25 +809,29 @@ export async function getVideoResolutionFromM3u8(
         if (hasMetadataLoaded || hasSpeedCalculated) {
           resolveCurrentState();
         } else {
-          hls.destroy();
-          video.remove();
+          cleanup();
           reject(
             new SpeedTestError('timeout', 'Timeout loading video metadata')
           );
         }
       }, timeoutMs);
+      signal?.addEventListener('abort', onAbort, { once: true });
 
       video.onerror = () => {
-        clearTimeout(timeout);
-        hls.destroy();
-        video.remove();
+        if (settled) return;
+        const mediaError = video.error;
+        cleanup();
         reject(
-          new SpeedTestError('unreachable', 'Failed to load video metadata')
+          new SpeedTestError(
+            'unreachable',
+            `视频元数据加载失败：code=${mediaError?.code || 0} ${mediaError?.message || ''}`
+          )
         );
       };
 
       let sampledBytes = 0;
       let sampledLoadTime = 0;
+      let samplingWindowElapsed = false;
 
       // 检查是否可以相互满足要求
       const checkAndResolve = () => {
@@ -816,9 +844,30 @@ export async function getVideoResolutionFromM3u8(
         }
       };
 
+      const updateSampledSpeed = () => {
+        if (settled || hasSpeedCalculated) return;
+        // 快线路可能在 1 秒内填满缓冲，之后不再下载分片。
+        // 采样窗口按墙钟结束，速度仍按实际传输耗时计算，避免空等整个超时。
+        if (
+          (!samplingWindowElapsed && sampledLoadTime < 1000) ||
+          sampledBytes < 256 * 1024 ||
+          sampledLoadTime <= 0
+        )
+          return;
+
+        const speedKBps = sampledBytes / 1024 / (sampledLoadTime / 1000);
+        actualLoadSpeed =
+          speedKBps >= 1024
+            ? `${(speedKBps / 1024).toFixed(1)} MB/s`
+            : `${speedKBps.toFixed(1)} KB/s`;
+        hasSpeedCalculated = true;
+        checkAndResolve();
+      };
+
       // 使用各视频分片自己的传输时间，忽略初始化分片和独立音轨。
       hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {
         if (
+          settled ||
           hasSpeedCalculated ||
           data.frag.type !== 'main' ||
           data.frag.sn === 'initSegment'
@@ -851,27 +900,29 @@ export async function getVideoResolutionFromM3u8(
 
         sampledBytes += size;
         sampledLoadTime += loadTime;
-
-        // 至少采样一秒和 256 KiB，避免秒取小分片产生虚高速度。
-        if (sampledLoadTime < 1000 || sampledBytes < 256 * 1024) return;
-
-        const speedKBps = sampledBytes / 1024 / (sampledLoadTime / 1000);
-        actualLoadSpeed =
-          speedKBps >= 1024
-            ? `${(speedKBps / 1024).toFixed(1)} MB/s`
-            : `${speedKBps.toFixed(1)} KB/s`;
-        hasSpeedCalculated = true;
-        checkAndResolve();
+        if (samplingTimeout === undefined) {
+          samplingTimeout = setTimeout(() => {
+            samplingWindowElapsed = true;
+            updateSampledSpeed();
+          }, 1000);
+        }
+        updateSampledSpeed();
       });
-
-      hls.loadSource(m3u8Url);
-      hls.attachMedia(video);
 
       // 监听hls.js错误
       hls.on(Hls.Events.ERROR, (event: any, data: any) => {
-        console.error('HLS错误:', data);
+        if (settled) return;
+        const statusCode = data.response?.code || data.response?.status;
+        const details = typeof data.details === 'string' ? data.details : '';
+        const cause = data.error instanceof Error ? data.error.message : '';
+        console.error(`[线路优选] HLS错误 ${JSON.stringify({
+          type: data.type,
+          details,
+          fatal: data.fatal,
+          status: statusCode,
+          error: cause,
+        })}`);
         if (data.fatal) {
-          const statusCode = data.response?.code || data.response?.status;
           // 防止 415 代理兜底熔断导致正常的二进制源在优选逻辑中被剔除
           if (
             statusCode === 415 &&
@@ -881,9 +932,7 @@ export async function getVideoResolutionFromM3u8(
             console.log(
               '[测速] 测速通道嗅探到这是底层的媒体流文件，免测速通过'
             );
-            clearTimeout(timeout);
-            hls.destroy();
-            video.remove();
+            cleanup();
             resolve({
               quality: '原生画质',
               loadSpeed: '直连',
@@ -893,17 +942,14 @@ export async function getVideoResolutionFromM3u8(
             return;
           }
 
-          clearTimeout(timeout);
-          hls.destroy();
-          video.remove();
+          cleanup();
           // HLS 的 *TimeOut 类 details（manifestLoadTimeOut 等）归为超时，
           // 其余致命错误（网络不可达、404、解析失败）归为无法访问
-          const details = typeof data.details === 'string' ? data.details : '';
           const isTimeout = details.toLowerCase().includes('timeout');
           reject(
             new SpeedTestError(
               isTimeout ? 'timeout' : 'unreachable',
-              `HLS播放失败: ${data.type}`
+              `HLS测速失败：${data.type}/${details}${statusCode ? ` HTTP ${statusCode}` : ''}${cause ? ` ${cause}` : ''}`
             )
           );
         }
@@ -914,8 +960,17 @@ export async function getVideoResolutionFromM3u8(
         hasMetadataLoaded = true;
         checkAndResolve(); // 尝试返回结果
       };
+      // 先绑定错误和元数据事件，再开始加载，避免同步报错被漏掉。
+      hls.loadSource(m3u8Url);
+      hls.attachMedia(video);
     });
   } catch (error) {
+    if (
+      error instanceof SpeedTestError ||
+      (error instanceof Error && error.name === 'AbortError')
+    ) {
+      throw error;
+    }
     throw new Error(
       `Error getting video resolution: ${
         error instanceof Error ? error.message : String(error)

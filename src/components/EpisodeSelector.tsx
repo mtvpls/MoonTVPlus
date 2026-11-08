@@ -27,7 +27,6 @@ import { loadAllLocalEpisodeProgressRecords } from '@/lib/episode-progress';
 import { isNetdiskSource } from '@/lib/netdisk/source';
 import { appendSpecialSourceParam } from '@/lib/special-source.client';
 import { probeTVBoxBridgePlaybackLines } from '@/lib/tvbox-bridge.client';
-import type { TVBoxBridgeProbeResult } from '@/lib/tvbox-bridge.shared';
 import {
   buildSourceTestKey,
   getActiveTVBoxBridgeLine,
@@ -458,6 +457,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   const [retestingSources, setRetestingSources] = useState<Set<string>>(
     new Set()
   );
+  const [testingLines, setTestingLines] = useState<Set<string>>(new Set());
   // 标记初始测速是否已完成
   const [initialTestingCompleted, setInitialTestingCompleted] = useState(false);
   // 标记是否正在进行全部重测
@@ -638,7 +638,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     return true;
   });
 
-  // 读取测速超时设置，默认4秒
+  // 读取测速超时设置，默认6秒
   const [speedTestTimeout] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('speedTestTimeout');
@@ -646,16 +646,10 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         return Number(saved);
       }
     }
-    return 4000;
+    return 6000;
   });
 
-  /**
-   * tvbox 线路实际要探测的媒体流在桥接服务器上（经常还要先经过 /api/stream 代理），
-   * 比直连源多一跳，4 秒窗口最容易误判成超时，所以探测窗口至少给 10 秒；
-   * 用户手动调大的超时（>10 秒）照旧生效。
-   */
-  const bridgeProbeTimeout = Math.max(speedTestTimeout, 10000);
-  /** 桥接解析（含 Spider）的独立上限，不占用上面的探测窗口 */
+  /** 桥接解析（含 Spider）的独立上限。 */
   const BRIDGE_PARSE_TIMEOUT = 15000;
 
   // 集数过滤逻辑
@@ -731,6 +725,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       if (cached) return cached;
 
       const request = (async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(
+          () => controller.abort(),
+          BRIDGE_PARSE_TIMEOUT
+        );
         try {
           // 搜索结果的 tvbox 源带的是裸 siteKey，统一换成 tvbox: 前缀，源名称/线路才认得出来
           const detailSource = isTVBoxBridgeSource(source.source)
@@ -743,7 +742,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
               )}&id=${encodeURIComponent(source.id)}&title=${encodeURIComponent(
                 source.title
               )}${line ? `&line=${encodeURIComponent(line)}` : ''}`
-            )
+            ),
+            { signal: controller.signal }
           );
           if (!response.ok) throw new Error('获取线路详情失败');
           const detail = (await response.json()) as SearchResult;
@@ -783,6 +783,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             bridgeDetailMapRef.current.delete(`${source.source}-${source.id}`);
           }
           return null;
+        } finally {
+          clearTimeout(timeout);
         }
       })();
 
@@ -797,13 +799,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
    *
    * tvbox 线路的播放地址是本地懒解析接口（/api/tvbox-bridge/play），直接测它测的是
    * 本地接口，而且它会 307 跳转到跨域的媒体地址，浏览器 fetch 必然失败。
-   * 所以一律先走 /api/tvbox-bridge/probe（同源、JSON）拿到真实媒体地址；
+   * 所以先走 /api/tvbox-bridge/probe（同源、JSON）拿到真实媒体地址；
    * 直播 / 需二次解析的线路 probe 会回 unsupported，界面显示「不支持测速」。
    */
   const resolveSpeedTestUrl = useCallback(
     async (
       episodeUrl: string,
-      preResolved?: TVBoxBridgeProbeResult
+      signal?: AbortSignal
     ): Promise<
       | { kind: 'url'; url: string }
       | { kind: 'unsupported'; reason?: string }
@@ -812,8 +814,9 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       const play = parseTVBoxBridgePlayUrl(episodeUrl);
       if (!play) return { kind: 'url', url: episodeUrl };
       try {
-        const data = preResolved ??
-          (await probeTVBoxBridgePlaybackLines([episodeUrl])).get(episodeUrl);
+        const data = (
+          await probeTVBoxBridgePlaybackLines([episodeUrl], signal)
+        ).get(episodeUrl);
         if (data && !data.ok && data.unsupported) {
           return { kind: 'unsupported', reason: data.reason };
         }
@@ -830,30 +833,30 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   /**
    * 测一次播放地址。
    *
-   * tvbox 线路要先经 probe 换到真实媒体流，两条超时分开算：
-   * 解析（含 Spider，常要 1s+）走 BRIDGE_PARSE_TIMEOUT，
-   * 媒体流探测走 bridgeProbeTimeout。否则 4 秒窗口几乎全被解析吃掉，结果永远超时。
-   * 其他源照旧直接探测，沿用用户设置的 speedTestTimeout。
+   * TVBox 线路解析后与普通源共用浏览器测速。
    */
   const probeStream = useCallback(
-    async (
-      episodeUrl: string,
-      preResolved?: TVBoxBridgeProbeResult
-    ): Promise<Awaited<ReturnType<typeof getVideoResolutionFromM3u8>>> => {
+    async (episodeUrl: string): Promise<
+      Awaited<ReturnType<typeof getVideoResolutionFromM3u8>>
+    > => {
       if (!parseTVBoxBridgePlayUrl(episodeUrl)) {
         return getVideoResolutionFromM3u8(episodeUrl, speedTestTimeout);
       }
 
-      const parseStartedAt = performance.now();
+      const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<null>((resolve) => {
         timer = setTimeout(() => resolve(null), BRIDGE_PARSE_TIMEOUT);
       });
       let resolved: Awaited<ReturnType<typeof resolveSpeedTestUrl>> | null;
       try {
-        resolved = await Promise.race([resolveSpeedTestUrl(episodeUrl, preResolved), timeout]);
+        resolved = await Promise.race([
+          resolveSpeedTestUrl(episodeUrl, controller.signal),
+          timeout,
+        ]);
       } finally {
         clearTimeout(timer);
+        controller.abort();
       }
       if (!resolved) {
         throw new SpeedTestError('timeout', '解析播放地址超时');
@@ -865,16 +868,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         throw new SpeedTestError('unreachable', '获取媒体流地址失败');
       }
 
-      // 预算按剩余时间扣减，避免「解析慢 + 探测慢」叠加成两倍超时
-      const elapsed = performance.now() - parseStartedAt;
-      const remaining = Math.max(bridgeProbeTimeout - elapsed, 5000);
-      return getVideoResolutionFromM3u8(resolved.url, remaining);
+      return getVideoResolutionFromM3u8(resolved.url, speedTestTimeout);
     },
-    [bridgeProbeTimeout, resolveSpeedTestUrl, speedTestTimeout]
+    [resolveSpeedTestUrl, speedTestTimeout]
   );
 
   // 详情已由 testSource 展开，这里只探测对应线路的地址。
-  const getVideoInfo = useCallback(async (source: SearchResult, line?: string, preResolved?: TVBoxBridgeProbeResult) => {
+  const getVideoInfo = useCallback(async (source: SearchResult, line?: string) => {
     // tvbox 源按线路分别测速，key 里带线路名；其他源保持「源-id」
     const sourceKey = buildSourceTestKey(source.source, source.id, line);
 
@@ -917,8 +917,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       setVideoInfoMap((prev) => new Map(prev).set(sourceKey, errorInfo));
     };
 
+    setTestingLines((prev) => new Set(prev).add(sourceKey));
     try {
-      const info = await probeStream(episodeUrl, preResolved);
+      const info = await probeStream(episodeUrl);
+      if (isTVBoxBridgeSource(source.source) && info.loadSpeed === '未知') {
+        writeErrorInfo('timeout');
+        return;
+      }
       videoInfoMapRef.current.set(sourceKey, info);
       setVideoInfoMap((prev) => new Map(prev).set(sourceKey, info));
     } catch (error) {
@@ -940,6 +945,12 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       const errorType: SpeedTestErrorType =
         error instanceof SpeedTestError ? error.type : 'unreachable';
       writeErrorInfo(errorType);
+    } finally {
+      setTestingLines((prev) => {
+        const next = new Set(prev);
+        next.delete(sourceKey);
+        return next;
+      });
     }
   }, [probeStream]);
 
@@ -1073,21 +1084,18 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         const entries = getSourceTestEntries(testable).filter(
           (entry) => !videoInfoMapRef.current.has(entry.key)
         );
-        const episodeUrlForEntry = (entry: { line?: string }) => {
-          const episodes = entry.line
-            ? getTVBoxBridgeLines(testable).find((line) => line.name === entry.line)?.episodes
-            : testable.episodes;
-          return episodes?.[episodes.length > 1 ? 1 : 0] || '';
+        // 每条线路的解析从 probeStream 的超时窗口内开始，不能在这里先等整批解析。
+        // 一条完成后马上显示结果并继续下一条，慢线路不阻塞其他线路。
+        let nextIndex = 0;
+        const worker = async () => {
+          while (nextIndex < entries.length) {
+            const entry = entries[nextIndex++];
+            await getVideoInfo(testable, entry.line);
+          }
         };
-        const probeResults = await probeTVBoxBridgePlaybackLines(entries.map(episodeUrlForEntry));
-        const concurrency = 2;
-        for (let start = 0; start < entries.length; start += concurrency) {
-          await Promise.all(
-            entries
-              .slice(start, start + concurrency)
-              .map((entry) => getVideoInfo(testable, entry.line, probeResults.get(episodeUrlForEntry(entry))))
-          );
-        }
+        await Promise.all(
+          Array.from({ length: Math.min(2, entries.length) }, worker)
+        );
       })();
       sourceTestTasksRef.current.set(cardKey, task);
       try {
@@ -1927,14 +1935,10 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                             >
                               {bridgeLines.map((line) => {
                                 // 只有正在播放的卡才标出「选中线路」，避免每张卡都亮着默认线路
-                                // 正在播放的卡只标明当前线路；其余卡默认第一条线路，
-                                // 与卡片底部测速结果（getSourceInfoKey）保持一致
-                                const lineIndex = bridgeLines.findIndex(
-                                  (item) => item.name === line.name
-                                );
-                                const isActive = isCurrentSource
-                                  ? line.name === activeLine?.name
-                                  : lineIndex === 0;
+                                // 其余卡片还没被选择，不把默认第一条标成当前线路。
+                                const isActive =
+                                  isCurrentSource &&
+                                  line.name === activeLine?.name;
                                 // 每条线路各自有测速结果，状态直接标在线路上
                                 const lineInfo = videoInfoMap.get(
                                   buildSourceTestKey(
@@ -1945,8 +1949,12 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                                 );
                                 const isLineTesting =
                                   !lineInfo &&
-                                  retestingSources.has(
-                                    `${source.source}-${source.id}`
+                                  testingLines.has(
+                                    buildSourceTestKey(
+                                      source.source,
+                                      source.id,
+                                      line.name
+                                    )
                                   );
                                 return (
                                   <button
@@ -2066,22 +2074,19 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                               </button>
                               {linePanelOpen && (
                                 <div className='min-w-0 rounded-md border border-gray-500/20 dark:border-white/10 bg-white/40 dark:bg-black/20 py-0.5'>
-                                  {bridgeLines.map((line, lineIndex) => {
+                                  {bridgeLines.map((line) => {
                                     const lineKey = buildSourceTestKey(
                                       source.source,
                                       source.id,
                                       line.name
                                     );
                                     const lineInfo = videoInfoMap.get(lineKey);
-                                    // 未测出结果时只区分两类：卡整体在重测 → 测速中；
-                                    // 其余就是还没测过，别把状态一直挂在「等待测速」上
+                                    // 只有这条线路的任务在执行时才显示测速中。
                                     const lineTesting =
-                                      !lineInfo &&
+                                      !lineInfo && testingLines.has(lineKey);
+                                    const lineActive =
                                       isCurrentSource &&
-                                      retestingSources.has(cardKey);
-                                    const lineActive = isCurrentSource
-                                      ? line.name === activeLine?.name
-                                      : lineIndex === 0;
+                                      line.name === activeLine?.name;
                                     const lineSpeed =
                                       lineInfo &&
                                       !lineInfo.hasError &&
