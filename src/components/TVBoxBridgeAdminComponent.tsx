@@ -3,6 +3,7 @@
 
 import {
   AlertCircle,
+  BookOpen,
   CheckCircle2,
   Cloud,
   Download,
@@ -27,6 +28,7 @@ import {
 } from '@/lib/tvbox-bridge.shared';
 
 import Toast, { ToastProps } from './Toast';
+import TVBoxBridgeDeployDialog from './TVBoxBridgeDeployDialog';
 
 interface TVBoxBridgeAdminComponentProps {
   config: AdminConfig | null;
@@ -127,6 +129,7 @@ export default function TVBoxBridgeAdminComponent({
   config,
   refreshConfig,
 }: TVBoxBridgeAdminComponentProps) {
+  const [showDeployGuide, setShowDeployGuide] = useState(false);
   const [toast, setToast] = useState<ToastProps | null>(null);
   const notify = (message: string, type: ToastProps['type'] = 'info') =>
     setToast({ message, type, onClose: () => setToast(null) });
@@ -503,6 +506,15 @@ export default function TVBoxBridgeAdminComponent({
           <p>• 同一部影片的多个「线路」在换源面板内切换</p>
           <p>• 配置由桥接自己持久化，这里只在改动时手动加载</p>
         </div>
+        <button
+          type='button'
+          onClick={() => setShowDeployGuide(true)}
+          aria-haspopup='dialog'
+          className='mt-3 inline-flex items-center gap-1.5 rounded text-sm font-medium text-blue-700 underline underline-offset-4 hover:text-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:text-blue-300 dark:hover:text-blue-100'
+        >
+          <BookOpen size={16} aria-hidden='true' />
+          查看部署教程
+        </button>
       </div>
 
       <div className='space-y-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700'>
@@ -993,6 +1005,10 @@ export default function TVBoxBridgeAdminComponent({
         </p>
       </div>
 
+      <TVBoxBridgeDeployDialog
+        open={showDeployGuide}
+        onClose={() => setShowDeployGuide(false)}
+      />
       {toast && <Toast {...toast} />}
     </div>
   );
