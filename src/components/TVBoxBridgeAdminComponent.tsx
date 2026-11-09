@@ -23,6 +23,7 @@ import {
   isTVBoxBridgeLocalSite,
   TVBOX_BRIDGE_NETDISK_PROVIDERS,
   TVBoxBridgeCredentialInfo,
+  TVBoxBridgeDepotInfo,
   TVBoxBridgeSiteInfo,
   TVBoxBridgeStatusInfo,
 } from '@/lib/tvbox-bridge.shared';
@@ -150,10 +151,8 @@ export default function TVBoxBridgeAdminComponent({
   // 配置地址 / 多仓
   const [configUrl, setConfigUrl] = useState('');
   const [loadingConfig, setLoadingConfig] = useState(false);
-  const [depot, setDepot] = useState<{
-    configUrl: string;
-    entries: Array<{ name: string; url: string }>;
-  } | null>(null);
+  const [depot, setDepot] = useState<TVBoxBridgeDepotInfo | null>(null);
+  const [selectedDepotUrl, setSelectedDepotUrl] = useState('');
   const [pickingDepotUrl, setPickingDepotUrl] = useState<string | null>(null);
 
   const [loadingSiteKey, setLoadingSiteKey] = useState<string | null>(null);
@@ -188,6 +187,8 @@ export default function TVBoxBridgeAdminComponent({
     setBaseUrl(bridge.BaseUrl || '');
     setToken(bridge.Token || '');
     setConfigUrl(bridge.ConfigUrl || '');
+    setDepot(bridge.Depot || null);
+    setSelectedDepotUrl(bridge.SelectedDepotUrl || '');
   }, [config]);
 
   // ---------- 初始化：读桥接状态与站点 ----------
@@ -291,6 +292,7 @@ export default function TVBoxBridgeAdminComponent({
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || '加载配置失败');
 
+      setSelectedDepotUrl('');
       if (data.result?.kind === 'depot') {
         setDepot({
           configUrl: data.result.configUrl || configUrl.trim(),
@@ -321,10 +323,24 @@ export default function TVBoxBridgeAdminComponent({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || '载入仓库失败');
-      setDepot(null);
-      setConfigUrl(url);
-      notify(`仓库已载入：${data.result?.siteCount ?? 0} 个站点，${data.result?.liveCount ?? 0} 个直播源`, 'success');
-      if (data.liveSyncError) notify(`直播源读取失败：${data.liveSyncError}`, 'error');
+      if (data.result?.kind === 'depot') {
+        setDepot({
+          configUrl: data.result.configUrl || url,
+          entries: data.result.entries || [],
+        });
+        setSelectedDepotUrl('');
+        notify('这是多仓配置，请继续选择一个仓库', 'info');
+      } else {
+        setSelectedDepotUrl(url);
+        notify(
+          `仓库已载入：${data.result?.siteCount ?? 0} 个站点，${
+            data.result?.liveCount ?? 0
+          } 个直播源`,
+          'success'
+        );
+        if (data.liveSyncError)
+          notify(`直播源读取失败：${data.liveSyncError}`, 'error');
+      }
       await refreshConfig();
       await fetchBridge(true);
     } catch (error) {
@@ -503,6 +519,7 @@ export default function TVBoxBridgeAdminComponent({
           关于 TVBox 桥接
         </h3>
         <div className='space-y-1 text-sm text-blue-800 dark:text-blue-200'>
+          <p>• 该功能目前属于实验性功能，无法保证所有 TVBox 源均可使用</p>
           <p>• 同一部影片的多个「线路」在换源面板内切换</p>
           <p>• 配置由桥接自己持久化，这里只在改动时手动加载</p>
         </div>
@@ -639,12 +656,13 @@ export default function TVBoxBridgeAdminComponent({
             type='text'
             value={configUrl}
             onChange={(e) => setConfigUrl(e.target.value)}
-            placeholder={status?.configUrl || 'https://example.com/tvbox.json'}
+            disabled={loadingConfig || !!pickingDepotUrl}
+            placeholder='请输入 TVBox 配置地址'
             className={inputClass}
           />
           <button
             onClick={loadConfig}
-            disabled={loadingConfig}
+            disabled={loadingConfig || !!pickingDepotUrl}
             className={`${buttonStyles.primary} flex-shrink-0`}
           >
             {loadingConfig ? (
@@ -665,7 +683,9 @@ export default function TVBoxBridgeAdminComponent({
         {depot && (
           <div className='rounded-lg border border-gray-200 dark:border-gray-700'>
             <div className='border-b border-gray-200 px-3 py-2 text-sm font-medium text-gray-900 dark:border-gray-700 dark:text-white'>
-              这是一个多仓配置，请选择仓库
+              {selectedDepotUrl
+                ? '仓库列表，可选择其他仓库切换'
+                : '这是一个多仓配置，请选择仓库'}
             </div>
             <div className='max-h-72 divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800'>
               {depot.entries.map((entry) => (
@@ -676,14 +696,20 @@ export default function TVBoxBridgeAdminComponent({
                   <div className='min-w-0'>
                     <p className='truncate text-sm text-gray-900 dark:text-white'>
                       {entry.name || entry.url}
+                      {selectedDepotUrl === entry.url && (
+                        <span className='ml-2'>
+                          <Badge tone='green'>当前仓库</Badge>
+                        </span>
+                      )}
                     </p>
                     <p className='truncate text-xs text-gray-400'>
                       {entry.url}
                     </p>
                   </div>
                   <button
+                    type='button'
                     onClick={() => pickDepot(entry.url)}
-                    disabled={!!pickingDepotUrl}
+                    disabled={loadingConfig || !!pickingDepotUrl}
                     className={`${buttonStyles.primary} flex-shrink-0`}
                   >
                     {pickingDepotUrl === entry.url ? (

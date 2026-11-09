@@ -9,6 +9,7 @@ import {
   buildTVBoxBridgeSourceValue,
   isTVBoxBridgeLocalSite,
   parseTVBoxBridgeEpisodeCount,
+  TVBoxBridgeDepotInfo,
 } from '@/lib/tvbox-bridge.shared';
 import type { SearchResult } from '@/lib/types';
 import { normalizeApiBaseUrl } from '@/lib/url';
@@ -44,10 +45,8 @@ export interface TVBoxBridgeConfigResult {
   sites: TVBoxBridgeSite[];
 }
 
-export interface TVBoxBridgeDepotResult {
+export interface TVBoxBridgeDepotResult extends TVBoxBridgeDepotInfo {
   kind: 'depot';
-  configUrl: string;
-  entries: Array<{ name: string; url: string }>;
 }
 
 export interface TVBoxBridgeEpisode {
@@ -189,8 +188,60 @@ async function bridgeJson<T>(
   const response = await bridgeFetch(endpoint, path, init);
   if (!response.ok) {
     const text = await response.text().catch(() => '');
+    const isHtml =
+      response.headers.get('content-type')?.includes('text/html') ||
+      /^\s*(?:<!doctype\s+html|<html)/i.test(text);
+    const isCloudflare =
+      /cloudflare/i.test(response.headers.get('server') || '') ||
+      Boolean(response.headers.get('cf-ray')) ||
+      /cloudflare/i.test(text);
+    let detail = '';
+    if (response.status === 530 && isHtml && isCloudflare) {
+      const code = text.match(
+        /(?:error\s*(?:code)?|cf-error-code)[^\d]{0,100}(1\d{3})\b/i
+      )?.[1];
+      const reason =
+        code === '1016'
+          ? '桥接源站 DNS 解析失败'
+          : code === '1033'
+          ? '桥接的 Cloudflare Tunnel 未连接'
+          : 'Cloudflare 无法访问桥接源站';
+      detail = `${reason}${code ? `（错误 ${code}）` : ''}`;
+    } else if (isHtml) {
+      detail = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '';
+    } else {
+      try {
+        const data = JSON.parse(text);
+        detail =
+          typeof data?.error === 'string'
+            ? data.error
+            : typeof data?.message === 'string'
+            ? data.message
+            : '';
+      } catch {
+        detail = text.trim();
+      }
+    }
+    detail = detail
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const reasons: Record<number, string> = {
+      401: '桥接鉴权失败',
+      403: '桥接访问被拒绝',
+      404: '桥接接口不存在',
+      500: '桥接服务内部错误',
+      502: '上游服务响应异常',
+      503: '桥接服务暂不可用',
+      504: '桥接服务响应超时',
+      530: '桥接源站连接失败',
+    };
     throw new Error(
-      `tvbox-bridge ${path} 失败: ${response.status} ${text.slice(0, 200)}`
+      `HTTP ${response.status}：${
+        detail.slice(0, 200) || reasons[response.status] || '桥接请求失败'
+      }`
     );
   }
   return (await response.json()) as T;

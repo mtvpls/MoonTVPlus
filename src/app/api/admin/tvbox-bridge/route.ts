@@ -239,8 +239,15 @@ export async function POST(request: NextRequest) {
       const result = await loadTVBoxBridgeConfig(endpoint, url);
 
       if (result.kind === 'depot') {
-        // 多仓：先选仓，等选定具体仓库后再写 ConfigUrl
-        await patchBridgeConfig({ ConfigUrl: url, SelectedDepotUrl: '' });
+        // 保留多仓地址与列表，选定具体仓库后仍可恢复选择。
+        await patchBridgeConfig({
+          ConfigUrl: url,
+          SelectedDepotUrl: '',
+          Depot: {
+            configUrl: result.configUrl || url,
+            entries: result.entries || [],
+          },
+        });
         await clearTVBoxLiveSources();
         return NextResponse.json({ success: true, result });
       }
@@ -251,6 +258,7 @@ export async function POST(request: NextRequest) {
       await patchBridgeConfig({
         ConfigUrl: url,
         SelectedDepotUrl: '',
+        Depot: null,
         ...catalog,
       });
       let liveSyncError: string | undefined;
@@ -269,11 +277,17 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await loadTVBoxBridgeConfig(endpoint, url);
-      if (result.kind !== 'config') {
-        return NextResponse.json(
-          { error: '该地址仍是多仓配置' },
-          { status: 400 }
-        );
+      if (result.kind === 'depot') {
+        // 多仓可以嵌套，继续展示子仓列表，直到选到具体配置。
+        await patchBridgeConfig({
+          SelectedDepotUrl: '',
+          Depot: {
+            configUrl: result.configUrl || url,
+            entries: result.entries || [],
+          },
+        });
+        await clearTVBoxLiveSources();
+        return NextResponse.json({ success: true, result });
       }
 
       const local = (await getConfig()).TVBoxBridgeConfig;

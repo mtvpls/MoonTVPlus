@@ -420,6 +420,11 @@ export interface AdminConfig {
     ConfigUrl?: string;
     // 多仓：已选定的具体仓库地址
     SelectedDepotUrl?: string;
+    // 多仓列表快照，供管理面板恢复选择与切换仓库
+    Depot?: {
+      configUrl: string;
+      entries: Array<{ name: string; url: string }>;
+    } | null;
     // 已发现的站点及视频源管理设置（key 为桥接 site.key）
     Sites?: Array<{
       key: string;

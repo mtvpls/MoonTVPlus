@@ -68,6 +68,11 @@ export interface TVBoxBridgeStatusInfo {
   } | null;
 }
 
+export interface TVBoxBridgeDepotInfo {
+  configUrl: string;
+  entries: Array<{ name: string; url: string }>;
+}
+
 export interface TVBoxBridgeCredentialInfo {
   ok: boolean;
   configured: boolean;

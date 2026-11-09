@@ -18482,9 +18482,6 @@ const LiveSourceConfig = ({
             </button>
           </div>
         </div>
-        <p className='text-xs text-gray-500 dark:text-gray-400'>
-          启用 TVBox 桥接并加载订阅后，直播源会自动加入此列表。普通列表直接读取，本机代理源通过桥接获取；首次加载代理源可能需要几分钟。
-        </p>
       </div>
 
       {showAddForm && (
