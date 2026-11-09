@@ -504,6 +504,7 @@ interface CollapsibleTabProps {
   onToggle: () => void;
   children: React.ReactNode;
   isParent?: boolean;
+  contentClassName?: string;
 }
 
 const CollapsibleTab = ({
@@ -513,6 +514,7 @@ const CollapsibleTab = ({
   onToggle,
   children,
   isParent = false,
+  contentClassName,
 }: CollapsibleTabProps) => {
   return (
     <div
@@ -554,7 +556,12 @@ const CollapsibleTab = ({
       </button>
 
       {isExpanded && (
-        <div className={isParent ? 'px-0.5 md:px-6 py-4' : 'px-6 py-4'}>
+        <div
+          className={
+            contentClassName ||
+            (isParent ? 'px-0.5 md:px-6 py-4' : 'px-6 py-4')
+          }
+        >
           {children}
         </div>
       )}
@@ -19288,6 +19295,7 @@ function AdminPageClient() {
   const [role, setRole] = useState<'owner' | 'admin' | null>(null);
   const [showResetConfigModal, setShowResetConfigModal] = useState(false);
   const [expandedTabs, setExpandedTabs] = useState<{ [key: string]: boolean }>({
+    viewingSources: false,
     userConfig: false,
     videoSource: false,
     sourceScriptLab: false,
@@ -19325,7 +19333,7 @@ function AdminPageClient() {
   // PC 侧边栏中分组的展开状态
   const [expandedGroups, setExpandedGroups] = useState<{
     [key: string]: boolean;
-  }>({ mediaLibrary: true });
+  }>({ viewingSources: true, mediaLibrary: true });
 
   // 获取管理员配置
   // showLoading 用于控制是否在请求期间显示整体加载骨架。
@@ -19573,13 +19581,53 @@ function AdminPageClient() {
   const navIconClass = 'text-gray-600 dark:text-gray-400';
   const navItems: AdminNavItem[] = [
     {
-      key: 'configFile',
-      title: '配置文件',
-      ownerOnly: true,
-      icon: <FileText size={20} className={navIconClass} />,
-      render: () => (
-        <ConfigFileComponent config={config} refreshConfig={fetchConfig} />
-      ),
+      key: 'viewingSources',
+      title: '观影源配置',
+      icon: <Video size={20} className={navIconClass} />,
+      children: [
+        {
+          key: 'configFile',
+          title: '配置文件',
+          ownerOnly: true,
+          icon: <FileText size={20} className={navIconClass} />,
+          render: () => (
+            <ConfigFileComponent config={config} refreshConfig={fetchConfig} />
+          ),
+        },
+        {
+          key: 'videoSource',
+          title: '视频源配置',
+          icon: <Video size={20} className={navIconClass} />,
+          render: () => (
+            <VideoSourceConfig config={config} refreshConfig={fetchConfig} />
+          ),
+        },
+        {
+          key: 'sourceScriptLab',
+          title: '视频源脚本',
+          icon: <Bot size={20} className={navIconClass} />,
+          render: () => <VideoSourceScriptLab />,
+        },
+        {
+          key: 'tvboxBridge',
+          title: 'TVBox 桥接',
+          icon: <Server size={20} className={navIconClass} />,
+          render: () => (
+            <TVBoxBridgeAdminComponent
+              config={config}
+              refreshConfig={fetchConfig}
+            />
+          ),
+        },
+        {
+          key: 'liveSource',
+          title: '电视直播源配置',
+          icon: <Tv size={20} className={navIconClass} />,
+          render: () => (
+            <LiveSourceConfig config={config} refreshConfig={fetchConfig} />
+          ),
+        },
+      ],
     },
     {
       key: 'siteConfig',
@@ -19629,31 +19677,6 @@ function AdminPageClient() {
       ),
     },
     {
-      key: 'videoSource',
-      title: '视频源配置',
-      icon: <Video size={20} className={navIconClass} />,
-      render: () => (
-        <VideoSourceConfig config={config} refreshConfig={fetchConfig} />
-      ),
-    },
-    {
-      key: 'sourceScriptLab',
-      title: '视频源脚本',
-      icon: <Bot size={20} className={navIconClass} />,
-      render: () => <VideoSourceScriptLab />,
-    },
-    {
-      key: 'tvboxBridge',
-      title: 'TVBox 桥接',
-      icon: <Server size={20} className={navIconClass} />,
-      render: () => (
-        <TVBoxBridgeAdminComponent
-          config={config}
-          refreshConfig={fetchConfig}
-        />
-      ),
-    },
-    {
       key: 'musicConfig',
       title: '音乐配置',
       icon: (
@@ -19691,14 +19714,6 @@ function AdminPageClient() {
       icon: <BookMarked size={20} className={navIconClass} />,
       render: () => (
         <OPDSConfigComponent config={config} refreshConfig={fetchConfig} />
-      ),
-    },
-    {
-      key: 'liveSource',
-      title: '电视直播源配置',
-      icon: <Tv size={20} className={navIconClass} />,
-      render: () => (
-        <LiveSourceConfig config={config} refreshConfig={fetchConfig} />
       ),
     },
     {
@@ -19845,9 +19860,18 @@ function AdminPageClient() {
     },
   ];
 
+  const visibleNavItems = navItems
+    .filter((item) => !item.ownerOnly || role === 'owner')
+    .map((item) => ({
+      ...item,
+      children: item.children?.filter(
+        (child) => !child.ownerOnly || role === 'owner'
+      ),
+    }));
+
   // 根据 key 查找区块（含分组子项）
   const findNavItem = (key: string): AdminNavItem | undefined => {
-    for (const it of navItems) {
+    for (const it of visibleNavItems) {
       if (it.key === key) return it;
       const child = it.children?.find((c) => c.key === key);
       if (child) return child;
@@ -19855,8 +19879,8 @@ function AdminPageClient() {
     return undefined;
   };
 
-  const visibleNavItems = navItems.filter(
-    (it) => !it.ownerOnly || role === 'owner'
+  const viewingSourcesItem = visibleNavItems.find(
+    (item) => item.key === 'viewingSources'
   );
   const activeItem = findNavItem(activeKey);
 
@@ -20009,25 +20033,28 @@ function AdminPageClient() {
 
           {/* 移动端 / 窄屏：保留原有手风琴 */}
           <div className='lg:hidden'>
-          {/* 配置文件标签 - 仅站长可见 */}
-          {role === 'owner' && (
-            <CollapsibleTab
-              title='配置文件'
-              icon={
-                <FileText
-                  size={20}
-                  className='text-gray-600 dark:text-gray-400'
-                />
-              }
-              isExpanded={expandedTabs.configFile}
-              onToggle={() => toggleTab('configFile')}
-            >
-              <ConfigFileComponent
-                config={config}
-                refreshConfig={fetchConfig}
-              />
-            </CollapsibleTab>
-          )}
+          {/* 观影源配置大类 */}
+          <CollapsibleTab
+            title='观影源配置'
+            icon={<Video size={20} className={navIconClass} />}
+            isExpanded={expandedTabs.viewingSources}
+            onToggle={() => toggleTab('viewingSources')}
+            contentClassName='px-0.5 md:px-6 py-4'
+          >
+            <div className='space-y-4'>
+              {viewingSourcesItem?.children?.map((item) => (
+                <CollapsibleTab
+                  key={item.key}
+                  title={item.title}
+                  icon={item.icon}
+                  isExpanded={expandedTabs[item.key]}
+                  onToggle={() => toggleTab(item.key)}
+                >
+                  {item.render?.()}
+                </CollapsibleTab>
+              ))}
+            </div>
+          </CollapsibleTab>
 
           {/* 站点配置标签 */}
           <CollapsibleTab
@@ -20099,43 +20126,6 @@ function AdminPageClient() {
               />
             </CollapsibleTab>
 
-            {/* 视频源配置标签 */}
-            <CollapsibleTab
-              title='视频源配置'
-              icon={
-                <Video size={20} className='text-gray-600 dark:text-gray-400' />
-              }
-              isExpanded={expandedTabs.videoSource}
-              onToggle={() => toggleTab('videoSource')}
-            >
-              <VideoSourceConfig config={config} refreshConfig={fetchConfig} />
-            </CollapsibleTab>
-
-            <CollapsibleTab
-              title='视频源脚本'
-              icon={
-                <Bot size={20} className='text-gray-600 dark:text-gray-400' />
-              }
-              isExpanded={expandedTabs.sourceScriptLab}
-              onToggle={() => toggleTab('sourceScriptLab')}
-            >
-              <VideoSourceScriptLab />
-            </CollapsibleTab>
-
-            <CollapsibleTab
-              title='TVBox 桥接'
-              icon={
-                <Server size={20} className='text-gray-600 dark:text-gray-400' />
-              }
-              isExpanded={expandedTabs.tvboxBridge}
-              onToggle={() => toggleTab('tvboxBridge')}
-            >
-              <TVBoxBridgeAdminComponent
-                config={config}
-                refreshConfig={fetchConfig}
-              />
-            </CollapsibleTab>
-
             <CollapsibleTab
               title='音乐配置'
               icon={
@@ -20196,18 +20186,6 @@ function AdminPageClient() {
                 config={config}
                 refreshConfig={fetchConfig}
               />
-            </CollapsibleTab>
-
-            {/* 电视直播源配置标签 */}
-            <CollapsibleTab
-              title='电视直播源配置'
-              icon={
-                <Tv size={20} className='text-gray-600 dark:text-gray-400' />
-              }
-              isExpanded={expandedTabs.liveSource}
-              onToggle={() => toggleTab('liveSource')}
-            >
-              <LiveSourceConfig config={config} refreshConfig={fetchConfig} />
             </CollapsibleTab>
 
             {/* 网络直播配置标签 */}
