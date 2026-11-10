@@ -1,18 +1,6 @@
 'use client';
 
-import {
-  BadgeCheck,
-  Clock3,
-  Loader2,
-  LogOut,
-  Menu,
-  QrCode,
-  ShieldCheck,
-  SlidersHorizontal,
-  User,
-  Wifi,
-  Volume2,
-} from 'lucide-react';
+import { Loader2, LogOut, Menu, Volume2, Wifi } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   type KeyboardEvent,
@@ -105,9 +93,9 @@ export default function TVMePage() {
       const bridgeUrl = window.MoonTVLocalRemote?.getRemoteUrl?.() || '';
       setLocalRemoteUrl(
         bridgeUrl ||
-        window.__MOONTV_LOCAL_REMOTE_URL ||
-        localStorage.getItem(LOCAL_REMOTE_URL_KEY) ||
-        ''
+          window.__MOONTV_LOCAL_REMOTE_URL ||
+          localStorage.getItem(LOCAL_REMOTE_URL_KEY) ||
+          ''
       );
     };
 
@@ -178,19 +166,19 @@ export default function TVMePage() {
     });
   };
 
-
-
-
-
   if (!ready || !authInfo) {
     return (
       <TVLayout>
-        <section className='mx-auto max-w-5xl rounded-[42px] border border-white/10 bg-slate-950/75 p-12 text-center shadow-2xl shadow-black/60'>
-          <Loader2 className='mx-auto h-16 w-16 animate-spin text-rose-400' />
-          <h1 className='mt-6 text-5xl font-black'>正在读取登录信息</h1>
-          <p className='mt-4 text-2xl text-slate-300'>
-            请稍候，电视端会自动跳转。
-          </p>
+        <section
+          role='status'
+          className='flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-[#19191b] p-6 text-xl text-[#a1a1a6]'
+        >
+          <Loader2
+            className='h-[18px] w-[18px] animate-spin motion-reduce:animate-none'
+            strokeWidth={1.5}
+            aria-hidden='true'
+          />
+          正在读取登录信息
         </section>
       </TVLayout>
     );
@@ -198,199 +186,180 @@ export default function TVMePage() {
 
   return (
     <TVLayout>
-      <section className='mx-auto max-w-6xl overflow-hidden rounded-[42px] border border-white/10 bg-slate-950/75 shadow-2xl shadow-black/60 backdrop-blur-xl'>
-        <div className='relative p-10 md:p-12'>
-          <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(244,63,94,0.25),transparent_34%),radial-gradient(circle_at_85%_0%,rgba(67,56,202,0.28),transparent_30%)]' />
-          <div className='relative grid gap-10 lg:grid-cols-[1fr_340px]'>
-            <div>
-              <div className='inline-flex items-center gap-3 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-5 py-2 text-xl font-bold text-emerald-200'>
-                <BadgeCheck className='h-6 w-6' />
-                已登录电视端
+      <section className='rounded-2xl border border-white/[0.08] bg-[#19191b] p-6 lg:p-8'>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <h1 className='text-4xl font-medium leading-tight lg:text-5xl'>
+            我的账号
+          </h1>
+          <span className='text-lg text-[#a1a1a6]'>已登录</span>
+        </div>
+        <div className='mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]'>
+          <div className='min-w-0'>
+            <div className='flex items-center gap-4'>
+              <div
+                aria-hidden='true'
+                className='flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-[#232325] text-4xl font-medium'
+              >
+                {avatarText}
               </div>
-              <div className='mt-8 flex items-center gap-7'>
-                <div className='flex h-28 w-28 shrink-0 items-center justify-center rounded-[32px] bg-gradient-to-br from-rose-500 to-indigo-600 text-6xl font-black text-white shadow-2xl shadow-rose-950/50'>
-                  {avatarText}
-                </div>
-                <div>
-                  <h1 className='text-6xl font-black tracking-tight text-white md:text-7xl'>
-                    {username}
-                  </h1>
-                  <p className='mt-3 text-2xl text-slate-300'>
-                    欢迎回来，继续享受大屏观影。
-                  </p>
-                </div>
-              </div>
-
-              <div className='mt-10 grid gap-4 md:grid-cols-2'>
-                <div className='rounded-[28px] border border-white/10 bg-white/[0.06] p-6'>
-                  <div className='flex items-center gap-3 text-xl font-bold text-slate-300'>
-                    <ShieldCheck className='h-6 w-6 text-rose-300' />
-                    账号角色
-                  </div>
-                  <div className='mt-4 text-4xl font-black text-white'>
-                    {roleText}
-                  </div>
-                </div>
-                <div className='rounded-[28px] border border-white/10 bg-white/[0.06] p-6'>
-                  <div className='flex items-center gap-3 text-xl font-bold text-slate-300'>
-                    <Clock3 className='h-6 w-6 text-indigo-300' />
-                    登录时间
-                  </div>
-                  <div className='mt-4 text-3xl font-black text-white'>
-                    {formatDateTime(authInfo.timestamp)}
-                  </div>
-                </div>
-              </div>
+              <h2 className='min-w-0 break-all text-3xl font-medium leading-tight lg:text-4xl'>
+                {username}
+              </h2>
             </div>
-
-            <aside className='flex flex-col justify-between rounded-[34px] border border-white/10 bg-black/35 p-7'>
+            <dl className='mt-6 flex flex-wrap gap-x-12 gap-y-4'>
               <div>
-                <div className='flex h-16 w-16 items-center justify-center rounded-3xl bg-white/10'>
-                  <User className='h-9 w-9 text-rose-300' />
-                </div>
-                <h2 className='mt-6 text-4xl font-black'>我的账号</h2>
-                <p className='mt-4 text-xl leading-relaxed text-slate-300'>
-                  当前设备已绑定该账号。登出后会清除电视端会话，并返回扫码登录页。
-                </p>
+                <dt className='text-lg text-[#a1a1a6]'>账号角色</dt>
+                <dd className='mt-1 text-xl'>{roleText}</dd>
               </div>
-
-              <div className='mt-10'>
-                {error && (
-                  <p
-                    role='alert'
-                    className='mb-4 rounded-2xl border border-red-400/40 bg-red-950/50 p-4 text-xl text-red-100'
-                  >
-                    {error}
-                  </p>
-                )}
-                <button
-                  type='button'
-                  onClick={handleLogout}
-                  disabled={loggingOut}
-                  className='tv-focusable flex w-full cursor-pointer items-center justify-center gap-3 rounded-3xl bg-rose-600 px-7 py-5 text-3xl font-black text-white outline-none transition duration-200 hover:bg-rose-500 focus:ring-4 focus:ring-rose-300 disabled:cursor-not-allowed disabled:opacity-70'
-                >
-                  {loggingOut ? (
-                    <Loader2 className='h-8 w-8 animate-spin' />
-                  ) : (
-                    <LogOut className='h-8 w-8' />
-                  )}
-                  {loggingOut ? '正在登出' : '登出'}
-                </button>
+              <div>
+                <dt className='text-lg text-[#a1a1a6]'>登录时间</dt>
+                <dd className='mt-1 text-xl tabular-nums'>
+                  {formatDateTime(authInfo.timestamp)}
+                </dd>
               </div>
-            </aside>
+            </dl>
           </div>
-
-          <div className='relative mt-10 overflow-hidden rounded-[34px] border border-indigo-300/20 bg-indigo-950/35 p-7'>
-            <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_8%_0%,rgba(99,102,241,0.35),transparent_34%),radial-gradient(circle_at_95%_10%,rgba(16,185,129,0.22),transparent_28%)]' />
-            <div className='relative flex flex-col gap-7 lg:flex-row lg:items-start lg:justify-between'>
-              <div className='max-w-2xl'>
-                <div className='inline-flex items-center gap-3 rounded-full border border-emerald-300/25 bg-emerald-400/10 px-4 py-2 text-lg font-black text-emerald-200'>
-                  <Wifi className='h-6 w-6' />
-                  局域网直连
-                </div>
-                <h2 className='mt-5 flex items-center gap-3 text-4xl font-black tracking-tight text-white'>
-                  <QrCode className='h-10 w-10 text-indigo-200' />
-                  手机扫码遥控
-                </h2>
-                <p className='mt-4 text-xl leading-relaxed text-slate-300'>
-                  在同一 Wi‑Fi 下用手机扫描二维码或打开遥控地址。
-                </p>
-
-                {localRemoteUrl ? (
-                  <div className='mt-6 rounded-3xl border border-white/10 bg-black/30 p-5'>
-                    <div className='text-base font-bold text-indigo-200'>遥控地址</div>
-                    <div className='mt-2 break-all font-mono text-lg font-black text-white'>
-                      {localRemoteUrl}
-                    </div>
-                  </div>
-                ) : (
-                  <div className='mt-6 rounded-3xl border border-amber-300/20 bg-amber-400/10 p-5 text-lg leading-relaxed text-amber-100'>
-                    当前页面未检测到 APK 内置局域网遥控服务。请使用新版 APK 打开电视端。
-                  </div>
-                )}
-              </div>
-
-              {localRemoteUrl && (
-                <div
-                  tabIndex={0}
-                  role='img'
-                  aria-label='局域网遥控地址二维码，手机扫码打开遥控器'
-                  className='tv-focusable tv-focusable-light shrink-0 rounded-[32px] border border-white/15 bg-white p-4 shadow-2xl shadow-black/40 outline-none'
-                >
-                  <img
-                    src={`/api/auth/qr/image?data=${encodeURIComponent(localRemoteUrl)}`}
-                    alt='局域网遥控地址二维码'
-                    className='pointer-events-none h-64 w-64 rounded-2xl'
-                    draggable={false}
-                  />
-                  <div className='mt-3 text-center text-base font-black text-slate-950'>
-                    手机扫码打开遥控器
-                  </div>
-                </div>
+          <aside className='flex flex-col justify-end gap-4 border-t border-white/[0.08] pt-6 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0'>
+            <p className='text-lg leading-7 text-[#a1a1a6]'>
+              登出后会清除当前电视的登录状态，并返回扫码登录页
+            </p>
+            {error && (
+              <p role='alert' className='text-lg text-rose-200'>
+                {error}
+              </p>
+            )}
+            <button
+              type='button'
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className='tv-focusable flex min-h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-white/10 bg-[#232325] px-5 py-3 text-xl font-medium outline-none hover:bg-[#303033] disabled:cursor-not-allowed disabled:opacity-60'
+            >
+              {loggingOut ? (
+                <Loader2
+                  className='h-[18px] w-[18px] animate-spin motion-reduce:animate-none'
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                />
+              ) : (
+                <LogOut
+                  className='h-[18px] w-[18px]'
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                />
               )}
-            </div>
-          </div>
+              {loggingOut ? '正在登出' : '登出'}
+            </button>
+          </aside>
+        </div>
+      </section>
 
-          <div className='relative mt-10 rounded-[34px] border border-white/10 bg-black/35 p-7'>
-            <div className='flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between'>
-              <div className='max-w-2xl'>
-                <div className='flex items-center gap-3 text-3xl font-black text-white'>
-                  <SlidersHorizontal className='h-9 w-9 text-rose-300' />
-                  偏好设置
-                </div>
-                <p className='mt-3 text-xl leading-relaxed text-slate-300'>
-                  这些设置保存在当前电视设备上。
+      <section className='mt-6 rounded-2xl border border-white/[0.08] bg-[#19191b] p-6 lg:p-8'>
+        <div className='flex flex-col gap-6 md:flex-row md:items-center md:justify-between'>
+          <div className='min-w-0 flex-1'>
+            <h2 className='text-2xl font-medium lg:text-3xl'>手机扫码遥控</h2>
+            <p className='mt-3 text-lg leading-7 text-[#a1a1a6] lg:text-xl'>
+              手机与电视连接同一 Wi-Fi，扫码或打开遥控地址
+            </p>
+            {localRemoteUrl ? (
+              <div className='mt-6'>
+                <p className='flex items-center gap-2 text-lg text-[#a1a1a6]'>
+                  <Wifi
+                    className='h-[18px] w-[18px]'
+                    strokeWidth={1.5}
+                    aria-hidden='true'
+                  />
+                  局域网遥控地址
+                </p>
+                <p className='mt-2 break-all font-mono text-lg leading-7'>
+                  {localRemoteUrl}
                 </p>
               </div>
+            ) : (
+              <p
+                role='status'
+                className='mt-6 text-lg leading-7 text-[#a1a1a6]'
+              >
+                当前设备未提供局域网遥控地址
+              </p>
+            )}
+          </div>
+          {localRemoteUrl && (
+            <div
+              tabIndex={0}
+              role='img'
+              aria-label='局域网遥控地址二维码，手机扫码打开遥控器'
+              className='tv-focusable tv-focusable-light w-full max-w-64 shrink-0 self-start rounded-2xl bg-white p-4 text-[#141415] outline-none md:self-center'
+            >
+              <img
+                src={`/api/auth/qr/image?data=${encodeURIComponent(
+                  localRemoteUrl
+                )}`}
+                alt='局域网遥控地址二维码'
+                className='pointer-events-none aspect-square w-full'
+                draggable={false}
+              />
+              <p className='mt-3 text-center text-base'>手机扫码打开遥控器</p>
+            </div>
+          )}
+        </div>
+      </section>
 
-              <div className='w-full rounded-[28px] border border-white/10 bg-white/[0.06] p-6 lg:max-w-[560px]'>
-                <div className='flex items-start justify-between gap-5'>
-                  <div>
-                    <h3 className='text-2xl font-black text-white'>
-                      播放页上下键功能
-                    </h3>
-                    <p className='mt-2 text-lg leading-relaxed text-slate-300'>
-                      播放页遥控器 ↑ / ↓ 键执行的操作。
-                    </p>
-                  </div>
-                  <div className='shrink-0 rounded-2xl bg-slate-950/55 px-4 py-2 text-lg font-black text-rose-100'>
-                    {upDownAction === 'wake-menu' ? '唤醒菜单' : '音量控制'}
-                  </div>
-                </div>
-
-                <div
-                  data-tv-preference-up-down-action
-                  onKeyDownCapture={handleUpDownActionKeyDown}
-                  className='mt-5 grid gap-3 sm:grid-cols-2'
-                >
-                  <button
-                    ref={wakeMenuButtonRef}
-                    type='button'
-                    onClick={() => handleUpDownActionChange('wake-menu')}
-                    className={`tv-focusable flex cursor-pointer items-center justify-center gap-3 rounded-2xl px-5 py-4 text-xl font-black outline-none transition focus:ring-4 focus:ring-rose-300 ${
-                      upDownAction === 'wake-menu'
-                        ? 'bg-rose-600 text-white shadow-lg shadow-rose-950/40'
-                        : 'bg-white/10 text-slate-200 hover:bg-white/15'
-                    }`}
-                  >
-                    <Menu className='h-6 w-6' />
-                    唤醒菜单
-                  </button>
-                  <button
-                    ref={volumeButtonRef}
-                    type='button'
-                    onClick={() => handleUpDownActionChange('volume')}
-                    className={`tv-focusable flex cursor-pointer items-center justify-center gap-3 rounded-2xl px-5 py-4 text-xl font-black outline-none transition focus:ring-4 focus:ring-rose-300 ${
-                      upDownAction === 'volume'
-                        ? 'bg-rose-600 text-white shadow-lg shadow-rose-950/40'
-                        : 'bg-white/10 text-slate-200 hover:bg-white/15'
-                    }`}
-                  >
-                    <Volume2 className='h-6 w-6' />
-                    音量控制
-                  </button>
-                </div>
-              </div>
+      <section className='mt-6 rounded-2xl border border-white/[0.08] bg-[#19191b] p-6 lg:p-8'>
+        <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]'>
+          <div>
+            <h2 className='text-2xl font-medium lg:text-3xl'>偏好设置</h2>
+            <p className='mt-3 text-lg leading-7 text-[#a1a1a6]'>
+              保存在当前电视设备上
+            </p>
+          </div>
+          <div className='min-w-0'>
+            <h3 className='text-xl font-medium'>播放页上下键功能</h3>
+            <p className='mt-2 text-lg text-[#a1a1a6]'>
+              选择遥控器上下键执行的操作
+            </p>
+            <div
+              data-tv-preference-up-down-action
+              data-tv-focus-row='horizontal'
+              aria-label='播放页上下键功能'
+              onKeyDownCapture={handleUpDownActionKeyDown}
+              className='mt-5 grid gap-4 sm:grid-cols-2'
+            >
+              <button
+                ref={wakeMenuButtonRef}
+                type='button'
+                aria-pressed={upDownAction === 'wake-menu'}
+                onClick={() => handleUpDownActionChange('wake-menu')}
+                className={`tv-focusable flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-lg border px-4 py-3 text-xl outline-none ${
+                  upDownAction === 'wake-menu'
+                    ? 'border-white/10 bg-[#232325] font-medium text-[#ededed]'
+                    : 'border-transparent text-[#a1a1a6] hover:bg-[#232325]'
+                }`}
+              >
+                <Menu
+                  className='h-[18px] w-[18px]'
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                />
+                唤醒菜单
+              </button>
+              <button
+                ref={volumeButtonRef}
+                type='button'
+                aria-pressed={upDownAction === 'volume'}
+                onClick={() => handleUpDownActionChange('volume')}
+                className={`tv-focusable flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-lg border px-4 py-3 text-xl outline-none ${
+                  upDownAction === 'volume'
+                    ? 'border-white/10 bg-[#232325] font-medium text-[#ededed]'
+                    : 'border-transparent text-[#a1a1a6] hover:bg-[#232325]'
+                }`}
+              >
+                <Volume2
+                  className='h-[18px] w-[18px]'
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                />
+                音量控制
+              </button>
             </div>
           </div>
         </div>

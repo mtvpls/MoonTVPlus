@@ -14,28 +14,33 @@ export default function TVRow({
   onItemMenu?: TVCardMenuHandler;
 }) {
   return (
-    <section className='mt-12'>
-      <div className='mb-5 flex items-end justify-between gap-4'>
+    <section className='mt-8 first:mt-0'>
+      <div className='mb-2 flex items-end justify-between gap-4'>
         <div>
-          <h2 className='text-4xl font-black tracking-tight text-white'>
+          <h2 className='text-2xl font-medium leading-8 text-[#ededed] lg:text-3xl lg:leading-10'>
             {section.title}
           </h2>
           {section.subtitle && (
-            <p className='mt-2 text-xl text-slate-400'>{section.subtitle}</p>
+            <p className='mt-1 text-lg text-[#a1a1a6]'>{section.subtitle}</p>
           )}
         </div>
         {section.href && (
           <Link
             href={section.href}
-            className='flex cursor-pointer items-center gap-1 rounded-full px-4 py-2 text-xl font-semibold text-slate-300 outline-none transition hover:bg-white/10 hover:text-white tv-focusable'
+            className='tv-focusable flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-lg text-[#a1a1a6] outline-none hover:bg-[#232325] hover:text-[#ededed]'
           >
-            查看更多 <ChevronRight className='h-6 w-6' />
+            查看更多{' '}
+            <ChevronRight
+              className='h-[18px] w-[18px]'
+              strokeWidth={1.5}
+              aria-hidden='true'
+            />
           </Link>
         )}
       </div>
       <div
         data-tv-focus-row='horizontal'
-        className='flex gap-5 overflow-x-auto px-5 py-6 [scrollbar-width:none]'
+        className='-mx-2 flex gap-4 overflow-x-auto overscroll-x-contain p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
       >
         {section.items.map((item) => (
           <TVCard

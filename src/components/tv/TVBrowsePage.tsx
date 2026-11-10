@@ -1,20 +1,23 @@
 'use client';
 
-import { Loader2, PlayCircle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+
+import { processImageUrl } from '@/lib/utils';
 
 import TVLayout from './TVLayout';
 import TVRow from './TVRow';
 import { TVItem, TVSection } from './types';
 
-const fallbackPosters = [
-  'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=500&q=80',
-  'https://images.unsplash.com/photo-1524985069026-dd778a71c7b4?auto=format&fit=crop&w=500&q=80',
-  'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=500&q=80',
-];
-
-async function loadDouban(kind: 'movie' | 'tv', tag: string, type: TVItem['type']): Promise<TVItem[]> {
-  const res = await fetch(`/api/douban?type=${kind}&tag=${encodeURIComponent(tag)}&pageSize=12`, { cache: 'no-store' });
+async function loadDouban(
+  kind: 'movie' | 'tv',
+  tag: string,
+  type: TVItem['type']
+): Promise<TVItem[]> {
+  const res = await fetch(
+    `/api/douban?type=${kind}&tag=${encodeURIComponent(tag)}&pageSize=12`,
+    { cache: 'no-store' }
+  );
   if (!res.ok) throw new Error('load failed');
   const data = await res.json();
   return (data.list || []).map((item: TVItem) => ({ ...item, type }));
@@ -31,19 +34,28 @@ export default function TVBrowsePage({
   subtitle: string;
   heroTitle?: string;
   heroSubtitle?: string;
-  sections: Array<{ title: string; subtitle?: string; kind: 'movie' | 'tv'; tag: string; type: TVItem['type']; href?: string }>;
+  sections: Array<{
+    title: string;
+    subtitle?: string;
+    kind: 'movie' | 'tv';
+    tag: string;
+    type: TVItem['type'];
+    href?: string;
+  }>;
 }) {
   const [rows, setRows] = useState<TVSection[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
-    Promise.allSettled(sections.map(async (section) => ({
-      title: section.title,
-      subtitle: section.subtitle,
-      href: section.href,
-      items: await loadDouban(section.kind, section.tag, section.type),
-    }))).then((results) => {
+    Promise.allSettled(
+      sections.map(async (section) => ({
+        title: section.title,
+        subtitle: section.subtitle,
+        href: section.href,
+        items: await loadDouban(section.kind, section.tag, section.type),
+      }))
+    ).then((results) => {
       if (!alive) return;
       const next = results.reduce<TVSection[]>((acc, result) => {
         if (result.status === 'fulfilled' && result.value.items.length > 0) {
@@ -54,36 +66,68 @@ export default function TVBrowsePage({
       setRows(next);
       setLoading(false);
     });
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [sections]);
 
-  const hero = rows[0]?.items[0];
+  const featured = (rows[0]?.items || [])
+    .filter((item) => item.poster)
+    .slice(0, 3);
 
   return (
     <TVLayout>
-      <section className='relative overflow-hidden rounded-[42px] border border-white/10 bg-slate-950/70 p-10 shadow-2xl shadow-black/60'>
-        <div className='absolute inset-0 opacity-35'>
-          {hero?.poster ? (
-            <img src={hero.poster} alt='' className='h-full w-full object-cover blur-sm' />
-          ) : (
-            <img src={fallbackPosters[0]} alt='' className='h-full w-full object-cover blur-sm' />
-          )}
-          <div className='absolute inset-0 bg-gradient-to-r from-black via-black/80 to-transparent' />
+      <section className='flex items-center justify-between gap-8 rounded-2xl border border-white/[0.08] bg-[#19191b] p-6 lg:p-8'>
+        <div className='min-w-0'>
+          <h1 className='text-4xl font-medium leading-tight lg:text-5xl'>
+            {heroTitle || title}
+          </h1>
+          <p className='mt-3 max-w-3xl text-xl leading-8 text-[#a1a1a6]'>
+            {heroSubtitle || subtitle}
+          </p>
+          <p className='mt-5 flex flex-wrap items-center gap-2 text-lg text-[#8d8d93]'>
+            方向键选片
+            <span aria-hidden='true' className='mx-1'>
+              ·
+            </span>
+            <kbd className='rounded border border-white/15 bg-[#232325] px-2 py-1 font-mono text-sm text-[#ededed]'>
+              OK
+            </kbd>
+            查看详情
+          </p>
         </div>
-        <div className='relative max-w-4xl py-12'>
-          <p className='mb-4 inline-flex rounded-full bg-rose-600 px-5 py-2 text-xl font-bold text-white'>TV 专用大屏模式</p>
-          <h1 className='text-7xl font-black tracking-tight text-white drop-shadow-2xl'>{heroTitle || title}</h1>
-          <p className='mt-5 max-w-3xl text-2xl leading-relaxed text-slate-200'>{heroSubtitle || subtitle}</p>
-          <div className='mt-9 inline-flex items-center gap-3 rounded-2xl bg-white px-7 py-4 text-2xl font-black text-black'>
-            <PlayCircle className='h-8 w-8 text-rose-600' />
-            遥控器 OK 键开始浏览
-          </div>
+        <div aria-hidden='true' className='hidden shrink-0 gap-3 md:flex'>
+          {featured.map((item) => (
+            <img
+              key={item.id}
+              src={processImageUrl(item.poster || '')}
+              alt=''
+              width={96}
+              height={144}
+              className='h-36 w-24 rounded-lg bg-[#232325] object-cover'
+            />
+          ))}
         </div>
       </section>
 
       {loading ? (
-        <div className='mt-16 flex items-center justify-center gap-4 text-2xl text-slate-300'>
-          <Loader2 className='h-8 w-8 animate-spin' /> 正在加载大屏内容...
+        <div
+          role='status'
+          className='mt-12 flex items-center justify-center gap-3 text-xl text-[#a1a1a6]'
+        >
+          <Loader2
+            className='h-6 w-6 animate-spin motion-reduce:animate-none'
+            strokeWidth={1.5}
+            aria-hidden='true'
+          />{' '}
+          正在加载影片
+        </div>
+      ) : rows.length === 0 ? (
+        <div
+          role='status'
+          className='mt-8 rounded-2xl border border-white/[0.08] bg-[#19191b] p-8 text-xl text-[#a1a1a6]'
+        >
+          暂无影片，可以稍后再试或使用搜索选片
         </div>
       ) : (
         rows.map((section) => <TVRow key={section.title} section={section} />)

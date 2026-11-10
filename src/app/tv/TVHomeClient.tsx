@@ -134,10 +134,10 @@ export default function TVHomeClient() {
         await Promise.all([
           getAllPlayRecords().catch(() => ({})),
           getAllFavorites().catch(() => ({})),
-          loadDouban('movie', '热门', 'movie'),
-          loadDouban('tv', '热门', 'tv'),
-          loadDouban('tv', '动画', 'tv'),
-          loadDouban('tv', '综艺', 'tv'),
+          loadDouban('movie', '热门', 'movie').catch(() => []),
+          loadDouban('tv', '热门', 'tv').catch(() => []),
+          loadDouban('tv', '动画', 'tv').catch(() => []),
+          loadDouban('tv', '综艺', 'tv').catch(() => []),
         ]);
       if (!alive) return;
 
@@ -152,13 +152,13 @@ export default function TVHomeClient() {
         { title: '我的收藏', subtitle: '最近收藏的内容', items: favoriteItems },
         {
           title: '热门电影',
-          subtitle: '今晚就看这些高热影片',
+          subtitle: '豆瓣热门影片',
           href: '/tv/movie',
           items: hotMovies,
         },
         {
           title: '热门剧集',
-          subtitle: '连续播放更适合电视',
+          subtitle: '豆瓣热门剧集',
           href: '/tv/series',
           items: hotSeries,
         },
@@ -170,7 +170,7 @@ export default function TVHomeClient() {
         },
         {
           title: '综艺推荐',
-          subtitle: '轻松下饭大屏看',
+          subtitle: '热门综艺节目',
           href: '/tv/variety',
           items: variety,
         },
@@ -253,12 +253,23 @@ export default function TVHomeClient() {
   return (
     <TVLayout>
       {loading ? (
-        <div className='mt-16 flex items-center justify-center gap-4 text-2xl text-slate-300'>
-          <Loader2 className='h-8 w-8 animate-spin' /> 正在加载电视首页...
+        <div
+          role='status'
+          className='mt-12 flex items-center justify-center gap-3 text-xl text-[#a1a1a6]'
+        >
+          <Loader2
+            className='h-6 w-6 animate-spin motion-reduce:animate-none'
+            strokeWidth={1.5}
+            aria-hidden='true'
+          />{' '}
+          正在加载影片
         </div>
       ) : empty ? (
-        <div className='rounded-[36px] border border-white/10 bg-white/[0.04] p-10 text-2xl text-slate-300'>
-          暂无首页内容
+        <div
+          role='status'
+          className='rounded-2xl border border-white/[0.08] bg-[#19191b] p-8 text-xl text-[#a1a1a6]'
+        >
+          暂无首页内容，可以使用搜索选片
         </div>
       ) : (
         sections.map((section) => (

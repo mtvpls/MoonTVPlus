@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { twMerge } from 'tailwind-merge';
 
 import { fireTVRemoteKey } from '@/lib/tv-remote-core';
 
@@ -248,7 +249,8 @@ function focusElement(element: HTMLElement) {
     });
     window.requestAnimationFrame(() => {
       const rect = element.getBoundingClientRect();
-      const safeTop = 150;
+      const header = document.querySelector('header');
+      const safeTop = header ? header.getBoundingClientRect().bottom + 24 : 24;
       const safeBottom = window.innerHeight - 96;
 
       if (rect.top < safeTop) {
@@ -307,7 +309,11 @@ function moveSpatialFocus(
   }
 
   if (direction === 'down' && isTopNavigationElement(active)) {
-    const firstContentElement = getContentFocusableElements()[0];
+    const contentElements = getContentFocusableElements();
+    const firstContentElement =
+      contentElements.find((element) =>
+        element.closest('[data-tv-focus-row="horizontal"]')
+      ) || contentElements[0];
     if (firstContentElement) {
       focusElement(firstContentElement);
       return;
@@ -446,7 +452,10 @@ function RemoteButton({
       onPointerCancel={clearRepeat}
       onPointerLeave={clearRepeat}
       onMouseDown={(event) => event.preventDefault()}
-      className={`flex cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white shadow-lg shadow-black/30 outline-none transition hover:bg-white/20 active:scale-95 focus-visible:ring-4 focus-visible:ring-rose-500/70 ${className}`}
+      className={twMerge(
+        'flex cursor-pointer items-center justify-center rounded-lg border border-white/[0.08] bg-[#232325] text-[#ededed] outline-none transition-colors duration-150 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
+        className
+      )}
     >
       {children}
     </button>
@@ -487,6 +496,12 @@ export default function TVVirtualRemote() {
         event.key === 'ArrowLeft' ||
         event.key === 'ArrowRight'
       ) {
+        // 菜单隐藏时，方向键由播放页处理唤出菜单、快进或换台。
+        const playerRoot = document.querySelector<HTMLElement>(
+          '[data-tv-player-root]'
+        );
+        if (playerRoot?.dataset.tvControlsOpen === 'false') return;
+
         // 播放页选集弹窗有自己的方向键导航和焦点陷阱；
         // 这里如果也执行全局空间焦点移动，会导致一次按键移动两格。
         if (document.querySelector('[data-tv-episode-panel]')) {
@@ -579,17 +594,17 @@ export default function TVVirtualRemote() {
   return (
     <aside
       data-tv-remote
-      className='fixed bottom-6 right-6 z-[80] w-[280px] rounded-[34px] border border-white/10 bg-slate-950/88 p-5 text-white shadow-2xl shadow-black/70 backdrop-blur-2xl'
+      className='fixed bottom-6 right-6 z-[80] w-[280px] rounded-2xl border border-white/10 bg-[#19191b] p-4 text-[#ededed]'
     >
       <div className='mb-4 flex items-center justify-between'>
         <div>
-          <div className='text-xl font-black'>虚拟遥控器</div>
-          <div className='text-sm text-slate-400'>F1 打开 / 关闭</div>
+          <div className='text-xl font-medium'>虚拟遥控器</div>
+          <div className='mt-1 text-sm text-[#a1a1a6]'>F1 打开 / 关闭</div>
         </div>
         <RemoteButton
           label='关闭遥控器'
           onClick={() => setOpen(false)}
-          className='h-11 w-11 rounded-full bg-rose-600/90 hover:bg-rose-500'
+          className='h-11 w-11'
         >
           <Power className='h-5 w-5' />
         </RemoteButton>
@@ -642,7 +657,7 @@ export default function TVVirtualRemote() {
         <RemoteButton
           label='确认'
           onClick={() => fireTVRemoteKey('ok')}
-          className='h-16 rounded-full bg-white text-black hover:bg-slate-200'
+          className='h-16 bg-[#ededed] text-[#171717] hover:bg-white'
         >
           <CornerDownLeft className='h-8 w-8' />
         </RemoteButton>
@@ -669,8 +684,8 @@ export default function TVVirtualRemote() {
         <div />
       </div>
 
-      <div className='mt-4 rounded-2xl bg-white/[0.06] p-3 text-center text-sm text-slate-300'>
-        点击按钮会向当前页面发送方向键 / Enter / Esc
+      <div className='mt-4 border-t border-white/[0.08] pt-3 text-center text-sm text-[#a1a1a6]'>
+        方向键选片，确认打开，返回退出
       </div>
     </aside>
   );
