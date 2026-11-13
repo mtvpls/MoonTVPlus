@@ -1,8 +1,19 @@
+/** 备用 OpenList 源（可添加无限条，路径用「源名@路径」指定） */
+export interface OpenListExtraSource {
+  name: string; // 源名字，唯一、非空、不含 @
+  url: string; // OpenList 服务器地址
+  username: string;
+  password: string;
+}
+
 export interface AdminConfig {
   ConfigSubscribtion: {
     URL: string;
     AutoUpdate: boolean;
     LastCheck: string;
+    // 拉取配置代理：拉取配置订阅时使用的 HTTP 代理，留空则回退到环境变量
+    // CONFIG_SUBSCRIPTION_PROXY
+    Proxy?: string;
   };
   ConfigFile: string;
   SiteConfig: {
@@ -164,16 +175,13 @@ export interface AdminConfig {
   };
   OpenListConfig?: {
     Enabled: boolean; // 是否启用私人影库功能
-    URL: string; // OpenList 服务器地址
+    URL: string; // 主 OpenList 服务器地址
     Username: string; // 账号（用于登录获取Token）
     Password: string; // 密码（用于登录获取Token）
     RootPath?: string; // 旧字段：根目录路径（向后兼容，迁移后删除）
-    RootPaths?: string[]; // 新字段：多根目录路径列表
-    OfflineDownloadPath: string; // 离线下载目录，默认 "/"
-    OfflineDownloadUseCustomSource?: boolean; // 离线下载是否使用独立 OpenList 源
-    OfflineDownloadURL?: string; // 独立离线下载 OpenList 服务器地址
-    OfflineDownloadUsername?: string; // 独立离线下载 OpenList 账号
-    OfflineDownloadPassword?: string; // 独立离线下载 OpenList 密码
+    RootPaths?: string[]; // 根目录路径列表，支持「源名@路径」
+    ExtraSources?: OpenListExtraSource[]; // 备用 OpenList 源列表
+    OfflineDownloadPath: string; // 离线下载目录，支持「源名@路径」，默认 "/"
     LastRefreshTime?: number; // 上次刷新时间戳
     ResourceCount?: number; // 资源数量
     ScanInterval?: number; // 定时扫描间隔（分钟），0表示关闭，最低60分钟
@@ -181,7 +189,8 @@ export interface AdminConfig {
     DisableVideoPreview?: boolean; // 禁用预览视频，直接返回直连链接
     /**
      * 路径元信息（最长前缀匹配 folder 路径）
-     * key: 规范化路径前缀，如 /videos 可匹配 /videos/某影片
+     * key: 规范化路径前缀，如 /videos 可匹配 /videos/某影片；
+     *      也可写「源名@/videos」只对指定源生效（无前缀则对所有源生效）
      */
     PathMeta?: {
       [path: string]: {
@@ -426,6 +435,8 @@ export interface AdminConfig {
       refillMissingEpisodes?: boolean;
       /** 自定义集数提取正则（留空用内置规则，首个捕获组作为集数） */
       episodeRegex?: string;
+      /** 覆盖父目录：留空用「离线下载目录」，填写后为「该路径/番剧名」，可用「源名@」指定备用源 */
+      downloadPath?: string;
       lastCheckTime: number;
       lastEpisode: number;
       createdAt: number;

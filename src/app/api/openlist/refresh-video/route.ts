@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { requireFeaturePermission } from '@/lib/permissions';
-import { OpenListClient } from '@/lib/openlist.client';
+import { resolveFolderSource } from '@/lib/openlist-sources';
 import { invalidateVideoInfoCache } from '@/lib/openlist-cache';
 
 export const runtime = 'nodejs';
@@ -43,16 +43,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'OpenList 未配置或未启用' }, { status: 400 });
     }
 
-    // folder 已经是完整路径，直接使用
-    const folderPath = folder;
-    const client = new OpenListClient(
-      openListConfig.URL,
-      openListConfig.Username,
-      openListConfig.Password
-    );
+    // folder 是完整路径，可能带「源名@」前缀
+    const resolved = resolveFolderSource(config, folder);
+    if (!resolved) {
+      return NextResponse.json({ error: 'OpenList 未配置' }, { status: 400 });
+    }
 
-    // 清除缓存
-    invalidateVideoInfoCache(folderPath);
+    // 缓存键用带源前缀的完整路径（与 detail 路由保持一致）
+    invalidateVideoInfoCache(folder);
 
     return NextResponse.json({
       success: true,

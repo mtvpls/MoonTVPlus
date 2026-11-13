@@ -5,7 +5,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
-import { OpenListClient } from '@/lib/openlist.client';
+import {
+  createClientForSource,
+  resolveFolderSource,
+} from '@/lib/openlist-sources';
 import {
   getCachedOpenListProxyUrl,
   setCachedOpenListProxyUrl,
@@ -111,7 +114,7 @@ async function getFinalUrl(url: string, maxRedirects = 5): Promise<string> {
  * 解析文件的最终播放 URL（优先视频预览流，失败降级到直连），并跟随重定向
  */
 async function resolveFinalPlayUrl(
-  client: OpenListClient,
+  client: ReturnType<typeof createClientForSource>,
   filePath: string,
   openListConfig: any
 ): Promise<string> {
@@ -243,10 +246,19 @@ export async function GET(
       return NextResponse.json({ error: 'OpenList 未配置或未启用' }, { status: 400 });
     }
 
+    // folderName 是 metainfo 中的完整路径，可能带「源名@」前缀，解析出源与真实路径
+    const resolved = resolveFolderSource(config, folderName);
+    if (!resolved) {
+      return NextResponse.json({ error: 'OpenList 未配置' }, { status: 400 });
+    }
+    const { source } = resolved;
+    const folderPath = resolved.path;
+
     // 解析路径元信息：仅允许开启了代理播放的路径走服务器代理
-    const { resolvePathMeta } = await import('@/lib/openlist-path-meta');
-    const pathMetaResolved = resolvePathMeta(
-      folderName,
+    const { resolvePathMetaForSource } = await import('@/lib/openlist-path-meta');
+    const pathMetaResolved = resolvePathMetaForSource(
+      source.name,
+      folderPath,
       openListConfig.PathMeta
     );
     if (!pathMetaResolved.proxyPlay) {
@@ -256,17 +268,14 @@ export async function GET(
       );
     }
 
-    // folderName 为 metainfo 中的完整路径，直接拼接文件路径
-    const filePath = `${folderName}/${fileName}`;
+    // 真实路径用于调用 OpenList API，带源前缀的完整路径作为代理缓存键（跨源不串扰）
+    const filePath = `${folderPath}/${fileName}`;
+    const cacheKey = `${folderName}/${fileName}`;
 
-    const client = new OpenListClient(
-      openListConfig.URL,
-      openListConfig.Username,
-      openListConfig.Password
-    );
+    const client = createClientForSource(source);
 
     // 1. 优先使用缓存的最终播放 URL
-    let finalUrl = getCachedOpenListProxyUrl(filePath);
+    let finalUrl = getCachedOpenListProxyUrl(cacheKey);
 
     // 2. 缓存未命中：解析最终播放 URL 并写入缓存
     if (!finalUrl || !finalUrl.trim()) {
@@ -278,7 +287,7 @@ export async function GET(
         );
       }
       setCachedOpenListProxyUrl(
-        filePath,
+        cacheKey,
         finalUrl,
         pathMetaResolved.proxyCacheMinutes
       );
@@ -314,7 +323,7 @@ export async function GET(
           );
         }
         setCachedOpenListProxyUrl(
-          filePath,
+          cacheKey,
           finalUrl,
           pathMetaResolved.proxyCacheMinutes
         );

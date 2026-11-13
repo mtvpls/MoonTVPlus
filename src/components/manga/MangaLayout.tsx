@@ -28,7 +28,7 @@ const tabs: MediaShellTab[] = [
 
 // 阅读页内容区样式：保持改造前的原值，避免 /manga/read 布局回归
 const READER_MAIN_CLASS =
-  'pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-[calc(6rem+env(safe-area-inset-top))] px-0 pb-24 sm:pb-28 lg:pb-10';
+  'pt-[calc(5rem+var(--safe-top))] sm:pt-[calc(6rem+var(--safe-top))] px-0 pb-24 sm:pb-28 lg:pb-10';
 
 function getMeta(
   pathname: string,

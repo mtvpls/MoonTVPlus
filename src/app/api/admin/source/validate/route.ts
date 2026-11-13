@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { API_CONFIG } from '@/lib/config';
+import { parseJsonLosslessIntegers } from '@/lib/json';
 
 export const runtime = 'nodejs';
 
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
               throw new Error(`HTTP ${response.status}`);
             }
 
-            const data = await response.json() as any;
+            const data = parseJsonLosslessIntegers<any>(await response.text());
 
             // 检查结果是否有效
             let status: 'valid' | 'no_results' | 'invalid';

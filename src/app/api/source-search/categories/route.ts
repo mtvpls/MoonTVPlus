@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { API_CONFIG, getAvailableApiSites, getConfig } from '@/lib/config';
+import { parseJsonLosslessIntegers } from '@/lib/json';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
@@ -57,7 +58,9 @@ export async function GET(request: NextRequest) {
       throw new Error('获取分类列表失败');
     }
 
-    const classData: CmsClassResponse = await classResponse.json();
+    const classData = parseJsonLosslessIntegers<CmsClassResponse>(
+      await classResponse.text()
+    );
 
     if (!classData.class || !Array.isArray(classData.class)) {
       return NextResponse.json({

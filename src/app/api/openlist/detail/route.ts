@@ -5,7 +5,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { requireFeaturePermission } from '@/lib/permissions';
-import { OpenListClient } from '@/lib/openlist.client';
+import {
+  createClientForSource,
+  resolveFolderSource,
+} from '@/lib/openlist-sources';
 import {
   getCachedVideoInfo,
   setCachedVideoInfo,
@@ -51,16 +54,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'OpenList 未配置或未启用' }, { status: 400 });
     }
 
-    // folderName 已经是完整路径，直接使用
-    const folderPath = folderName;
-    const client = new OpenListClient(
-      openListConfig.URL,
-      openListConfig.Username,
-      openListConfig.Password
-    );
+    // folderName 是完整路径，可能带「源名@」前缀，解析出源与真实路径
+    const resolved = resolveFolderSource(config, folderName);
+    if (!resolved) {
+      return NextResponse.json({ error: 'OpenList 未配置' }, { status: 400 });
+    }
+    const { source } = resolved;
+    const folderPath = resolved.path;
+    // 缓存键用带源前缀的完整路径，避免不同源的相同路径互相覆盖
+    const cacheKey = folderName;
+    const client = createClientForSource(source);
 
     // 1. 尝试读取缓存的 videoinfo.json
-    let videoInfo: VideoInfo | null = getCachedVideoInfo(folderPath);
+    let videoInfo: VideoInfo | null = getCachedVideoInfo(cacheKey);
 
     if (!videoInfo) {
       // 2. 尝试从 OpenList 读取 videoinfo.json
@@ -82,7 +88,7 @@ export async function GET(request: NextRequest) {
 
           // 缓存
           if (videoInfo) {
-            setCachedVideoInfo(folderPath, videoInfo);
+            setCachedVideoInfo(cacheKey, videoInfo);
           }
         }
       } catch (error) {
@@ -138,7 +144,7 @@ export async function GET(request: NextRequest) {
       }
 
       // 仅缓存到内存，不再持久化到 OpenList
-      setCachedVideoInfo(folderPath, videoInfo);
+      setCachedVideoInfo(cacheKey, videoInfo);
     }
 
     // 4. 获取视频文件列表（不获取播放链接，使用懒加载）
@@ -236,9 +242,10 @@ export async function GET(request: NextRequest) {
         return a.fileName.localeCompare(b.fileName);
       });
 
-    const { resolvePathMeta } = await import('@/lib/openlist-path-meta');
-    const pathMetaResolved = resolvePathMeta(
-      folderName,
+    const { resolvePathMetaForSource } = await import('@/lib/openlist-path-meta');
+    const pathMetaResolved = resolvePathMetaForSource(
+      source.name,
+      folderPath,
       openListConfig.PathMeta
     );
 

@@ -93,6 +93,10 @@ jobs:
           fi
 
       - name: Update wrangler.toml with environment variables
+        env:
+          # VARS 支持多行 KEY=VALUE；用 env 传递，避免多行写入 $GITHUB_ENV 时报错。
+          # 同时兼容仓库变量(vars.VARS)与仓库密钥(secrets.VARS)。
+          VARS: ${{ vars.VARS || secrets.VARS }}
         run: |
           # Function to append variable to wrangler.toml if it has a value
           append_var() {
@@ -140,6 +144,39 @@ jobs:
           append_var WATCH_ROOM_EXTERNAL_SERVER_AUTH "${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_AUTH }}"
           append_var WATCH_ROOM_EXTERNAL_SERVER_URL "${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_URL }}"
           append_var WATCH_ROOM_SERVER_TYPE "${{ secrets.WATCH_ROOM_SERVER_TYPE }}"
+
+          # 追加自定义变量：VARS 里每行形如 KEY=VALUE，自动转成 TOML 的 KEY = "VALUE"
+          # 等号两边有无空格均可：KEY=VALUE / KEY= VALUE / KEY =VALUE / KEY = VALUE
+          # 例：ENABLE_TVBOX_SUBSCRIBE=true  ->  ENABLE_TVBOX_SUBSCRIBE = "true"
+          if [ -n "$VARS" ]; then
+            printf '%s\n' "$VARS" | while IFS= read -r line; do
+              # 兼容 Windows(CRLF) 行尾
+              line="${line%$'\r'}"
+              # 去掉首尾空白
+              line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+              # 跳过空行和注释
+              if [ -z "$line" ]; then continue; fi
+              case "$line" in \#*) continue ;; esac
+              # 仅处理包含 = 的行
+              case "$line" in
+                *=*) ;;
+                *) echo "⚠️ 跳过非法行（缺少 =）: $line"; continue ;;
+              esac
+              # 以第一个 = 分割，无论等号两边有无空格
+              key="$(printf '%s' "${line%%=*}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+              value="$(printf '%s' "${line#*=}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+              if [ -z "$key" ]; then echo "⚠️ 跳过非法行（缺少变量名）: $line"; continue; fi
+              # 去掉用户自带的包裹引号
+              value="${value%\"}"; value="${value#\"}"
+              # 转义 TOML 基本字符串里的 \ 和 "
+              value="$(printf '%s' "$value" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+              # 变量名含裸键不允许的字符（空格等）时，用引号包裹保证合法
+              case "$key" in
+                *[!A-Za-z0-9_-]*) printf '"%s" = "%s"\n' "$key" "$value" >> wrangler.toml ;;
+                *) printf '%s = "%s"\n' "$key" "$value" >> wrangler.toml ;;
+              esac
+            done
+          fi
           
           echo "Updated wrangler.toml:"
           cat wrangler.toml

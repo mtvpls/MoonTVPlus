@@ -11,6 +11,7 @@ export const runtime = 'nodejs';
 // 支持的操作类型
 type Action =
   | 'add'
+  | 'update'
   | 'disable'
   | 'enable'
   | 'delete'
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest) {
     // 基础校验
     const ACTIONS: Action[] = [
       'add',
+      'update',
       'disable',
       'enable',
       'delete',
@@ -118,6 +120,28 @@ export async function POST(request: NextRequest) {
           from: 'custom',
           disabled: false,
         });
+        break;
+      }
+      case 'update': {
+        const { key, name, api, detail } = body as {
+          key?: string;
+          name?: string;
+          api?: string;
+          detail?: string;
+        };
+        if (!key || !name || !api) {
+          return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
+        }
+        const entry = adminConfig.SourceConfig.find((s) => s.key === key);
+        if (!entry)
+          return NextResponse.json({ error: '源不存在' }, { status: 404 });
+        // 配置文件中的源由配置合并逻辑覆盖，不允许编辑
+        if (entry.from === 'config') {
+          return NextResponse.json({ error: '该源不可编辑' }, { status: 400 });
+        }
+        entry.name = name;
+        entry.api = api;
+        entry.detail = detail;
         break;
       }
       case 'disable': {

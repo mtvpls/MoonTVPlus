@@ -63,7 +63,7 @@ export default function MediaShell({
     <div className={cn('min-h-screen', LIBRARY_PAGE, LIBRARY_TEXT)}>
       <header
         className='fixed inset-x-0 top-0 z-40 border-b border-library-edge bg-library-paper/95 backdrop-blur-none dark:border-library-night-edge dark:bg-library-night/95'
-        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        style={{ paddingTop: 'var(--safe-top)' }}
       >
         <div className='mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:h-16 sm:px-6'>
           <div className='flex min-w-0 flex-1 items-center gap-2'>
@@ -148,7 +148,7 @@ export default function MediaShell({
           'mx-auto max-w-7xl',
           reader
             ? reader.mainClassName
-            : 'px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-[calc(5rem+env(safe-area-inset-top))] sm:px-6 sm:pt-[calc(6rem+env(safe-area-inset-top))] lg:pb-10'
+            : 'px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-[calc(5rem+var(--safe-top))] sm:px-6 sm:pt-[calc(6rem+var(--safe-top))] lg:pb-10'
         )}
       >
         {children}

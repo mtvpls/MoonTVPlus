@@ -277,6 +277,7 @@ export default function PlayRecordsPanel({
                       origin={record.origin}
                       playTime={record.play_time}
                       totalTime={record.total_time}
+                      isDuanju={Boolean(record.is_duanju)}
                     />
                     {editMode && (
                       <button

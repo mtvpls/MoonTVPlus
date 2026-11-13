@@ -2,9 +2,10 @@
 'use client';
 
 import { AlertCircle, FlaskConical, Loader2, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import OpenListPathInput from '@/components/OpenListPathInput';
 import {
   buildFilterTextFromRecognition,
   type FansubRecognition,
@@ -22,6 +23,7 @@ import {
   type AnimeFansubPreset,
 } from '@/lib/anime-filter-presets';
 import { AdminConfig } from '@/lib/admin.types';
+import { getOpenListSources, MAIN_SOURCE_NAME } from '@/lib/openlist-sources';
 import {
   AnimeSubscription,
   AnimeSubscriptionDownloadTool,
@@ -212,7 +214,14 @@ export default function AnimeSubscriptionComponent({
     onePerEpisode: false,
     refillMissingEpisodes: false,
     episodeRegex: '',
+    downloadPath: '',
   });
+
+  // 可选的 OpenList 源名（主源在前），供「覆盖路径」选源
+  const sourceNames = useMemo(() => {
+    const names = getOpenListSources(config).map((item) => item.name);
+    return names.length ? names : [MAIN_SOURCE_NAME];
+  }, [config]);
 
   // 加载配置
   useEffect(() => {
@@ -235,6 +244,7 @@ export default function AnimeSubscriptionComponent({
       onePerEpisode: false,
       refillMissingEpisodes: false,
       episodeRegex: '',
+      downloadPath: '',
     });
     setEditingSubscription(null);
     setShowAddForm(false);
@@ -318,6 +328,7 @@ export default function AnimeSubscriptionComponent({
       onePerEpisode: Boolean(sub.onePerEpisode),
       refillMissingEpisodes: Boolean(sub.refillMissingEpisodes),
       episodeRegex: sub.episodeRegex || '',
+      downloadPath: sub.downloadPath || '',
     });
     setRecognizeError('');
     setRecognition(null);
@@ -602,6 +613,13 @@ export default function AnimeSubscriptionComponent({
     }
   };
 
+  /** 「覆盖路径」填写时的实际保存目录（覆盖父目录 + 番剧名） */
+  const formatSavePath = (sub: AnimeSubscription) => {
+    const raw = (sub.downloadPath || '').trim();
+    if (!raw) return '';
+    return `${raw.replace(/\/+$/, '')}/${sub.title}/`;
+  };
+
   const formatTime = (timestamp: number) => {
     if (!timestamp) return '从未';
     const now = Date.now();
@@ -660,7 +678,7 @@ export default function AnimeSubscriptionComponent({
           <AlertCircle className='w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5' />
           <div className='text-sm text-blue-800 dark:text-blue-200 space-y-1'>
             <p>• 定时任务会自动检查订阅更新</p>
-            <p>• 下载路径：OpenList离线下载根目录/番剧名称/</p>
+            <p>• 下载路径：默认「OpenList 离线下载根目录/番剧名称/」，可用订阅里的「覆盖路径」改写父目录（支持「源名@路径」指定备用源）</p>
             <p>
               • 过滤/排除支持 <code className='text-xs'>&amp;</code>（且）、
               <code className='text-xs'>|</code>（或）、
@@ -985,6 +1003,21 @@ export default function AnimeSubscriptionComponent({
                 </p>
               </div>
             </div>
+            <div>
+              <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                覆盖路径
+              </label>
+              <OpenListPathInput
+                value={formData.downloadPath}
+                onChange={(value) => setFormData({ ...formData, downloadPath: value })}
+                sourceNames={sourceNames}
+                placeholder='/anime'
+                fieldClass='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500'
+              />
+              <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                可选；留空用「离线下载目录/番剧名称」，填写后为「该路径/番剧名称」（源按左侧选择，默认主源）
+              </p>
+            </div>
             <div className='flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap'>
               <div className='flex items-center gap-3'>
                 <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>
@@ -1078,6 +1111,9 @@ export default function AnimeSubscriptionComponent({
                     {sub.excludeText ? <p>排除条件：{sub.excludeText}</p> : null}
                     {sub.episodeRegex ? <p>集数正则：{sub.episodeRegex}</p> : null}
                     <p>当前集数：第 {sub.lastEpisode} 集</p>
+                    {sub.downloadPath ? (
+                      <p>覆盖路径：{sub.downloadPath}（保存到 {formatSavePath(sub)}）</p>
+                    ) : null}
                     <p>上次检查：{formatTime(sub.lastCheckTime)}</p>
                   </div>
                 </div>
@@ -1158,6 +1194,9 @@ export default function AnimeSubscriptionComponent({
                     <p className='break-all'>集数正则：{sub.episodeRegex}</p>
                   ) : null}
                   <p>集数：第 {sub.lastEpisode} 集 · {formatTime(sub.lastCheckTime)}</p>
+                  {sub.downloadPath ? (
+                    <p className='break-all'>保存：{formatSavePath(sub)}</p>
+                  ) : null}
                 </div>
                 <div className='flex items-center gap-2 pt-1'>
                   <button

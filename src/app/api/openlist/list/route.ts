@@ -13,8 +13,9 @@ import {
 } from '@/lib/openlist-cache';
 import {
   listPathMetaCategories,
-  resolvePathMeta,
+  resolvePathMetaForSource,
 } from '@/lib/openlist-path-meta';
+import { resolveSourcePath } from '@/lib/openlist-sources';
 import { getTMDBImageUrl } from '@/lib/tmdb.search';
 
 export const runtime = 'nodejs';
@@ -130,7 +131,13 @@ export async function GET(request: NextRequest) {
     let allVideos = Object.entries(metaInfo.folders)
       .filter(([, info]) => includeFailed || !info.failed)
       .map(([key, info]) => {
-        const pathMetaResolved = resolvePathMeta(info.folderName, pathMeta);
+        // 解析 folderName 的「源名@」前缀，PathMeta 按「真实路径 + 源」匹配
+        const resolvedPath = resolveSourcePath(config, info.folderName);
+        const pathMetaResolved = resolvePathMetaForSource(
+          resolvedPath?.source.name,
+          resolvedPath?.path || info.folderName,
+          pathMeta
+        );
         return {
           id: key,
           folder: info.folderName,

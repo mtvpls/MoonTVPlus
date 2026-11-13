@@ -1,7 +1,7 @@
 name = "moontv-plus"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
-main = ".open-next/worker.js"
+main = "./cloudflare-worker.ts"
 minify = true
 
 # 静态资源配置
@@ -16,6 +16,27 @@ binding = "DB"
 database_name = "moontvplus"
 database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 
+# 观影室的 Durable Object。
+# 单个 hub DO 装下所有房间：客户端是先建连、后 emit room:create/join，
+# 建连那一刻拿不到 roomId，所以没法按房间做 idFromName 路由。
+[[durable_objects.bindings]]
+name = "WATCH_ROOM"
+class_name = "WatchRoomHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["WatchRoomHub"]
+
+# 定时任务（对齐 vercel.json 的 "0 1 * * *"）。
+# 触发器要想生效，入口必须导出 scheduled —— 见 cloudflare-worker.ts。
+[triggers]
+crons = ["0 1 * * *"]
+
+# 注意：[vars] 必须留在文件最后。
+# cloudflare-deploy.yml 是用 `echo >> wrangler.toml` 追加环境变量的，
+# 追加的变量会落在文件末尾 —— 只有 [vars] 在最后它们才会进 [vars]。
 [vars]
 NODE_ENV = "production"
 BUILD_TARGET = "cloudflare"
+# cron 路由等任务真正结束再返回（CF 上不需要 Vercel 那套"先返回 202 再后台跑"）
+CRON_WAIT_FOR_COMPLETION = "true"

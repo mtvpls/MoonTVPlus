@@ -13,7 +13,7 @@ import { db, getStorage } from '@/lib/db';
 import { EmailService } from '@/lib/email.service';
 import {
   addOpenListOfflineDownload,
-  getOfflineDownloadBasePath,
+  getOfflineDownloadTarget,
   joinOpenListPath,
 } from '@/lib/openlist-offline-download';
 import { AnimeSubscription, AnimeSubscriptionDownloadTool } from '@/types/anime-subscription';
@@ -439,17 +439,22 @@ export async function searchACG(
 
 /**
  * 添加离线下载任务
+ * folderName 为订阅标题，实际目录 = 父目录/订阅标题。
+ * 父目录默认取「离线下载目录」，订阅里填了「覆盖路径」(basePathOverride) 时以它为准。
  */
 export async function addOfflineDownload(
   torrentUrl: string,
-  downloadPath: string
+  folderName: string,
+  basePathOverride?: string
 ) {
   const config = await getConfig();
   const downloadTool = getAnimeSubscriptionDownloadTool(
     config.AnimeSubscriptionConfig?.DownloadTool
   );
 
-  await addOpenListOfflineDownload(config, downloadPath, torrentUrl, downloadTool);
+  const target = getOfflineDownloadTarget(config, undefined, basePathOverride);
+  const downloadPath = joinOpenListPath(target.basePath, folderName);
+  await addOpenListOfflineDownload(target.source, downloadPath, torrentUrl, downloadTool);
 }
 
 /**
@@ -584,7 +589,7 @@ async function sendAnimeUpdateNotifications(
  */
 export async function checkSubscription(subscription: AnimeSubscription) {
   const config = await getConfig();
-  if (!config.OpenListConfig?.OfflineDownloadPath) {
+  if (!subscription.downloadPath && !config.OpenListConfig?.OfflineDownloadPath) {
     throw new Error('OpenList 离线下载路径未配置');
   }
 
@@ -629,11 +634,11 @@ export async function checkSubscription(subscription: AnimeSubscription) {
       continue;
     }
     try {
-      const downloadPath = joinOpenListPath(
-        getOfflineDownloadBasePath(config),
-        subscription.title
+      await addOfflineDownload(
+        item.torrentUrl,
+        subscription.title,
+        subscription.downloadPath
       );
-      await addOfflineDownload(item.torrentUrl, downloadPath);
 
       // 成功后更新 lastEpisode
       subscription.lastEpisode = item.episode;

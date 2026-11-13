@@ -3,6 +3,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
+import {
+  createClientForSource,
+  resolveFolderSource,
+} from '@/lib/openlist-sources';
 import { hasFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
@@ -90,8 +94,6 @@ export async function GET(
       });
     }
 
-    const rootPath = openListConfig.RootPath || '/';
-
     // 读取元数据
     const { getCachedMetaInfo, setCachedMetaInfo } = await import('@/lib/openlist-cache');
     const { db } = await import('@/lib/db');
@@ -128,7 +130,7 @@ export async function GET(
     if (wd) {
       // 如果是 detail 模式且有搜索词，返回第一个匹配结果的详情
       if (ac === 'detail') {
-        return await handleDetailBySearch(metaInfo, wd, openListConfig, rootPath, requestToken, request);
+        return await handleDetailBySearch(metaInfo, wd, config, requestToken, request);
       }
       return await handleSearch(metaInfo, wd, request);
     }
@@ -146,7 +148,7 @@ export async function GET(
           list: [],
         });
       }
-      return await handleDetail(metaInfo, ids, openListConfig, rootPath, requestToken, request);
+      return await handleDetail(metaInfo, ids, config, requestToken, request);
     }
 
     // 列表模式（返回所有）
@@ -212,8 +214,7 @@ async function handleSearch(metaInfo: any, query: string, request: NextRequest) 
 async function handleDetailBySearch(
   metaInfo: any,
   query: string,
-  openListConfig: any,
-  rootPath: string,
+  config: any,
   token: string,
   request: NextRequest
 ) {
@@ -240,7 +241,7 @@ async function handleDetailBySearch(
 
   // 使用找到的 folderKey 调用详情处理函数
   const [folderKey] = matchedEntry;
-  return await handleDetail(metaInfo, folderKey, openListConfig, rootPath, token, request);
+  return await handleDetail(metaInfo, folderKey, config, token, request);
 }
 
 /**
@@ -249,8 +250,7 @@ async function handleDetailBySearch(
 async function handleDetail(
   metaInfo: any,
   folderKey: string,
-  openListConfig: any,
-  rootPath: string,
+  config: any,
   token: string,
   request: NextRequest
 ) {
@@ -270,22 +270,32 @@ async function handleDetail(
     });
   }
 
-  // 获取文件夹名称和路径
+  // 获取文件夹名称和路径（folderName 可能带「源名@」前缀，需解析出源与真实路径）
   const folderName = folderMeta.folderName;
-  const folderPath = `${rootPath}${rootPath.endsWith('/') ? '' : '/'}${folderName}`;
+  const resolved = resolveFolderSource(config, folderName);
+  if (!resolved) {
+    return NextResponse.json({
+      code: 0,
+      msg: 'OpenList 未配置',
+      page: 1,
+      pagecount: 0,
+      limit: 0,
+      total: 0,
+      list: [],
+    });
+  }
+  const { source } = resolved;
+  const folderPath = resolved.path;
 
   // 调用 OpenList 客户端获取视频文件列表
-  const { OpenListClient } = await import('@/lib/openlist.client');
   const { getCachedVideoInfo, setCachedVideoInfo } = await import('@/lib/openlist-cache');
   const { formatEpisodeDisplayTitle, parseVideoFileName } = await import('@/lib/video-parser');
 
-  const client = new OpenListClient(
-    openListConfig.URL,
-    openListConfig.Username,
-    openListConfig.Password
-  );
+  const client = createClientForSource(source);
 
-  let videoInfo = getCachedVideoInfo(folderPath);
+  // 缓存键用带源前缀的完整路径（与 detail 路由保持一致）
+  const cacheKey = folderName;
+  let videoInfo = getCachedVideoInfo(cacheKey);
 
   // 获取所有分页的视频文件
   const allFiles: any[] = [];
@@ -338,7 +348,7 @@ async function handleDetail(
         isOVA: parsed.isOVA,
       };
     }
-    setCachedVideoInfo(folderPath, videoInfo);
+    setCachedVideoInfo(cacheKey, videoInfo);
   }
 
   // 构建播放链接

@@ -18,6 +18,9 @@ export interface PlayRecord {
   origin?: 'vod' | 'live';
   /** 是否动漫（写入时根据 CMS type_name/class 判断） */
   is_anime?: boolean;
+  /** 是否短剧（短剧竖屏页写入；普通播放页按 CMS type_name/class 判断）。
+      继续观看据此改用 /duanju/play 进去。 */
+  is_duanju?: boolean;
 }
 
 // 收藏数据结构

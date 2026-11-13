@@ -2,6 +2,10 @@
 
 import { API_CONFIG, getAvailableApiSites } from '@/lib/config';
 import { db } from '@/lib/db';
+import { parseJsonLosslessIntegers } from '@/lib/json';
+import { isDuanjuTypeName } from '@/lib/duanju.client';
+
+export { isDuanjuTypeName };
 
 interface CmsClassResponse {
   class?: Array<{
@@ -16,15 +20,6 @@ export interface DuanjuSource {
   api: string;
   typeId?: string;
   typeName?: string;
-}
-
-export function isDuanjuTypeName(typeName: string): boolean {
-  const normalizedTypeName = typeName.toLowerCase();
-  return (
-    normalizedTypeName.includes('短剧') ||
-    normalizedTypeName.includes('短视频') ||
-    normalizedTypeName.includes('微短剧')
-  );
 }
 
 /**
@@ -72,7 +67,9 @@ export async function getDuanjuSources(): Promise<DuanjuSource[]> {
           return null;
         }
 
-        const data: CmsClassResponse = await response.json();
+        const data = parseJsonLosslessIntegers<CmsClassResponse>(
+          await response.text()
+        );
 
         // 检查是否有短剧分类
         if (data.class && Array.isArray(data.class)) {

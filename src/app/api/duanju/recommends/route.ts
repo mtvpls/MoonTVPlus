@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 
 import { API_CONFIG, getCacheTime } from '@/lib/config';
 import { getDuanjuSources } from '@/lib/duanju';
+import { parseJsonLosslessIntegers } from '@/lib/json';
 import { SearchResult } from '@/lib/types';
 import { cleanHtmlTags } from '@/lib/utils';
 
@@ -16,7 +17,7 @@ let cachedRecommends: {
 } | null = null;
 
 interface ApiSearchItem {
-  vod_id: string;
+  vod_id: string | number;
   vod_name: string;
   vod_pic: string;
   vod_remarks?: string;
@@ -44,7 +45,9 @@ const fetchVideoList = async (api: string, typeId: string | number) => {
     headers: API_CONFIG.search.headers,
   });
   if (!response.ok) return null;
-  const data = await response.json();
+  const data = parseJsonLosslessIntegers<{ list?: ApiSearchItem[] }>(
+    await response.text()
+  );
   if (!data?.list || !Array.isArray(data.list)) return null;
   return data.list as ApiSearchItem[];
 };
@@ -100,7 +103,9 @@ export async function GET() {
       throw new Error('获取分类列表失败');
     }
 
-    const classData: CmsClassResponse = await classResponse.json();
+    const classData = parseJsonLosslessIntegers<CmsClassResponse>(
+      await classResponse.text()
+    );
 
     // 找到短剧分类的ID
     let duanjuClass: CmsClassItem | null = null;

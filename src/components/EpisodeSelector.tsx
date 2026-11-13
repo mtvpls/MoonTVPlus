@@ -1351,7 +1351,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             !sourceSearchError &&
             availableSources.length > 0 && (
               <div className='flex-1 overflow-y-auto space-y-2 pb-20'>
-                {availableSources
+                {[...availableSources]
                   .sort((a, b) => {
                     const aIsCurrent =
                       a.source?.toString() === currentSource?.toString() &&

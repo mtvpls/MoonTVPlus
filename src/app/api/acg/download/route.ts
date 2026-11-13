@@ -5,9 +5,10 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import {
   addOpenListOfflineDownload,
-  getOfflineDownloadBasePath,
   joinOpenListPath,
+  resolveOfflineDownloadTarget,
 } from '@/lib/openlist-offline-download';
+import { findUnknownSourceName, getOpenListSources } from '@/lib/openlist-sources';
 import { hasFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
@@ -34,7 +35,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { url, name, tool = 'aria2' } = await req.json();
+    const {
+      url,
+      name,
+      tool = 'aria2',
+      source: sourceName,
+      path: pathOverride,
+    } = await req.json();
 
     if (!url || typeof url !== 'string') {
       return NextResponse.json(
@@ -60,12 +67,36 @@ export async function POST(req: NextRequest) {
     // 获取 OpenList 配置
     const config = await getConfig();
 
-    // 构建下载路径（使用离线下载目录）
-    const downloadPath = joinOpenListPath(
-      getOfflineDownloadBasePath(config),
-      name
-    );
-    await addOpenListOfflineDownload(config, downloadPath, url, tool);
+    // 「存到私人影库」弹窗可临时指定源与目录，否则用离线下载目录
+    if (sourceName) {
+      const known = getOpenListSources(config).some(
+        (s) => s.name === sourceName
+      );
+      if (!known) {
+        return NextResponse.json(
+          { error: `未知的 OpenList 源：${sourceName}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    const pathText =
+      typeof pathOverride === 'string' ? pathOverride.trim() : '';
+    const unknownSource = findUnknownSourceName(config, pathText);
+    if (unknownSource) {
+      return NextResponse.json(
+        { error: `覆盖路径引用了未知的 OpenList 源：${unknownSource}` },
+        { status: 400 }
+      );
+    }
+
+    // 构建下载路径（父目录可被覆盖，源可被覆盖）
+    const target = resolveOfflineDownloadTarget(config, {
+      sourceName,
+      pathOverride: pathText,
+    });
+    const downloadPath = joinOpenListPath(target.basePath, name);
+    await addOpenListOfflineDownload(target.source, downloadPath, url, tool);
 
     return NextResponse.json({
       success: true,

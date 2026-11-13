@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { API_CONFIG, getCacheTime, getConfig } from '@/lib/config';
 import { getDuanjuSources, isDuanjuTypeName } from '@/lib/duanju';
+import { parseJsonLosslessIntegers } from '@/lib/json';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
@@ -47,7 +48,9 @@ export async function GET(request: NextRequest) {
       throw new Error('获取分类列表失败');
     }
 
-    const data: CmsClassResponse = await response.json();
+    const data = parseJsonLosslessIntegers<CmsClassResponse>(
+      await response.text()
+    );
     const config = await getConfig();
 
     const allClasses = data.class || [];

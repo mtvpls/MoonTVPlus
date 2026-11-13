@@ -21,6 +21,8 @@ import {
   isFansubPresetActive,
 } from '@/lib/anime-filter-presets';
 
+import OpenListPathInput from '@/components/OpenListPathInput';
+import { MAIN_SOURCE_NAME } from '@/lib/openlist-sources';
 import { type EpisodeTestResult } from '@/types/anime-subscription';
 
 export interface AnimeSubscribeModalProps {
@@ -64,7 +66,32 @@ export default function AnimeSubscribeModal({
     onePerEpisode: false,
     refillMissingEpisodes: false,
     episodeRegex: '',
+    downloadPath: '',
   });
+  /** 可选的 OpenList 源名（主源在前），供「覆盖路径」选源 */
+  const [sourceNames, setSourceNames] = useState<string[]>([MAIN_SOURCE_NAME]);
+  const [sourcesLoaded, setSourcesLoaded] = useState(false);
+
+  // 只在打开时拉一次（VideoCard 会为每张卡片实例化本组件，别在挂载时就请求）
+  useEffect(() => {
+    if (!isOpen || sourcesLoaded) return;
+    let cancelled = false;
+    fetch('/api/openlist/sources')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (Array.isArray(data?.sources) && data.sources.length) {
+          setSourceNames(data.sources);
+          setSourcesLoaded(true);
+        }
+      })
+      .catch(() => {
+        // 拉取失败时只保留主源，路径仍可手填
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, sourcesLoaded]);
 
   useEffect(() => {
     if (isOpen) {
@@ -87,6 +114,7 @@ export default function AnimeSubscribeModal({
         onePerEpisode: false,
         refillMissingEpisodes: false,
         episodeRegex: '',
+        downloadPath: '',
       });
     } else {
       setVisible(false);
@@ -240,6 +268,7 @@ export default function AnimeSubscribeModal({
           onePerEpisode: form.onePerEpisode,
           refillMissingEpisodes: form.refillMissingEpisodes,
           episodeRegex: form.episodeRegex.trim(),
+          downloadPath: form.downloadPath.trim(),
         }),
       });
       if (res.status === 403) {
@@ -576,6 +605,22 @@ export default function AnimeSubscribeModal({
                 className='w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm'
               />
             </div>
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+              覆盖路径
+            </label>
+            <OpenListPathInput
+              value={form.downloadPath}
+              onChange={(value) => setForm({ ...form, downloadPath: value })}
+              sourceNames={sourceNames}
+              placeholder='/anime'
+              fieldClass='px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm'
+            />
+            <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+              可选；留空用「离线下载目录/番剧名称」
+            </p>
           </div>
 
           <label className='flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300'>

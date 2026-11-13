@@ -40,7 +40,7 @@ import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { clearAllDanmakuCache, getDanmakuCacheStats } from '@/lib/danmaku/api';
-import { SAVE_LIVE_PLAY_RECORDS_KEY } from '@/lib/db.client';
+import { LIVE_AUTO_SPEED_TEST_KEY, SAVE_LIVE_PLAY_RECORDS_KEY } from '@/lib/db.client';
 import {
   LOCAL_SETTINGS_KEYS,
   LOCAL_SETTINGS_SYNC_LAST_PULL_KEY,
@@ -168,6 +168,7 @@ export const UserMenu: React.FC = () => {
   // 设置相关状态
   const [defaultAggregateSearch, setDefaultAggregateSearch] = useState(true);
   const [saveLivePlayRecords, setSaveLivePlayRecords] = useState(false);
+  const [liveAutoSpeedTest, setLiveAutoSpeedTest] = useState(false);
   const [doubanProxyUrl, setDoubanProxyUrl] = useState('');
   const [enableOptimization, setEnableOptimization] = useState(true);
   const [preferStrategy, setPreferStrategy] = useState<'fast' | 'full'>('fast');
@@ -218,6 +219,7 @@ export const UserMenu: React.FC = () => {
     useState(true);
   const [disablePlaybackThumbnail, setDisablePlaybackThumbnail] =
     useState(true);
+  const [disableDuanjuVertical, setDisableDuanjuVertical] = useState(false);
   const [disableEpisodeTitleFetch, setDisableEpisodeTitleFetch] =
     useState(false);
   const [disableAutoLoadDanmaku, setDisableAutoLoadDanmaku] = useState(false);
@@ -639,6 +641,13 @@ export const UserMenu: React.FC = () => {
         setSaveLivePlayRecords(savedSaveLivePlayRecords === 'true');
       }
 
+      const savedLiveAutoSpeedTest = localStorage.getItem(
+        LIVE_AUTO_SPEED_TEST_KEY
+      );
+      if (savedLiveAutoSpeedTest !== null) {
+        setLiveAutoSpeedTest(savedLiveAutoSpeedTest === 'true');
+      }
+
       const savedDoubanDataSource = localStorage.getItem('doubanDataSource');
       const defaultDoubanProxyType =
         (window as any).RUNTIME_CONFIG?.DOUBAN_PROXY_TYPE ||
@@ -802,6 +811,13 @@ export const UserMenu: React.FC = () => {
       );
       if (savedDisablePlaybackThumbnail !== null) {
         setDisablePlaybackThumbnail(savedDisablePlaybackThumbnail === 'true');
+      }
+
+      const savedDisableDuanjuVertical = localStorage.getItem(
+        'disableDuanjuVertical'
+      );
+      if (savedDisableDuanjuVertical !== null) {
+        setDisableDuanjuVertical(savedDisableDuanjuVertical === 'true');
       }
 
       const savedDisableEpisodeTitleFetch = localStorage.getItem(
@@ -1716,6 +1732,17 @@ export const UserMenu: React.FC = () => {
     }
   };
 
+  const handleLiveAutoSpeedTestToggle = (value: boolean) => {
+    setLiveAutoSpeedTest(value);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LIVE_AUTO_SPEED_TEST_KEY, String(value));
+      // 广播给直播页，让开关即时生效
+      window.dispatchEvent(
+        new CustomEvent('liveAutoSpeedTestChanged', { detail: { enabled: value } })
+      );
+    }
+  };
+
   const handleDoubanProxyUrlChange = (value: string) => {
     setDoubanProxyUrl(value);
     if (typeof window !== 'undefined') {
@@ -2046,6 +2073,13 @@ export const UserMenu: React.FC = () => {
     }
   };
 
+  const handleDisableDuanjuVerticalToggle = (value: boolean) => {
+    setDisableDuanjuVertical(value);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('disableDuanjuVertical', String(value));
+    }
+  };
+
   const handleDisableEpisodeTitleFetchToggle = (value: boolean) => {
     setDisableEpisodeTitleFetch(value);
     if (typeof window !== 'undefined') {
@@ -2205,6 +2239,7 @@ export const UserMenu: React.FC = () => {
 
     setDefaultAggregateSearch(true);
     setSaveLivePlayRecords(false);
+    setLiveAutoSpeedTest(false);
     setEnableOptimization(true);
     setPreferStrategy('fast');
     setPreferMode('balanced');
@@ -2244,6 +2279,7 @@ export const UserMenu: React.FC = () => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('defaultAggregateSearch', JSON.stringify(true));
       localStorage.setItem(SAVE_LIVE_PLAY_RECORDS_KEY, 'false');
+      localStorage.setItem(LIVE_AUTO_SPEED_TEST_KEY, 'false');
       localStorage.setItem('enableOptimization', JSON.stringify(true));
       localStorage.setItem('preferStrategy', 'fast');
       localStorage.setItem('preferMode', 'balanced');
@@ -2268,6 +2304,7 @@ export const UserMenu: React.FC = () => {
       localStorage.setItem('nextEpisodePreCache', 'true');
       localStorage.setItem('nextEpisodeDanmakuPreload', 'true');
       localStorage.setItem('disablePlaybackThumbnail', 'true');
+      localStorage.setItem('disableDuanjuVertical', 'false');
       localStorage.setItem('disableEpisodeTitleFetch', 'false');
       localStorage.setItem(
         'disableAutoLoadDanmaku',
@@ -2353,6 +2390,9 @@ export const UserMenu: React.FC = () => {
         break;
       case 'saveLivePlayRecords':
         setSaveLivePlayRecords(false);
+        break;
+      case 'liveAutoSpeedTest':
+        setLiveAutoSpeedTest(false);
         break;
       case 'enableOptimization':
         setEnableOptimization(true);
@@ -2457,6 +2497,9 @@ export const UserMenu: React.FC = () => {
       case 'disablePlaybackThumbnail':
         setDisablePlaybackThumbnail(true);
         break;
+      case 'disableDuanjuVertical':
+        setDisableDuanjuVertical(false);
+        break;
       case 'disableEpisodeTitleFetch':
         setDisableEpisodeTitleFetch(false);
         break;
@@ -2512,6 +2555,15 @@ export const UserMenu: React.FC = () => {
           break;
         case 'saveLivePlayRecords':
           setSaveLivePlayRecords(value === 'true');
+          break;
+        case 'liveAutoSpeedTest':
+          setLiveAutoSpeedTest(value === 'true');
+          // 远端同步后广播给直播页，让开关即时生效
+          window.dispatchEvent(
+            new CustomEvent('liveAutoSpeedTestChanged', {
+              detail: { enabled: value === 'true' },
+            })
+          );
           break;
         case 'enableOptimization':
           setEnableOptimization(value === 'true');
@@ -2598,6 +2650,9 @@ export const UserMenu: React.FC = () => {
           break;
         case 'disablePlaybackThumbnail':
           setDisablePlaybackThumbnail(value === 'true');
+          break;
+        case 'disableDuanjuVertical':
+          setDisableDuanjuVertical(value === 'true');
           break;
         case 'disableEpisodeTitleFetch':
           setDisableEpisodeTitleFetch(value === 'true');
@@ -4130,6 +4185,32 @@ export const UserMenu: React.FC = () => {
                     </div>
                   )}
 
+                  {/* 电视直播自动测速 */}
+                  <div className='flex items-center justify-between'>
+                    <div>
+                      <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                        电视直播自动测速
+                      </h4>
+                      <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                        开启后自动测速当前分组下的线路
+                      </p>
+                    </div>
+                    <label className='flex items-center cursor-pointer'>
+                      <div className='relative'>
+                        <input
+                          type='checkbox'
+                          className='sr-only peer'
+                          checked={liveAutoSpeedTest}
+                          onChange={(e) =>
+                            handleLiveAutoSpeedTestToggle(e.target.checked)
+                          }
+                        />
+                        <div className='w-11 h-6 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>
+                        <div className='absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-5'></div>
+                      </div>
+                    </label>
+                  </div>
+
                   {/* 流式搜索 */}
                   <div className='flex items-center justify-between'>
                     <div>
@@ -4769,6 +4850,32 @@ export const UserMenu: React.FC = () => {
                             handleDisablePlaybackThumbnailToggle(
                               e.target.checked
                             )
+                          }
+                        />
+                        <div className='w-11 h-6 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>
+                        <div className='absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-5'></div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* 禁用短剧竖屏模式 */}
+                  <div className='flex items-center justify-between'>
+                    <div>
+                      <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                        禁用短剧竖屏模式
+                      </h4>
+                      <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                        禁用后短剧不再进入竖屏模式
+                      </p>
+                    </div>
+                    <label className='flex items-center cursor-pointer'>
+                      <div className='relative'>
+                        <input
+                          type='checkbox'
+                          className='sr-only peer'
+                          checked={disableDuanjuVertical}
+                          onChange={(e) =>
+                            handleDisableDuanjuVerticalToggle(e.target.checked)
                           }
                         />
                         <div className='w-11 h-6 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>

@@ -35,7 +35,7 @@ const tabs: MediaShellTab[] = [
 // （阅读页自身按 calc(100vh-3.5rem) 计算高度，原先桌面端 h-16 会多出 0.5rem）。
 // max-w-6xl 经 cn() 覆盖外壳默认的 max-w-7xl，避免 /books/read 布局回归。
 const READER_MAIN_CLASS =
-  'max-w-6xl pt-[calc(3.5rem+env(safe-area-inset-top))] sm:pt-[calc(4rem+env(safe-area-inset-top))]';
+  'max-w-6xl pt-[calc(3.5rem+var(--safe-top))] sm:pt-[calc(4rem+var(--safe-top))]';
 
 type ReadHeaderPayload = {
   title?: string;

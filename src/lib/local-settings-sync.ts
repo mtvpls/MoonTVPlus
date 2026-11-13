@@ -13,6 +13,7 @@ export const LOCAL_SETTINGS_SYNC_LAST_PULL_KEY = 'moontv_local_settings_sync_las
 export const LOCAL_SETTINGS_KEYS: string[] = [
   'defaultAggregateSearch',
   'saveLivePlayRecords',
+  'liveAutoSpeedTest',
   'enableOptimization',
   'preferStrategy',
   'preferMode',
@@ -42,6 +43,7 @@ export const LOCAL_SETTINGS_KEYS: string[] = [
   'nextEpisodePreCache',
   'nextEpisodeDanmakuPreload',
   'disablePlaybackThumbnail',
+  'disableDuanjuVertical',
   'disableEpisodeTitleFetch',
   'disableAutoLoadDanmaku',
   'danmakuMaxCount',

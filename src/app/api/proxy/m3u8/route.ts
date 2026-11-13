@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { getConfig } from "@/lib/config";
 import { getBaseUrl, resolveUrl } from "@/lib/live";
+import { fetchLive, toWebStream } from "@/lib/live-http";
 
 export const runtime = 'nodejs';
 
@@ -29,13 +30,8 @@ export async function GET(request: Request) {
   try {
     const decodedUrl = decodeURIComponent(url);
 
-    response = await fetch(decodedUrl, {
-      cache: 'no-cache',
+    response = await fetchLive(decodedUrl, ua, {
       redirect: 'follow',
-      credentials: 'same-origin',
-      headers: {
-        'User-Agent': ua,
-      },
     });
 
     if (!response.ok) {
@@ -75,7 +71,7 @@ export async function GET(request: Request) {
     headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
 
     // 直接返回视频流
-    return new Response(response.body, {
+    return new Response(toWebStream(response.body), {
       status: 200,
       headers,
     });
@@ -85,7 +81,7 @@ export async function GET(request: Request) {
     // 确保 response 被正确关闭以释放资源
     if (response && !responseUsed) {
       try {
-        response.body?.cancel();
+        toWebStream(response.body)?.cancel();
       } catch (error) {
         // 忽略关闭时的错误
         console.warn('Failed to close response body:', error);

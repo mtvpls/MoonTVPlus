@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { API_CONFIG, getAvailableApiSites } from '@/lib/config';
+import { parseJsonLosslessIntegers } from '@/lib/json';
 import { SearchResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -74,7 +75,9 @@ export async function GET(request: NextRequest) {
       throw new Error('搜索失败');
     }
 
-    const searchData: CmsVideoResponse = await searchResponse.json();
+    const searchData = parseJsonLosslessIntegers<CmsVideoResponse>(
+      await searchResponse.text()
+    );
 
     if (!searchData.list || !Array.isArray(searchData.list)) {
       return NextResponse.json({

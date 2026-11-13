@@ -3,6 +3,7 @@
  * PathMeta: { [path]: { category, refresh14m, proxyPlay, proxyCacheMinutes } }
  * 匹配规则：规范化后最长前缀匹配
  * 例：配置 /videos 可匹配 /videos/某影片
+ * key 也可写「源名@/videos」只对指定源生效（无前缀的 key 对所有源生效）
  */
 
 export interface OpenListPathMetaEntry {
@@ -115,6 +116,72 @@ export function resolvePathMeta(
     if (!matched) continue;
     if (key.length >= bestKey.length) {
       bestKey = key;
+      best = entry;
+    }
+  }
+
+  if (!best) {
+    return { ...EMPTY_PATH_META };
+  }
+
+  return {
+    category: best.category || '',
+    refresh14m: Boolean(best.refresh14m),
+    proxyPlay: Boolean(best.proxyPlay),
+    proxyCacheMinutes: normalizeProxyCacheMinutes(best.proxyCacheMinutes),
+  };
+}
+
+/**
+ * 拆分 PathMeta key 的「源名@」前缀
+ * 「115@/videos」→ { sourceName: '115', path: '/videos' }
+ * 「/videos」    → { sourceName: null, path: '/videos' }
+ */
+function splitSourceKey(key: string): { sourceName: string | null; path: string } {
+  const at = key.indexOf('@');
+  if (at > 0) {
+    return { sourceName: key.slice(0, at).trim(), path: key.slice(at + 1) };
+  }
+  return { sourceName: null, path: key };
+}
+
+/**
+ * 带源的路径元信息匹配
+ * - key 无「源名@」前缀：对所有源生效
+ * - key 带前缀：仅当 sourceName 与该源名一致时生效
+ * - 路径部分按最长前缀匹配（与 resolvePathMeta 相同规则）
+ */
+export function resolvePathMetaForSource(
+  sourceName: string | undefined | null,
+  folderPath: string,
+  pathMeta: OpenListPathMetaMap | undefined | null
+): OpenListPathMetaEntry {
+  const normalized = normalizeOpenListPath(folderPath);
+  if (!normalized || !pathMeta) {
+    return { ...EMPTY_PATH_META };
+  }
+
+  const map = normalizePathMetaMap(pathMeta);
+  let bestLen = -1;
+  let best: OpenListPathMetaEntry | null = null;
+
+  for (const [key, entry] of Object.entries(map)) {
+    if (!key) continue;
+    const { sourceName: keySource, path: keyPath } = splitSourceKey(key);
+    if (keySource && keySource !== sourceName) continue;
+
+    const p = keyPath;
+    if (!p) continue;
+
+    const matched =
+      normalized === p ||
+      (p === '/'
+        ? normalized.startsWith('/')
+        : normalized.startsWith(p + '/'));
+    if (!matched) continue;
+
+    if (key.length > bestLen) {
+      bestLen = key.length;
       best = entry;
     }
   }

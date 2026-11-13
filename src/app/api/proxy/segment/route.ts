@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 
 import { getConfig } from "@/lib/config";
+import { fetchLive, toWebStream } from "@/lib/live-http";
 
 export const runtime = 'nodejs';
 
@@ -22,18 +23,16 @@ export async function GET(request: Request) {
   const ua = liveSource.ua || 'AptvPlayer/1.4.10';
 
   let response: Response | null = null;
+  let bodyStream: ReadableStream<Uint8Array> | null = null;
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
   try {
     const decodedUrl = decodeURIComponent(url);
-    response = await fetch(decodedUrl, {
-      headers: {
-        'User-Agent': ua,
-      },
-    });
+    response = await fetchLive(decodedUrl, ua);
     if (!response.ok) {
       return NextResponse.json({ error: 'Failed to fetch segment' }, { status: 500 });
     }
+    bodyStream = toWebStream(response.body);
 
     const headers = new Headers();
     headers.set('Content-Type', 'video/mp2t');
@@ -46,12 +45,12 @@ export async function GET(request: Request) {
     // 使用流式传输，避免占用内存
     const stream = new ReadableStream({
       start(controller) {
-        if (!response?.body) {
+        if (!bodyStream) {
           controller.close();
           return;
         }
 
-        reader = response.body.getReader();
+        reader = bodyStream.getReader();
         const isCancelled = false;
 
         function pump() {
@@ -104,9 +103,9 @@ export async function GET(request: Request) {
           reader = null;
         }
 
-        if (response?.body) {
+        if (bodyStream) {
           try {
-            response.body.cancel();
+            bodyStream.cancel();
           } catch (e) {
             // 忽略取消时的错误
           }
@@ -125,9 +124,9 @@ export async function GET(request: Request) {
       }
     }
 
-    if (response?.body) {
+    if (bodyStream) {
       try {
-        response.body.cancel();
+        bodyStream.cancel();
       } catch (e) {
         // 忽略错误
       }

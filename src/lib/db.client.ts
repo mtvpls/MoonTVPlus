@@ -51,6 +51,8 @@ export interface PlayRecord {
   new_episodes?: number; // 新增的剧集数量（用于显示更新提示）
   /** 是否动漫（写入时根据 CMS type_name/class 判断） */
   is_anime?: boolean;
+  /** 是否短剧（短剧竖屏页写入；普通播放页按 CMS type_name/class 判断） */
+  is_duanju?: boolean;
 }
 
 // ---- 收藏类型 ----
@@ -101,12 +103,21 @@ interface UserCacheStore {
 // ---- 常量 ----
 const PLAY_RECORDS_KEY = 'moontv_play_records';
 export const SAVE_LIVE_PLAY_RECORDS_KEY = 'saveLivePlayRecords';
+export const LIVE_AUTO_SPEED_TEST_KEY = 'liveAutoSpeedTest';
 
 /** 是否允许保存直播播放记录（默认关闭）。 */
 export function isLivePlayRecordSavingEnabled(): boolean {
   return (
     typeof window !== 'undefined' &&
     localStorage.getItem(SAVE_LIVE_PLAY_RECORDS_KEY) === 'true'
+  );
+}
+
+/** 是否开启电视直播自动测速（默认关闭）。 */
+export function isLiveAutoSpeedTestEnabled(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    localStorage.getItem(LIVE_AUTO_SPEED_TEST_KEY) === 'true'
   );
 }
 

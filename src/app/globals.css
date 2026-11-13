@@ -52,6 +52,16 @@
 
 :root {
   --foreground-rgb: 255, 255, 255;
+  /* 顶部安全区：只在"装到主屏(独立窗口)"的沉浸式场景才留。
+     普通浏览器里状态栏在视口之外，但升级后的部分 WebView 仍会上报
+     env(safe-area-inset-top)，直接照用会凭空多出一条留白。 */
+  --safe-top: 0px;
+}
+
+@media (display-mode: standalone) {
+  :root {
+    --safe-top: env(safe-area-inset-top);
+  }
 }
 
 html,
@@ -195,6 +205,26 @@ div[data-media-provider] video {
   background-position: center center !important; /* 居中显示 */
   background-repeat: no-repeat !important; /* 防止重复 */
   background-color: #000 !important; /* 其余区域填充为黑色 */
+}
+
+/* iOS PWA 自绘全屏：把这套类加到播放器容器上，直接钉满视口、铺黑底。
+   iPhone 上普通元素用不了 Fullscreen API（只有 <video> 能原生全屏），
+   ArtPlayer 的 fullscreenWeb 又不会转屏、画面还缩在中间，所以这里不借浏览器全屏，
+   只把容器撑满，画面本身交给 object-fit: contain 居中。
+   代价：竖屏放横片就是"整宽一条 + 上下黑边"——这是几何，不会转屏。 */
+.ios-pwa-immersive {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 9999 !important;
+  background: #000 !important;
+}
+
+.ios-pwa-immersive,
+.ios-pwa-immersive > * {
+  border-radius: 0 !important;
 }
 
 /* 隐藏移动端竖屏时的 pip 按钮 */

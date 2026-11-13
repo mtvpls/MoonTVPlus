@@ -30,6 +30,12 @@ export interface AnimeSubscription {
    * 例：第(\d{1,3})[话話集]
    */
   episodeRegex?: string;
+  /**
+   * 覆盖父目录（可选）。
+   * 留空用「离线下载目录」；填写后实际保存到「该路径/番剧名」，可用「源名@路径」指定备用源。
+   * 例：115@/anime → 115 源的 /anime/番剧名
+   */
+  downloadPath?: string;
   lastCheckTime: number;
   lastEpisode: number;
   createdAt: number;

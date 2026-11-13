@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { API_CONFIG, getAvailableApiSites } from '@/lib/config';
+import { parseJsonLosslessIntegers } from '@/lib/json';
 import { SearchResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -74,7 +75,9 @@ export async function GET(request: NextRequest) {
       throw new Error('获取视频列表失败');
     }
 
-    const videoData: CmsVideoResponse = await videoResponse.json();
+    const videoData = parseJsonLosslessIntegers<CmsVideoResponse>(
+      await videoResponse.text()
+    );
 
     if (!videoData.list || !Array.isArray(videoData.list)) {
       return NextResponse.json({

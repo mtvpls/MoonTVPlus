@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { parseJsonLosslessIntegers } from '@/lib/json';
 import {
   getCachedMetaInfo,
   MetaInfo,
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const data = await response.json();
+      const data = parseJsonLosslessIntegers<any>(await response.text());
       console.log('CMS API 返回数据:', {
         code: data.code,
         msg: data.msg,

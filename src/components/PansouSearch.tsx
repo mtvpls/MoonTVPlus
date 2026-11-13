@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { PansouLink, PansouSearchResult } from '@/lib/pansou.client';
 
+import OpenListSourceSelect from '@/components/OpenListSourceSelect';
 import Toast, { ToastProps } from '@/components/Toast';
 
 interface PansouSearchProps {
@@ -188,6 +189,8 @@ export default function PansouSearch({
     useState<PansouLink | null>(null);
   const [customName, setCustomName] = useState('');
   const [downloadTool, setDownloadTool] = useState<DownloadTool>('aria2');
+  const [downloadSource, setDownloadSource] = useState('');
+  const [downloadPath, setDownloadPath] = useState('');
   const [toast, setToast] = useState<ToastProps | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0);
   const [checkStatesByType, setCheckStatesByType] = useState<
@@ -466,6 +469,8 @@ export default function PansouSearch({
     setSelectedDownloadLink(null);
     setCustomName('');
     setDownloadTool('aria2');
+    setDownloadSource('');
+    setDownloadPath('');
   };
 
   const handleConfirmDownload = async () => {
@@ -486,6 +491,8 @@ export default function PansouSearch({
           url: selectedDownloadLink.url,
           name: customName.trim(),
           tool: downloadTool,
+          source: downloadSource || undefined,
+          path: downloadPath.trim() || undefined,
         }),
       });
 
@@ -495,7 +502,9 @@ export default function PansouSearch({
       }
 
       setToast({
-        message: data.message || '已添加到离线下载队列',
+        message: data.path
+          ? `${data.message || '已添加到离线下载队列'}：${data.path}`
+          : data.message || '已添加到离线下载队列',
         type: 'success',
         onClose: () => setToast(null),
       });
@@ -510,6 +519,8 @@ export default function PansouSearch({
       setSelectedDownloadLink(null);
       setCustomName('');
       setDownloadTool('aria2');
+      setDownloadSource('');
+      setDownloadPath('');
     }
   };
 
@@ -1162,6 +1173,23 @@ export default function PansouSearch({
                 </option>
               ))}
             </select>
+            <OpenListSourceSelect
+              value={downloadSource}
+              onChange={setDownloadSource}
+            />
+            <label className='mt-4 block text-sm font-medium text-gray-700 dark:text-gray-300'>
+              覆盖路径
+            </label>
+            <input
+              type='text'
+              value={downloadPath}
+              onChange={(e) => setDownloadPath(e.target.value)}
+              placeholder='留空使用离线下载目录'
+              className='mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500'
+            />
+            <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+              可选；最终保存到「该目录/资源名称」
+            </p>
             <div className='mt-4 flex gap-2 justify-end'>
               <button
                 onClick={handleCloseDownloadDialog}

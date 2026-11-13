@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
+import { fetchLive, toWebStream } from '@/lib/live-http';
 import { requireFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
@@ -27,13 +28,8 @@ export async function GET(request: NextRequest) {
   try {
     const decodedUrl = decodeURIComponent(url);
 
-    const response = await fetch(decodedUrl, {
-      cache: 'no-cache',
+    const response = await fetchLive(decodedUrl, ua, {
       redirect: 'follow',
-      credentials: 'same-origin',
-      headers: {
-        'User-Agent': ua,
-      },
     });
 
     if (!response.ok) {
@@ -45,7 +41,7 @@ export async function GET(request: NextRequest) {
     const finalUrl = response.url || decodedUrl;
     const normalizedUrl = finalUrl.toLowerCase().split('?')[0];
     if (response.body) {
-      response.body.cancel();
+      toWebStream(response.body)?.cancel();
     }
     if (normalizedContentType.includes('video/mp4') || normalizedUrl.endsWith('.mp4')) {
       return NextResponse.json({ success: true, type: 'mp4' }, { status: 200 });

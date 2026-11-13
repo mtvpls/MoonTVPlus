@@ -17,7 +17,7 @@ const MobileHeader = ({ showBackButton = false }: MobileHeaderProps) => {
   return (
     <header
       className='md:hidden fixed top-0 left-0 right-0 z-[999] w-full bg-white/70 backdrop-blur-xl border-b border-gray-200/50 shadow-sm dark:bg-gray-900/70 dark:border-gray-700/50'
-      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      style={{ paddingTop: 'var(--safe-top)' }}
     >
       <div className='relative h-12 flex items-center justify-between px-4'>
         {/* 左侧：搜索按钮、返回按钮和设置按钮 */}

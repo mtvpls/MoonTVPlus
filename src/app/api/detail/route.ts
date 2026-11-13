@@ -86,8 +86,6 @@ export async function GET(request: NextRequest) {
         throw new Error('OpenList 未配置或未启用');
       }
 
-      const rootPath = openListConfig.RootPath || '/';
-
       // 1. 读取 metainfo 获取元数据
       let metaInfo: any = null;
       let folderMeta: any = null;
@@ -114,22 +112,25 @@ export async function GET(request: NextRequest) {
         throw new Error('读取视频信息失败: ' + (error as Error).message);
       }
 
-      // 使用 folderName 构建实际路径
+      // 使用 folderName 构建实际路径（folderName 可能带「源名@」前缀，需解析出源与真实路径）
       const folderName = folderMeta.folderName;
-      const folderPath = `${rootPath}${rootPath.endsWith('/') ? '' : '/'}${folderName}`;
+      const { resolveFolderSource, createClientForSource } = await import('@/lib/openlist-sources');
+      const resolved = resolveFolderSource(config, folderName);
+      if (!resolved) {
+        throw new Error('OpenList 未配置');
+      }
+      const { source } = resolved;
+      const folderPath = resolved.path;
 
       // 2. 直接调用 OpenList 客户端获取视频列表
-      const { OpenListClient } = await import('@/lib/openlist.client');
       const { getCachedVideoInfo, setCachedVideoInfo } = await import('@/lib/openlist-cache');
       const { formatEpisodeDisplayTitle, parseVideoFileName } = await import('@/lib/video-parser');
 
-      const client = new OpenListClient(
-        openListConfig.URL,
-        openListConfig.Username,
-        openListConfig.Password
-      );
+      const client = createClientForSource(source);
 
-      let videoInfo = getCachedVideoInfo(folderPath);
+      // 缓存键用带源前缀的完整路径（与 detail 路由保持一致）
+      const cacheKey = folderName;
+      let videoInfo = getCachedVideoInfo(cacheKey);
 
       // 获取所有分页的视频文件
       const allFiles: any[] = [];
@@ -174,7 +175,7 @@ export async function GET(request: NextRequest) {
             isOVA: parsed.isOVA,
           };
         }
-        setCachedVideoInfo(folderPath, videoInfo);
+        setCachedVideoInfo(cacheKey, videoInfo);
       }
 
       const parsedSeasons = new Set(
@@ -215,10 +216,11 @@ export async function GET(request: NextRequest) {
 
       // 3. 从 metainfo 中获取元数据
       const { getTMDBImageUrl } = await import('@/lib/tmdb.search');
-      const { resolvePathMeta } = await import('@/lib/openlist-path-meta');
-      // folderName 为 metainfo 完整路径，PathMeta 最长前缀匹配
-      const pathMetaResolved = resolvePathMeta(
-        folderName,
+      const { resolvePathMetaForSource } = await import('@/lib/openlist-path-meta');
+      // folderName 为 metainfo 完整路径，PathMeta 按「真实路径 + 源」匹配
+      const pathMetaResolved = resolvePathMetaForSource(
+        source.name,
+        folderPath,
         openListConfig.PathMeta
       );
 

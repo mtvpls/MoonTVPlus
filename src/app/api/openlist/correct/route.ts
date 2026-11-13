@@ -6,7 +6,6 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { requireFeaturePermission } from '@/lib/permissions';
 import { db } from '@/lib/db';
-import { OpenListClient } from '@/lib/openlist.client';
 import {
   getCachedMetaInfo,
   invalidateMetaInfoCache,
@@ -67,12 +66,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    const client = new OpenListClient(
-      openListConfig.URL,
-      openListConfig.Username,
-      openListConfig.Password
-    );
 
     // 读取现有 metainfo (从数据库或缓存)
     let metaInfo: MetaInfo | null = getCachedMetaInfo();

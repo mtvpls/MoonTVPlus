@@ -4,7 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
-import { OpenListClient } from '@/lib/openlist.client';
+import {
+  createClientForSource,
+  resolveFolderSource,
+} from '@/lib/openlist-sources';
 import { hasFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
@@ -78,14 +81,20 @@ export async function GET(
       return NextResponse.json({ error: 'OpenList 未配置或未启用' }, { status: 400 });
     }
 
-    const rootPath = openListConfig.RootPath || '/';
-    const folderPath = `${rootPath}${rootPath.endsWith('/') ? '' : '/'}${folderName}`;
+    // folderName 是完整路径，可能带「源名@」前缀，解析出源与真实路径
+    const resolved = resolveFolderSource(config, folderName);
+    if (!resolved) {
+      return NextResponse.json({ error: 'OpenList 未配置' }, { status: 400 });
+    }
+    const { source } = resolved;
+    const folderPath = resolved.path;
     const filePath = `${folderPath}/${fileName}`;
 
     // 解析路径元信息：路径开启代理播放时重定向到服务器代理地址
-    const { resolvePathMeta } = await import('@/lib/openlist-path-meta');
-    const pathMetaResolved = resolvePathMeta(
-      folderName,
+    const { resolvePathMetaForSource } = await import('@/lib/openlist-path-meta');
+    const pathMetaResolved = resolvePathMetaForSource(
+      source.name,
+      folderPath,
       openListConfig.PathMeta
     );
 
@@ -108,11 +117,7 @@ export async function GET(
       return NextResponse.redirect(proxyUrl);
     }
 
-    const client = new OpenListClient(
-      openListConfig.URL,
-      openListConfig.Username,
-      openListConfig.Password
-    );
+    const client = createClientForSource(source);
 
     // 获取文件的播放链接
     const fileResponse = await client.getFile(filePath);
@@ -133,7 +138,7 @@ export async function GET(
       '@/lib/openlist-play-url'
     );
     const playUrl = resolveOpenListDirectPlayUrl({
-      openListBaseUrl: openListConfig.URL,
+      openListBaseUrl: source.url,
       filePath,
       rawUrl: fileResponse.data.raw_url,
       sign: fileResponse.data.sign,

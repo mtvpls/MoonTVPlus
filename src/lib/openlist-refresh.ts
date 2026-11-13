@@ -8,6 +8,12 @@ import { generateFolderKey } from '@/lib/crypto';
 import { db } from '@/lib/db';
 import { OpenListClient } from '@/lib/openlist.client';
 import {
+  createClientForSource,
+  formatSourcePath,
+  resolveSourcePath,
+  type ResolvedOpenListSource,
+} from '@/lib/openlist-sources';
+import {
   invalidateMetaInfoCache,
   MetaInfo,
   setCachedMetaInfo,
@@ -130,16 +136,26 @@ export async function startOpenListRefresh(clearMetaInfo = false): Promise<{ tas
 
   const rootPaths = getRootPaths(openListConfig);
 
-  // 顺序扫描多个根目录
+  // 解析每个根目录的 (源, 真实路径)
+  const roots: Array<{ source: ResolvedOpenListSource; path: string }> = [];
+  for (const raw of rootPaths) {
+    const resolved = resolveSourcePath(config, raw);
+    if (resolved) {
+      roots.push({ source: resolved.source, path: resolved.path });
+    }
+  }
+
+  if (roots.length === 0) {
+    throw new Error('没有可用的根目录');
+  }
+
+  // 顺序扫描多个根目录（可跨多个 OpenList 源）
   performMultiRootScan(
     taskId,
-    openListConfig.URL,
-    rootPaths,
+    roots,
     tmdbApiKey,
     tmdbProxy,
     tmdbReverseProxy,
-    openListConfig.Username,
-    openListConfig.Password,
     clearMetaInfo,
     openListConfig.ScanMode || 'hybrid'
   ).catch((error) => {
@@ -206,46 +222,59 @@ async function listRootFolders(
 }
 
 /**
- * 扫描多个根目录：先汇总全部文件夹数量，再连续累计进度，最后统一完成任务
+ * 扫描多个根目录（可跨多个源）：先汇总全部文件夹数量，再连续累计进度，最后统一完成任务
  */
 async function performMultiRootScan(
   taskId: string,
-  url: string,
-  rootPaths: string[],
+  roots: Array<{ source: ResolvedOpenListSource; path: string }>,
   tmdbApiKey: string,
   tmdbProxy: string | undefined,
   tmdbReverseProxy: string | undefined,
-  username: string,
-  password: string,
   clearMetaInfo: boolean,
   scanMode: 'torrent' | 'name' | 'hybrid'
 ): Promise<void> {
-  const client = new OpenListClient(url, username, password);
-
   updateScanTaskProgress(taskId, 0, 0);
 
   try {
     const metaInfo = await loadMetaInfo(clearMetaInfo);
     invalidateMetaInfoCache();
 
-    const rootFolderGroups: { rootPath: string; folders: any[] }[] = [];
+    const rootFolderGroups: {
+      source: ResolvedOpenListSource;
+      rootPath: string;
+      folders: any[];
+    }[] = [];
     let totalFolders = 0;
 
-    for (let i = 0; i < rootPaths.length; i++) {
-      const rootPath = rootPaths[i];
+    // 同一源复用同一个客户端
+    const clientCache = new Map<string, OpenListClient>();
+    const getClient = (source: ResolvedOpenListSource) => {
+      let client = clientCache.get(source.name);
+      if (!client) {
+        client = createClientForSource(source);
+        clientCache.set(source.name, client);
+      }
+      return client;
+    };
+
+    for (let i = 0; i < roots.length; i++) {
+      const { source, path: rootPath } = roots[i];
       console.log(
-        `[OpenList Refresh] 列举根目录 (${i + 1}/${rootPaths.length}): ${rootPath}`
+        `[OpenList Refresh] 列举根目录 (${i + 1}/${roots.length}) [${source.name}]: ${rootPath}`
       );
 
       try {
-        const folders = await listRootFolders(client, rootPath);
-        rootFolderGroups.push({ rootPath, folders });
+        const folders = await listRootFolders(getClient(source), rootPath);
+        rootFolderGroups.push({ source, rootPath, folders });
         totalFolders += folders.length;
         console.log(
-          `[OpenList Refresh] 根目录 ${rootPath} 发现 ${folders.length} 个文件夹`
+          `[OpenList Refresh] 根目录 [${source.name}] ${rootPath} 发现 ${folders.length} 个文件夹`
         );
       } catch (error) {
-        console.error(`[OpenList Refresh] 根目录 ${rootPath} 列举失败:`, error);
+        console.error(
+          `[OpenList Refresh] 根目录 [${source.name}] ${rootPath} 列举失败:`,
+          error
+        );
       }
     }
 
@@ -266,9 +295,9 @@ async function performMultiRootScan(
       folderNameToKey.set(info.folderName, key);
     }
 
-    for (const { rootPath, folders } of rootFolderGroups) {
+    for (const { source, rootPath, folders } of rootFolderGroups) {
       console.log(
-        `[OpenList Refresh] 处理根目录: ${rootPath} (${folders.length} 个文件夹)`
+        `[OpenList Refresh] 处理根目录 [${source.name}]: ${rootPath} (${folders.length} 个文件夹)`
       );
 
       for (const folder of folders) {
@@ -280,7 +309,10 @@ async function performMultiRootScan(
           folder.name
         );
 
-        const fullFolderPath = `${rootPath}${rootPath.endsWith('/') ? '' : '/'}${folder.name}`;
+        const fullFolderPath = formatSourcePath(
+          source.name,
+          `${rootPath}${rootPath.endsWith('/') ? '' : '/'}${folder.name}`
+        );
 
         if (!clearMetaInfo && folderNameToKey.has(fullFolderPath)) {
           existingCount++;

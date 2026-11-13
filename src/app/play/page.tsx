@@ -97,6 +97,14 @@ import {
 import { getTMDBImageUrl } from '@/lib/tmdb.search';
 import { DanmakuFilterConfig, EpisodeFilterConfig, SearchResult } from '@/lib/types';
 import { base58Decode, getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
+import {
+  isDuanjuTypeName,
+  isDuanjuVerticalDisabled,
+} from '@/lib/duanju.client';
+import {
+  createAdFilteringHlsLoader,
+  loadCustomAdFilterCode,
+} from '@/lib/hls-ad-filter.client';
 import { useEnableAIComments } from '@/hooks/useEnableAIComments';
 import { useEnableComments } from '@/hooks/useEnableComments';
 import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
@@ -538,6 +546,13 @@ function PlayPageClient() {
     blockAdEnabledRef.current = blockAdEnabled;
   }, [blockAdEnabled]);
 
+  // 本地设置「禁用短剧竖屏模式」：影响是否渲染「短剧模式」入口，
+  // 所以挂载后再读 localStorage，别让 SSR/CSR 首屏不一致
+  const [duanjuVerticalDisabled, setDuanjuVerticalDisabled] = useState(false);
+  useEffect(() => {
+    setDuanjuVerticalDisabled(isDuanjuVerticalDisabled());
+  }, []);
+
   // 工具栏去广告开关：用于外部播放器及鸿蒙原生 HLS，默认 false
   const [externalPlayerAdBlock, setExternalPlayerAdBlock] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -555,65 +570,15 @@ function PlayPageClient() {
   // 自定义去广告代码（从服务器获取并缓存）
   const customAdFilterCodeRef = useRef<string>('');
 
-  // 初始化时获取自定义去广告代码
+  // 初始化时获取自定义去广告代码（缓存/版本校验都在 lib/hls-ad-filter.client 里）
   useEffect(() => {
-    const fetchAdFilterCode = async () => {
-      if (typeof window === 'undefined') return;
-
-      try {
-        // 先从 localStorage 获取缓存的代码，立即可用
-        const cachedCode = localStorage.getItem('custom_ad_filter_code_cache');
-        const cachedVersion = localStorage.getItem('custom_ad_filter_version_cache');
-
-        if (cachedCode) {
-          customAdFilterCodeRef.current = cachedCode;
-          console.log('使用缓存的去广告代码');
-        }
-
-        // 从 window.RUNTIME_CONFIG 获取版本号
-        const version = (window as any).RUNTIME_CONFIG?.CUSTOM_AD_FILTER_VERSION || 0;
-
-        // 如果版本号为 0，说明去广告未设置，清空缓存并跳过
-        if (version === 0) {
-          console.log('去广告代码未设置（版本 0），清空缓存');
-          localStorage.removeItem('custom_ad_filter_code_cache');
-          localStorage.removeItem('custom_ad_filter_version_cache');
-          customAdFilterCodeRef.current = '';
-          return;
-        }
-
-        // 如果版本号不一致或没有缓存，才获取完整代码
-        if (!cachedVersion || parseInt(cachedVersion) !== version) {
-          console.log('检测到去广告代码更新（版本 ' + version + '），获取最新代码');
-
-          // 获取完整代码
-          const fullResponse = await fetch('/api/ad-filter?full=true');
-          if (!fullResponse.ok) {
-            console.warn('获取完整去广告代码失败，使用缓存');
-            return;
-          }
-
-          const { code } = await fullResponse.json();
-
-          if (code) {
-            localStorage.setItem('custom_ad_filter_code_cache', code);
-            localStorage.setItem('custom_ad_filter_version_cache', version.toString());
-            customAdFilterCodeRef.current = code;
-          } else if (!cachedCode) {
-            // 如果服务器没有代码且本地也没有缓存，清空缓存
-            localStorage.removeItem('custom_ad_filter_code_cache');
-            localStorage.removeItem('custom_ad_filter_version_cache');
-          }
-        } else {
-          console.log('去广告代码已是最新版本（版本 ' + version + '）');
-        }
-      } catch (error) {
-        console.error('获取去广告代码配置失败:', error);
-        // 失败时已经使用了缓存，无需额外处理
-      }
+    let cancelled = false;
+    loadCustomAdFilterCode().then((code) => {
+      if (!cancelled) customAdFilterCodeRef.current = code;
+    });
+    return () => {
+      cancelled = true;
     };
-
-    fetchAdFilterCode();
   }, []);
 
   // Anime4K超分相关状态
@@ -2547,6 +2512,31 @@ function PlayPageClient() {
   const artRef = useRef<HTMLDivElement | null>(null);
   // 换集重建播放器前记住网页全屏状态，新播放器 ready 后恢复
   const restoreWebFullscreenOnReadyRef = useRef(false);
+
+  // iOS PWA 自绘全屏：见 globals.css 的 .ios-pwa-immersive。
+  // 容器（artRef 的父级）是 JSX 里的固定节点，跨换集重建不换，所以类名能留着不丢全屏。
+  const isImmersiveFullscreen = () =>
+    !!artRef.current?.parentElement?.classList.contains('ios-pwa-immersive');
+  const enterImmersiveFullscreen = () => {
+    const wrap = artRef.current?.parentElement;
+    if (!wrap) return;
+    wrap.classList.add('ios-pwa-immersive');
+    document.body.style.overflow = 'hidden';
+    // 尺寸变了，催播放器重算（弹幕画布、Anime4K 画布都依赖 resize）
+    window.dispatchEvent(new Event('resize'));
+  };
+  const exitImmersiveFullscreen = () => {
+    artRef.current?.parentElement?.classList.remove('ios-pwa-immersive');
+    document.body.style.removeProperty('overflow');
+    window.dispatchEvent(new Event('resize'));
+  };
+  // 卸载兜底：用户在全屏里直接返回时，把 body 滚动锁和类名清掉
+  useEffect(() => {
+    return () => {
+      artRef.current?.parentElement?.classList.remove('ios-pwa-immersive');
+      document.body.style.removeProperty('overflow');
+    };
+  }, []);
   const activeHarmonyHlsPlaybackModeRef =
     useRef<HarmonyHlsPlaybackMode | null>(null);
   const activeNetdiskHlsPlaybackModeRef =
@@ -5096,83 +5086,6 @@ function PlayPageClient() {
     }
   };
 
-  function filterAdsFromM3U8(type: string, m3u8Content: string): string {
-    // 尝试使用缓存的自定义去广告代码
-    if (customAdFilterCodeRef.current && customAdFilterCodeRef.current.trim()) {
-      try {
-        // 移除 TypeScript 类型注解，转换为纯 JavaScript
-        const jsCode = customAdFilterCodeRef.current
-          // 移除函数参数的类型注解：name: type
-          .replace(/(\w+)\s*:\s*(string|number|boolean|any|void|never|unknown|object)\s*([,)])/g, '$1$3')
-          // 移除函数返回值类型注解：): type {
-          .replace(/\)\s*:\s*(string|number|boolean|any|void|never|unknown|object)\s*\{/g, ') {')
-          // 移除变量声明的类型注解：const name: type =
-          .replace(/(const|let|var)\s+(\w+)\s*:\s*(string|number|boolean|any|void|never|unknown|object)\s*=/g, '$1 $2 =');
-
-        // 创建并执行自定义函数
-        const customFunction = new Function('type', 'm3u8Content',
-          jsCode + '\nreturn filterAdsFromM3U8(type, m3u8Content);'
-        );
-        return customFunction(type, m3u8Content);
-      } catch (err) {
-        console.error('执行自定义去广告代码失败，使用默认规则:', err);
-        // 如果自定义代码执行失败，继续使用默认规则
-      }
-    }
-
-    // 默认去广告规则
-    if (!m3u8Content) return '';
-
-    // 广告关键字列表
-    const adKeywords = [
-      'sponsor',
-      '/ad/',
-      '/ads/',
-      'advert',
-      'advertisement',
-      '/adjump',
-      'redtraffic'
-    ];
-
-    // 按行分割M3U8内容
-    const lines = m3u8Content.split('\n');
-    const filteredLines = [];
-
-    let i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-
-      // 跳过 #EXT-X-DISCONTINUITY 标识
-      if (line.includes('#EXT-X-DISCONTINUITY')) {
-        i++;
-        continue;
-      }
-
-      // 如果是 EXTINF 行，检查下一行 URL 是否包含广告关键字
-      if (line.includes('#EXTINF:')) {
-        // 检查下一行 URL 是否包含广告关键字
-        if (i + 1 < lines.length) {
-          const nextLine = lines[i + 1];
-          const containsAdKeyword = adKeywords.some(keyword =>
-            nextLine.toLowerCase().includes(keyword.toLowerCase())
-          );
-
-          if (containsAdKeyword) {
-            // 跳过 EXTINF 行和 URL 行
-            i += 2;
-            continue;
-          }
-        }
-      }
-
-      // 保留当前行
-      filteredLines.push(line);
-      i++;
-    }
-
-    return filteredLines.join('\n');
-  }
-
   // 跳过片头片尾配置相关函数
   const handleSkipConfigChange = async (newConfig: {
     enable: boolean;
@@ -5246,42 +5159,6 @@ function PlayPageClient() {
         .toString()
         .padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
-  };
-
-  // 创建自定义 HLS loader 的工厂函数
-  const createCustomHlsLoader = (HlsLib: any) => {
-    return class CustomHlsJsLoader extends HlsLib.DefaultConfig.loader {
-      constructor(config: any) {
-        super(config);
-        const load = this.load.bind(this);
-        this.load = function (context: any, config: any, callbacks: any) {
-          // 拦截manifest和level请求
-          if (
-            (context as any).type === 'manifest' ||
-            (context as any).type === 'level'
-          ) {
-            const onSuccess = callbacks.onSuccess;
-            callbacks.onSuccess = function (
-              response: any,
-              stats: any,
-              context: any
-            ) {
-              // 如果是m3u8文件，处理内容以移除广告分段
-              if (response.data && typeof response.data === 'string') {
-                // 过滤掉广告段 - 实现更精确的广告过滤逻辑
-                response.data = filterAdsFromM3U8(
-                  currentSourceRef.current,
-                  response.data
-                );
-              }
-              return onSuccess(response, stats, context, null);
-            };
-          }
-          // 执行原始load方法
-          load(context, config, callbacks);
-        };
-      }
-    };
   };
 
   // 当集数索引变化时自动更新视频地址
@@ -5700,15 +5577,19 @@ function PlayPageClient() {
         // 异步获取其他源信息，不阻塞播放
         setBackgroundSourcesLoading(true);
         fetchSourcesData(searchTitle || videoTitle).then((sources) => {
-          // 合并当前源和搜索到的其他源
-          const allSources = [...sourcesInfo];
-          sources.forEach((source) => {
-            // 避免重复添加当前源
-            if (!(source.source === currentSource && source.id === currentId)) {
-              allSources.push(source);
+          // 合并当前源和搜索到的其他源。
+          // 注意：命中缓存时 sourcesInfo 已经是完整源列表，直接拼接会和搜索结果重复，
+          // 必须按 source+id 去重（当前源的详情保留在前，信息更全）。
+          const mergedSources = new Map<string, SearchResult>();
+          [...sourcesInfo, ...sources].forEach((source) => {
+            const key = `${source.source}-${source.id}`;
+            if (!mergedSources.has(key)) {
+              mergedSources.set(key, source);
             }
           });
-          setAvailableSources(applyCorrectionsToSources(allSources));
+          setAvailableSources(
+            applyCorrectionsToSources(Array.from(mergedSources.values()))
+          );
           setBackgroundSourcesLoading(false);
         }).catch((err) => {
           console.error('异步获取其他源失败:', err);
@@ -7211,6 +7092,12 @@ function PlayPageClient() {
           detailRef.current?.type_name,
           detailRef.current?.class
         ),
+        // 短剧内容在这里也打标，免得续看记录被普通页写掉后回不到竖屏页；
+        // 判断不出就不表态（undefined），别把竖屏页打的标记冲掉
+        is_duanju:
+          isDuanjuTypeName(
+            detailRef.current?.type_name || detailRef.current?.class || ''
+          ) || undefined,
       });
 
       lastSavedPlayTimeRef.current = playTime;
@@ -7689,8 +7576,12 @@ function PlayPageClient() {
           });
         };
 
-        // 创建自定义 HLS loader
-        const CustomHlsJsLoader = createCustomHlsLoader(Hls);
+        // 创建自定义 HLS loader（去广告逻辑见 lib/hls-ad-filter.client）
+        const CustomHlsJsLoader = createAdFilteringHlsLoader(
+          Hls,
+          () => currentSourceRef.current,
+          () => customAdFilterCodeRef.current
+        );
 
         // 创建新的播放器实例
         Artplayer.PLAYBACK_RATE = PLAYBACK_RATE_OPTIONS;
@@ -8147,18 +8038,25 @@ function PlayPageClient() {
                 return newVal;
               },
             }] : []),
-            ...(webGPUSupported ? [
-              {
-                name: 'Anime4K超分',
-                html: 'Anime4K超分',
-                icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5zm0 18c-4 0-7-3-7-7V9l7-3.5L19 9v4c0 4-3 7-7 7z" fill="#ffffff"/><path d="M10 12l2 2 4-4" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+            {
+              name: 'Anime4K超分',
+              html: 'Anime4K超分',
+              icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5zm0 18c-4 0-7-3-7-7V9l7-3.5L19 9v4c0 4-3 7-7 7z" fill="#ffffff"/><path d="M10 12l2 2 4-4" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+              ...(webGPUSupported ? {
                 switch: anime4kEnabledRef.current,
                 onSwitch: async function (item: any) {
                   const newVal = !item.switch;
                   await toggleAnime4K(newVal);
                   return newVal;
                 },
-              },
+              } : {
+                tooltip: '环境不支持',
+                onClick: function () {
+                  return '环境不支持';
+                },
+              }),
+            },
+            ...(webGPUSupported ? [
               {
                 name: '超分模式',
                 html: '超分模式',
@@ -8844,18 +8742,14 @@ function PlayPageClient() {
                   return;
                 }
 
-                // 如果在 PWA 模式下，直接使用容器全屏（可以隐藏状态栏）
+                // PWA 下自绘全屏：iPhone 上 requestFullscreen 对普通元素无效；
+                // 原来这里调 $container.webkitEnterFullscreen() 是死代码（div 没这方法），
+                // 恒为假 → 永远退化成 fullscreenWeb → 竖屏不转、画面缩在中间。
                 if (isPWA) {
-                  const container = artPlayerRef.current.template.$container;
-                  if (container && container.webkitEnterFullscreen) {
-                    container.webkitEnterFullscreen().catch((err: Error) => {
-                      console.error('PWA 全屏失败:', err);
-                      // 如果失败，降级使用网页全屏
-                      artPlayerRef.current.fullscreenWeb = true;
-                    });
+                  if (isImmersiveFullscreen()) {
+                    exitImmersiveFullscreen();
                   } else {
-                    // 不支持原生全屏，使用网页全屏
-                    artPlayerRef.current.fullscreenWeb = true;
+                    enterImmersiveFullscreen();
                   }
                   return;
                 }
@@ -11370,6 +11264,49 @@ function PlayPageClient() {
                             </span>
                           </button>
                         )}
+
+                        {/* 短剧模式：分类名命中短剧时，切到竖屏沉浸播放页
+                            （本地设置禁用竖屏模式、或处于观影室内时不出这个入口） */}
+                        {currentSource &&
+                          currentId &&
+                          !duanjuVerticalDisabled &&
+                          !watchRoomContext?.currentRoom &&
+                          isDuanjuTypeName(detail?.type_name || detail?.class || '') && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                saveCurrentPlayProgress();
+                                const params = new URLSearchParams({
+                                  source: currentSource,
+                                  id: currentId,
+                                  title: videoTitle || detail?.title || '',
+                                });
+                                const y = videoYear || detail?.year;
+                                if (y) params.set('year', y);
+                                if (fileName) params.set('fileName', fileName);
+                                router.push(`/duanju/play?${params.toString()}`);
+                              }}
+                              className='group relative flex items-center justify-center gap-1 w-8 h-8 lg:w-auto lg:h-auto lg:px-2 lg:py-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-xs font-medium rounded-md transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer overflow-hidden border border-emerald-400 flex-shrink-0'
+                              title='切换到短剧竖屏模式'
+                              aria-label='切换到短剧竖屏模式'
+                            >
+                              <svg
+                                className='w-4 h-4 flex-shrink-0 text-white'
+                                viewBox='0 0 24 24'
+                                fill='none'
+                                stroke='currentColor'
+                                strokeWidth='2'
+                                strokeLinecap='round'
+                                strokeLinejoin='round'
+                              >
+                                <rect x='7' y='2' width='10' height='20' rx='2' />
+                                <path d='M12 18h.01' />
+                              </svg>
+                              <span className='hidden lg:inline max-w-0 group-hover:max-w-[100px] overflow-hidden whitespace-nowrap transition-all duration-200 ease-in-out text-white'>
+                                短剧模式
+                              </span>
+                            </button>
+                          )}
 
                         {/* 快捷键说明 */}
                         <button

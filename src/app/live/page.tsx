@@ -4,7 +4,10 @@
 
 import {
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
   Download,
+  Gauge,
   GitBranch,
   Heart,
   Loader2,
@@ -12,6 +15,7 @@ import {
   Radio,
   RefreshCw,
   Tv,
+  Wand2,
   X,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -21,6 +25,7 @@ import {
   deleteFavorite,
   generateStorageKey,
   isFavorited as checkIsFavorited,
+  isLiveAutoSpeedTestEnabled,
   isLivePlayRecordSavingEnabled,
   saveFavorite,
   savePlayRecord,
@@ -193,6 +198,7 @@ function LivePageClient() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [expandedMergedChannels, setExpandedMergedChannels] = useState<string[]>([]);
   const [lineTestResults, setLineTestResults] = useState<Record<string, LiveLineTestResult>>({});
+  const [liveAutoSpeedTest, setLiveAutoSpeedTest] = useState(false);
 
   // 节目单信息
   const [epgData, setEpgData] = useState<{
@@ -377,6 +383,14 @@ function LivePageClient() {
   const groupContainerRef = useRef<HTMLDivElement>(null);
   const groupButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const channelListRef = useRef<HTMLDivElement>(null);
+  // 记录自动测速已处理过的「直播源:分组」，避免重复测速
+  const autoTestedGroupRef = useRef<string>('');
+  // 当前测速会话的中断控制器：自动/手动测速共用，切换分组或直播源时统一中断
+  const testAbortRef = useRef<AbortController | null>(null);
+  // 正在测速的线路 key（同步锁，避免自动/手动在同一帧内重复测同一条线路）
+  const inFlightKeysRef = useRef<Set<string>>(new Set());
+  // lineTestResults 的同步镜像：handleTestLines 内部逻辑据此判断「已完成/在测」
+  const lineTestResultsRef = useRef<Record<string, LiveLineTestResult>>({});
 
   // -----------------------------------------------------------------------------
   // 工具函数（Utils）
@@ -1292,6 +1306,13 @@ function LivePageClient() {
     return `${speedKBps.toFixed(0)} KB/s`;
   };
 
+  // 卡片上的紧凑速度，避免占满一行
+  const formatLineSpeedCompact = (speedKBps?: number) => {
+    if (!speedKBps || speedKBps <= 0) return '';
+    if (speedKBps >= 1024) return `${(speedKBps / 1024).toFixed(1)}M/s`;
+    return `${speedKBps.toFixed(0)}K/s`;
+  };
+
   const formatLineLatency = (firstByteMs?: number) => {
     if (!firstByteMs || firstByteMs <= 0) return '';
     return `${Math.round(firstByteMs)}ms`;
@@ -1309,9 +1330,33 @@ function LivePageClient() {
     return speed || latency || '可用';
   };
 
+  // 卡片上展示的徽标文字：短、不会换行
+  const getLineTestBadge = (channel: LiveChannel) => {
+    const result = lineTestResults[getLineTestKey(channel)];
+    if (!result) return '';
+    if (result.status === 'testing') return '测速中';
+    if (result.status === 'fail') return '不可用';
+    return formatLineSpeedCompact(result.speedKBps) || '可用';
+  };
+
   const getBestTestedLine = (channels: LiveChannel[]) => {
     const okChannels = channels
       .map((channel) => ({ channel, result: lineTestResults[getLineTestKey(channel)] }))
+      .filter((item): item is { channel: LiveChannel; result: LiveLineTestResult } => item.result?.status === 'ok');
+
+    if (okChannels.length === 0) return null;
+
+    return okChannels.sort((a, b) => {
+      const speedDiff = (b.result.speedKBps || 0) - (a.result.speedKBps || 0);
+      if (Math.abs(speedDiff) > 1) return speedDiff;
+      return (a.result.firstByteMs || Number.MAX_SAFE_INTEGER) - (b.result.firstByteMs || Number.MAX_SAFE_INTEGER);
+    })[0].channel;
+  };
+
+  // 从本次测速的即时结果中选出最优线路（不依赖异步 state，供「测速并选择推荐线路」使用）
+  const getBestChannelFromResults = (channels: LiveChannel[], results: Record<string, LiveLineTestResult>) => {
+    const okChannels = channels
+      .map((channel) => ({ channel, result: results[getLineTestKey(channel)] }))
       .filter((item): item is { channel: LiveChannel; result: LiveLineTestResult } => item.result?.status === 'ok');
 
     if (okChannels.length === 0) return null;
@@ -1334,23 +1379,54 @@ function LivePageClient() {
   };
 
   const isTestingLineGroup = (channels: LiveChannel[]) => {
-    return channels.some((channel) => lineTestResults[getLineTestKey(channel)]?.status === 'testing');
+    return channels.some((channel) => {
+      const key = getLineTestKey(channel);
+      // 同步锁优先，避免自动/手动在同一帧内重复测同一条线路
+      return inFlightKeysRef.current.has(key) || lineTestResults[key]?.status === 'testing';
+    });
+  };
+
+  // 复用或新建当前测速会话的中断控制器（已中断则重建）
+  const ensureTestSignal = () => {
+    if (!testAbortRef.current || testAbortRef.current.signal.aborted) {
+      testAbortRef.current = new AbortController();
+    }
+    return testAbortRef.current.signal;
+  };
+
+  // 中断当前所有测速（自动 + 手动）
+  const abortLiveTests = () => {
+    testAbortRef.current?.abort();
+    testAbortRef.current = null;
+  };
+
+  // 更新测速结果（同时同步 ref，供 handleTestLines 内部同步读取）
+  const commitTestResults = (next: Record<string, LiveLineTestResult>) => {
+    lineTestResultsRef.current = next;
+    setLineTestResults(next);
   };
 
   const testLineGroup = (event: React.MouseEvent, channels: LiveChannel[]) => {
     event.stopPropagation();
     if (isTestingLineGroup(channels)) return;
-    handleTestLines(channels);
+    handleTestLines(channels, ensureTestSignal());
   };
 
-  const testButtonClassName = (disabled: boolean) => (
-    `text-xs px-2 py-1 rounded border flex-shrink-0 ${disabled
+  // 测速并自动切换到推荐（最优）线路
+  const testAndPickLineGroup = (event: React.MouseEvent, channels: LiveChannel[], mergedKey?: string) => {
+    event.stopPropagation();
+    if (isTestingLineGroup(channels)) return;
+    handleTestAndPlayLines(channels, mergedKey);
+  };
+
+  const iconButtonClassName = (disabled: boolean, active = false) => (
+    `inline-flex h-7 w-7 items-center justify-center rounded-md border flex-shrink-0 transition-colors ${disabled
       ? 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60'
-      : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-green-500 hover:text-green-600 dark:hover:text-green-400'
+      : active
+        ? 'border-green-500 text-green-600 dark:border-green-500 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'
+        : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-green-500 hover:text-green-600 dark:hover:border-green-500 dark:hover:text-green-400'
     }`
   );
-
-  const testButtonLabel = (disabled: boolean) => disabled ? '测速中' : '测速';
 
   const resolveClientUrl = (baseUrl: string, relativePath: string) => {
     try {
@@ -1449,8 +1525,14 @@ function LivePageClient() {
     };
   };
 
-  const testLiveLine = async (channel: LiveChannel): Promise<LiveLineTestResult> => {
+  const testLiveLine = async (channel: LiveChannel, externalSignal?: AbortSignal): Promise<LiveLineTestResult> => {
     const controller = new AbortController();
+    // 外部中断（如切换分组）时立即终止本条测速
+    const onExternalAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort();
+      else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    }
     const timeout = window.setTimeout(() => controller.abort(), 10000);
     const source = currentSourceRef.current || currentSource;
     const testUrl = getClientTestUrl(channel.url, source);
@@ -1507,50 +1589,113 @@ function LivePageClient() {
       };
     } finally {
       window.clearTimeout(timeout);
+      externalSignal?.removeEventListener('abort', onExternalAbort);
     }
   };
 
-  const handleTestLines = async (channels: LiveChannel[]) => {
-    if (!channels.length) return;
+  const handleTestLines = async (
+    channels: LiveChannel[],
+    signal?: AbortSignal,
+    skipCompleted = false
+  ): Promise<Record<string, LiveLineTestResult>> => {
+    if (!channels.length) return {};
 
     const pendingChannels = channels;
-    const now = Date.now();
+    const results: Record<string, LiveLineTestResult> = {};
 
-    setLineTestResults((prev) => {
-      const next = { ...prev };
+    // 中断时清理尚未出结果的「测速中」状态，避免 UI 卡在加载中
+    const clearPendingTesting = () => {
+      const next = { ...lineTestResultsRef.current };
       pendingChannels.forEach((channel) => {
-        next[getLineTestKey(channel)] = {
-          status: 'testing',
-          testedAt: now,
-        };
-      });
-      return next;
-    });
-
-    const maxConcurrency = Math.min(4, pendingChannels.length);
-    let nextIndex = 0;
-
-    const worker = async () => {
-      while (nextIndex < pendingChannels.length) {
-        const channel = pendingChannels[nextIndex++];
         const key = getLineTestKey(channel);
-        try {
-          const result = await testLiveLine(channel);
-          setLineTestResults((prev) => ({ ...prev, [key]: result }));
-        } catch (error) {
-          setLineTestResults((prev) => ({
-            ...prev,
-            [key]: {
+        if (next[key]?.status === 'testing') {
+          delete next[key];
+        }
+      });
+      commitTestResults(next);
+    };
+
+    if (signal?.aborted) return results;
+
+    // 每 5 个一组并发测速，一组测完再测下一组
+    const batchSize = 5;
+    const runBatch = async (batch: LiveChannel[]) => {
+      const startedAt = Date.now();
+      // 只把真正开始测的这一组标记为「测速中」，尚未轮到的线路保持可手动测
+      const next = { ...lineTestResultsRef.current };
+      batch.forEach((channel) => {
+        const key = getLineTestKey(channel);
+        next[key] = { status: 'testing', testedAt: startedAt };
+        inFlightKeysRef.current.add(key);
+      });
+      commitTestResults(next);
+
+      await Promise.all(
+        batch.map(async (channel) => {
+          const key = getLineTestKey(channel);
+          try {
+            const result = await testLiveLine(channel, signal);
+            // 已被中断则丢弃本条结果
+            if (signal?.aborted) return;
+            results[key] = result;
+            commitTestResults({ ...lineTestResultsRef.current, [key]: result });
+          } catch (error) {
+            if (signal?.aborted) return;
+            const failResult: LiveLineTestResult = {
               status: 'fail',
               testedAt: Date.now(),
               error: error instanceof Error ? error.message : '测速失败',
-            },
-          }));
-        }
-      }
+            };
+            results[key] = failResult;
+            commitTestResults({
+              ...lineTestResultsRef.current,
+              [key]: failResult,
+            });
+          } finally {
+            inFlightKeysRef.current.delete(key);
+          }
+        })
+      );
     };
 
-    await Promise.all(Array.from({ length: maxConcurrency }, () => worker()));
+    for (let i = 0; i < pendingChannels.length; i += batchSize) {
+      if (signal?.aborted) break;
+      const batch = pendingChannels.slice(i, i + batchSize).filter((channel) => {
+        const key = getLineTestKey(channel);
+        // 正被其它测速任务测的线路跳过，避免重复
+        if (inFlightKeysRef.current.has(key)) return false;
+        // 自动测速跳过已出结果的线路（手动可以刷新重测）
+        if (skipCompleted) {
+          const status = lineTestResultsRef.current[key]?.status;
+          if (status === 'ok' || status === 'fail') return false;
+        }
+        return true;
+      });
+      if (!batch.length) continue;
+      await runBatch(batch);
+    }
+
+    if (signal?.aborted) {
+      clearPendingTesting();
+    }
+
+    return results;
+  };
+
+  // 测速完成后自动播放评分最高的线路
+  const handleTestAndPlayLines = async (channels: LiveChannel[], mergedKey?: string) => {
+    if (!channels.length) return;
+    const results = await handleTestLines(channels, ensureTestSignal());
+    const best = getBestChannelFromResults(channels, results);
+    if (best) {
+      // 展开合并频道，让用户看到被选中的推荐线路
+      if (mergedKey) {
+        setExpandedMergedChannels((prev) => (
+          prev.includes(mergedKey) ? prev : [...prev, mergedKey]
+        ));
+      }
+      handleChannelChange(best);
+    }
   };
 
   const handlePlayLines = (channels: LiveChannel[]) => {
@@ -1558,10 +1703,72 @@ function LivePageClient() {
     if (preferred) handleChannelChange(preferred);
   };
 
+  // 读取「电视直播自动测速」开关，并监听设置面板的变更广播
+  useEffect(() => {
+    setLiveAutoSpeedTest(isLiveAutoSpeedTestEnabled());
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ enabled?: boolean }>).detail;
+      setLiveAutoSpeedTest(
+        typeof detail?.enabled === 'boolean'
+          ? detail.enabled
+          : isLiveAutoSpeedTestEnabled()
+      );
+    };
+    window.addEventListener('liveAutoSpeedTestChanged', handler);
+    return () =>
+      window.removeEventListener('liveAutoSpeedTestChanged', handler);
+  }, []);
+
+  // 切换直播源时重置自动测速记录，避免把旧源的测速结果错记到新源
+  useEffect(() => {
+    autoTestedGroupRef.current = '';
+    // 切换直播源立即中断在跑的所有测速（自动 + 手动）
+    abortLiveTests();
+  }, [currentSource?.key]);
+
+  // 开启自动测速后，自动测速当前分组下的线路
+  useEffect(() => {
+    if (!liveAutoSpeedTest) {
+      autoTestedGroupRef.current = '';
+      abortLiveTests();
+      return;
+    }
+    if (!selectedGroup || isSwitchingSource) return;
+    const channels = groupedChannels[selectedGroup];
+    if (!channels || channels.length === 0) return;
+
+    const groupKey = `${currentSource?.key || ''}:${selectedGroup}`;
+    if (autoTestedGroupRef.current === groupKey) return;
+    autoTestedGroupRef.current = groupKey;
+
+    // 开始新分组的测速（跳过已出结果的线路），共用当前会话以便切换分组时统一中断
+    handleTestLines(channels, ensureTestSignal(), true);
+
+    return () => {
+      abortLiveTests();
+    };
+  }, [
+    liveAutoSpeedTest,
+    selectedGroup,
+    groupedChannels,
+    currentSource,
+    isSwitchingSource,
+  ]);
+
+  // 组件卸载时中断在跑的测速
+  useEffect(() => () => {
+    abortLiveTests();
+    inFlightKeysRef.current.clear();
+  }, []);
+
   // 切换分组
   const handleGroupChange = (group: string) => {
     // 如果正在切换直播源，则禁用分组切换
     if (isSwitchingSource) return;
+
+    // 切换分组立即中断上一分组正在进行的测速（自动 + 手动）
+    abortLiveTests();
+    autoTestedGroupRef.current = '';
 
     setSelectedGroup(group);
     const filtered = filterChannels(group, searchKeyword);
@@ -2879,35 +3086,40 @@ function LivePageClient() {
                                     )}
                                   </div>
                                   <div className='flex-1 min-w-0'>
-                                    <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate' title={channel.name}>
-                                      {channel.name}
-                                    </div>
-                                    <div className='text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2' title={channel.group}>
-                                      <span>{channel.group}</span>
+                                    <div className='flex items-center gap-2 min-w-0 overflow-hidden'>
+                                      <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate' title={channel.name}>
+                                        {channel.name}
+                                      </div>
                                       {testLabel && (
-                                        <>
-                                          <span>·</span>
-                                          <span className={
+                                        <span
+                                          title={testLabel}
+                                          className={`flex-shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] leading-none ${
                                             testResult?.status === 'ok'
-                                              ? 'text-green-600 dark:text-green-400'
+                                              ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
                                               : testResult?.status === 'fail'
-                                                ? 'text-red-500 dark:text-red-400'
-                                                : 'text-amber-600 dark:text-amber-400'
-                                          }>
-                                            {testLabel}
-                                          </span>
-                                        </>
+                                                ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300'
+                                                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                          }`}
+                                        >
+                                          {getLineTestBadge(channel)}
+                                        </span>
                                       )}
                                     </div>
+                                    <div className='text-xs text-gray-500 dark:text-gray-400 mt-1 truncate' title={channel.group}>
+                                      {channel.group}
+                                    </div>
                                   </div>
-                                  <span
-                                    role='button'
-                                    aria-disabled={isTesting}
-                                    onClick={(e) => testLineGroup(e, getItemChannels(item))}
-                                    className={testButtonClassName(isTesting)}
-                                  >
-                                    {testButtonLabel(isTesting)}
-                                  </span>
+                                  <div className='flex items-center gap-1 flex-shrink-0'>
+                                    <span
+                                      role='button'
+                                      aria-disabled={isTesting}
+                                      title={isTesting ? '测速中' : '测速'}
+                                      onClick={(e) => testLineGroup(e, getItemChannels(item))}
+                                      className={iconButtonClassName(isTesting)}
+                                    >
+                                      {isTesting ? <Loader2 className='w-4 h-4 animate-spin' /> : <Gauge className='w-4 h-4' />}
+                                    </span>
+                                  </div>
                                 </div>
                               </button>
                             );
@@ -2920,6 +3132,9 @@ function LivePageClient() {
                           const bestLineIndex = bestLine ? item.channels.findIndex(channel => channel.id === bestLine.id) : -1;
                           const isTestingLines = item.channels.some(channel => lineTestResults[getLineTestKey(channel)]?.status === 'testing');
                           const bestLineLabel = bestLine ? getLineTestLabel(bestLine) : '';
+                          const bestLineSpeed = bestLine
+                            ? formatLineSpeedCompact(lineTestResults[getLineTestKey(bestLine)]?.speedKBps)
+                            : '';
 
                           return (
                             <div
@@ -2953,50 +3168,62 @@ function LivePageClient() {
                                     )}
                                   </div>
                                   <div className='flex-1 min-w-0'>
-                                    <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate' title={item.name}>
-                                      {item.name}
+                                    <div className='flex items-center gap-2 min-w-0 overflow-hidden'>
+                                      <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate' title={item.name}>
+                                        {item.name}
+                                      </div>
+                                      {isTestingLines ? (
+                                        <span className='flex-shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] leading-none bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'>
+                                          测速中
+                                        </span>
+                                      ) : bestLine ? (
+                                        <span
+                                          title={`推荐线路${bestLineIndex + 1}${bestLineLabel ? ` ${bestLineLabel}` : ''}`}
+                                          className='flex-shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] leading-none bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                                        >
+                                          {`推荐${bestLineIndex + 1}${bestLineSpeed ? ` ${bestLineSpeed}` : ''}`}
+                                        </span>
+                                      ) : hasActiveChild ? (
+                                        <span className='flex-shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] leading-none bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'>
+                                          {`当前${activeLineIndex + 1}`}
+                                        </span>
+                                      ) : null}
                                     </div>
-                                    <div className='text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2'>
-                                      <span title={item.group}>{item.group}</span>
-                                      <span>·</span>
-                                      <span>{item.channels.length} 条线路</span>
-                                      {hasActiveChild && (
-                                        <>
-                                          <span>·</span>
-                                          <span>{`当前线路${activeLineIndex + 1}`}</span>
-                                        </>
-                                      )}
-                                      {isTestingLines && (
-                                        <>
-                                          <span>·</span>
-                                          <span className='text-amber-600 dark:text-amber-400'>测速中...</span>
-                                        </>
-                                      )}
-                                      {!isTestingLines && bestLine && (
-                                        <>
-                                          <span>·</span>
-                                          <span className='text-green-600 dark:text-green-400'>{`推荐线路${bestLineIndex + 1}${bestLineLabel ? ` ${bestLineLabel}` : ''}`}</span>
-                                        </>
-                                      )}
+                                    <div className='text-xs text-gray-500 dark:text-gray-400 mt-1 truncate' title={item.group}>
+                                      {`${item.group} · ${item.channels.length} 条线路`}
                                     </div>
                                   </div>
-                                  <div className='flex flex-col items-end gap-2 flex-shrink-0'>
+                                  <div className='flex items-center gap-1 flex-shrink-0'>
+                                    <div className='flex flex-col gap-1'>
+                                      <span
+                                        role='button'
+                                        aria-disabled={isTestingLines}
+                                        title={isTestingLines ? '测速中' : '测速'}
+                                        onClick={(e) => testLineGroup(e, getItemChannels(item))}
+                                        className={iconButtonClassName(isTestingLines)}
+                                      >
+                                        {isTestingLines ? <Loader2 className='w-4 h-4 animate-spin' /> : <Gauge className='w-4 h-4' />}
+                                      </span>
+                                      <span
+                                        role='button'
+                                        aria-disabled={isTestingLines}
+                                        title='测速并选择推荐线路'
+                                        onClick={(e) => testAndPickLineGroup(e, getItemChannels(item), item.key)}
+                                        className={iconButtonClassName(isTestingLines)}
+                                      >
+                                        <Wand2 className='w-4 h-4' />
+                                      </span>
+                                    </div>
                                     <span
                                       role='button'
-                                      aria-disabled={isTestingLines}
-                                      onClick={(e) => testLineGroup(e, getItemChannels(item))}
-                                      className={testButtonClassName(isTestingLines)}
-                                    >
-                                      {testButtonLabel(isTestingLines)}
-                                    </span>
-                                    <span
+                                      title={isExpanded ? '收起' : '展开'}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         toggleMergedChannel(item.key);
                                       }}
-                                      className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                                      className={iconButtonClassName(false, isExpanded)}
                                     >
-                                      {isExpanded ? '收起' : '展开'}
+                                      {isExpanded ? <ChevronUp className='w-4 h-4' /> : <ChevronDown className='w-4 h-4' />}
                                     </span>
                                   </div>
                                 </div>
@@ -3024,30 +3251,33 @@ function LivePageClient() {
                                               : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                                         }`}
                                       >
-                                        <div className='flex items-center justify-between gap-3'>
-                                          <span className='font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2'>
+                                        <div className='flex items-center gap-3'>
+                                          <span className='flex-shrink-0 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2'>
                                             <GitBranch className='w-4 h-4 text-gray-500 dark:text-gray-400' />
                                             {`线路${index + 1}`}
                                           </span>
-                                          <div className='flex items-center gap-2 text-xs'>
+                                          <div className='flex flex-1 min-w-0 items-center justify-end gap-2 overflow-hidden text-xs'>
                                             {testLabel && (
-                                              <span className={
-                                                testResult?.status === 'ok'
-                                                  ? 'text-green-600 dark:text-green-400'
-                                                  : testResult?.status === 'fail'
-                                                    ? 'text-red-500 dark:text-red-400'
-                                                    : 'text-amber-600 dark:text-amber-400'
-                                              }>
+                                              <span
+                                                title={testLabel}
+                                                className={`min-w-0 truncate ${
+                                                  testResult?.status === 'ok'
+                                                    ? 'text-green-600 dark:text-green-400'
+                                                    : testResult?.status === 'fail'
+                                                      ? 'text-red-500 dark:text-red-400'
+                                                      : 'text-amber-600 dark:text-amber-400'
+                                                }`}
+                                              >
                                                 {testLabel}
                                               </span>
                                             )}
                                             {isBestLine && (
-                                              <span className='rounded bg-green-100 px-2 py-0.5 text-green-700 dark:bg-green-900/40 dark:text-green-300'>
+                                              <span className='flex-shrink-0 whitespace-nowrap rounded bg-green-100 px-2 py-0.5 text-green-700 dark:bg-green-900/40 dark:text-green-300'>
                                                 推荐
                                               </span>
                                             )}
                                             {isActive && (
-                                              <span className='text-green-600 dark:text-green-400'>
+                                              <span className='flex-shrink-0 whitespace-nowrap text-green-600 dark:text-green-400'>
                                                 当前播放
                                               </span>
                                             )}

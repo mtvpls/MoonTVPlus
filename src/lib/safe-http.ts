@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import http from 'http';
 import https from 'https';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import nodeFetch from 'node-fetch';
@@ -26,15 +27,25 @@ import nodeFetch from 'node-fetch';
 let useNonKeepAliveAgent = false;
 
 /** 代理路径保持现状（keepAlive:false）；无代理路径由门闩控制 keep-alive */
-export function makeFetchAgent(proxy?: string | null): https.Agent | HttpsProxyAgent<string> | undefined {
+export function makeFetchAgent(
+  proxy?: string | null,
+  forceNonKeepAlive = false
+):
+  | http.Agent
+  | HttpsProxyAgent<string>
+  | ((url: URL) => http.Agent)
+  | undefined {
   if (proxy) {
     return new HttpsProxyAgent(proxy, {
       timeout: 30000,
       keepAlive: false,
     });
   }
-  if (useNonKeepAliveAgent) {
-    return new https.Agent({ keepAlive: false });
+  if (forceNonKeepAlive || useNonKeepAliveAgent) {
+    const httpAgent = new http.Agent({ keepAlive: false });
+    const httpsAgent = new https.Agent({ keepAlive: false });
+    // node-fetch 在每次请求（含重定向）时调用，避免跨协议时复用错误的 Agent。
+    return (url) => (url.protocol === 'http:' ? httpAgent : httpsAgent);
   }
   return undefined;
 }
@@ -50,8 +61,7 @@ function isPrematureClose(err: unknown): boolean {
 
 /**
  * 真正执行一次 node-fetch 请求。
- * init 中若带有 agent 会被剔除，agent 一律由 makeFetchAgent(proxy) 按门闩状态决定，
- * 保证无代理路径的 keep-alive 行为完全由门闩控制。
+ * init 中若带有 agent 会被剔除，agent 由 makeFetchAgent 按门闩及强制选项决定。
  */
 function doFetch(
   url: string,
@@ -62,13 +72,8 @@ function doFetch(
   const opts: any = { ...(init || {}) };
   delete opts.agent;
 
-  // 仅用于重试时的临时强制（门闩尚未翻转但当前请求已确认命中竞态）
-  if (forceNonKeepAlive && !proxy && !useNonKeepAliveAgent) {
-    opts.agent = new https.Agent({ keepAlive: false });
-  } else {
-    const agent = makeFetchAgent(proxy);
-    if (agent) opts.agent = agent;
-  }
+  const agent = makeFetchAgent(proxy, forceNonKeepAlive);
+  if (agent) opts.agent = agent;
 
   return nodeFetch(url, opts) as unknown as Promise<Response>;
 }
@@ -86,7 +91,14 @@ function wrapResponse(
 ): Response {
   let readRetried = false;
   const target = res as any;
-  const methodNames = ['json', 'text', 'arrayBuffer', 'buffer', 'blob', 'formData'];
+  const methodNames = [
+    'json',
+    'text',
+    'arrayBuffer',
+    'buffer',
+    'blob',
+    'formData',
+  ];
 
   return new Proxy(target, {
     get(inner, prop, receiver) {
@@ -95,7 +107,10 @@ function wrapResponse(
           const read = () => inner[prop](...args);
           if (readRetried) return read();
           return read().catch((err: unknown) => {
-            if (isPrematureClose(err) && !(init?.method && init.method !== 'GET')) {
+            if (
+              isPrematureClose(err) &&
+              !(init?.method && init.method !== 'GET')
+            ) {
               // 只在 GET 时重试，避免 POST/webhook 等重复投递
               readRetried = true;
               useNonKeepAliveAgent = true; // 翻转门闩：后续请求全部走非 keep-alive
@@ -128,7 +143,10 @@ function wrapResponse(
 export function safeFetch(
   url: string,
   init?: RequestInit,
-  proxy?: string | null
+  proxy?: string | null,
+  options?: { forceNonKeepAlive?: boolean }
 ): Promise<Response> {
-  return doFetch(url, init, proxy).then((res) => wrapResponse(res, url, init, proxy));
+  return doFetch(url, init, proxy, options?.forceNonKeepAlive === true).then(
+    (res) => wrapResponse(res, url, init, proxy)
+  );
 }

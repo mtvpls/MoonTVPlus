@@ -25,15 +25,9 @@ export default async function SpecialPage() {
     <main className='min-h-screen bg-gray-50 text-gray-900 dark:bg-black dark:text-slate-100'>
       <section className='mx-auto flex min-h-screen w-full max-w-xl items-center px-5 py-10'>
         <div className='w-full rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-zinc-950 sm:p-8'>
-          <div className='space-y-3'>
-            <h1 className='text-2xl font-semibold tracking-tight text-gray-900 dark:text-white'>
-              特殊源
-            </h1>
-            <p className='text-sm leading-6 text-gray-600 dark:text-slate-400'>
-              特殊源只在 {SPECIAL_SOURCE_PATH} 路径下可用，普通搜索不会出现特殊源的内容；
-              {SPECIAL_SOURCE_PATH} 路径下也不会出现普通源的内容。
-            </p>
-          </div>
+          <h1 className='text-2xl font-semibold tracking-tight text-gray-900 dark:text-white'>
+            特殊源
+          </h1>
 
           <div className='mt-8 flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03]'>
             <div>
@@ -51,20 +45,8 @@ export default async function SpecialPage() {
             <SpecialSourceToggle initialEnabled={enabled} />
           </div>
 
-          {specialCount === 0 && (
-            <p className='mt-4 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'>
-              没有任何采集源被标记为特殊源，此时普通搜索不会屏蔽任何源。请在后台
-              「视频源管理 → 特殊源设置」勾选，或在配置文件里补上
-              <code className='mx-1'>special_source_apis</code>
-              后重新保存配置文件。
-            </p>
-          )}
-
           <p className='mt-4 text-xs leading-5 text-gray-500 dark:text-slate-500'>
-            这是本机开关（存在 cookie 里），谁打开谁能用，只影响当前设备与浏览器，
-            不改动站点配置。关闭后 {SPECIAL_SOURCE_PATH} 返回 404，特殊源的收藏与播放记录也不会出现在
-            普通入口——记录仍在，重新打开即可看到。此开关对 TVBox、OrionTV、WebTV
-            渠道无效，这些渠道始终无法使用特殊源。
+            此开关对 TVBox、OrionTV、WebTV 渠道无效，这些渠道始终无法使用特殊源。
           </p>
 
           <div className='mt-8 flex flex-col gap-3 sm:flex-row'>

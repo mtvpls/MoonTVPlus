@@ -40,9 +40,11 @@ import {
   FileText,
   FolderOpen,
   Globe,
+  Info,
   Mail,
   Monitor,
   Palette,
+  Pencil,
   Plus,
   Search,
   Send,
@@ -54,6 +56,7 @@ import {
   UserPlus,
   Users,
   Video,
+  Wifi,
   X,
 } from 'lucide-react';
 import { GripVertical } from 'lucide-react';
@@ -69,17 +72,19 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 
-import { AdminConfig, AdminConfigResult } from '@/lib/admin.types';
+import { AdminConfig, AdminConfigResult, OpenListExtraSource } from '@/lib/admin.types';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { BookSource } from '@/lib/book.types';
 import {
   ALL_FEATURE_PERMISSION_KEYS,
   FEATURE_PERMISSION_OPTIONS,
 } from '@/lib/feature-permissions';
+import { MAIN_SOURCE_NAME } from '@/lib/openlist-sources';
 
 import AnimeSubscriptionComponent from '@/components/AnimeSubscriptionComponent';
 import CorrectDialog from '@/components/CorrectDialog';
 import DataMigration from '@/components/DataMigration';
+import OpenListPathInput from '@/components/OpenListPathInput';
 import PageLayout from '@/components/PageLayout';
 
 // 统一按钮样式系统
@@ -144,6 +149,18 @@ const buttonStyles = {
 };
 
 const DEFAULT_GROUP_PERMISSIONS = [...ALL_FEATURE_PERMISSION_KEYS];
+
+/**
+ * 备用源列表按索引存展开 / 检测状态，删除某项后需要平移索引，否则状态会错位到别的卡片上。
+ */
+const shiftIndexSetAfterRemove = (prev: Set<number>, removed: number) => {
+  const next = new Set<number>();
+  prev.forEach((n) => {
+    if (n < removed) next.add(n);
+    else if (n > removed) next.add(n - 1);
+  });
+  return next;
+};
 
 // 通用弹窗组件
 interface AlertModalProps {
@@ -3479,11 +3496,7 @@ const OpenListConfigComponent = ({
   const [password, setPassword] = useState('');
   const [rootPaths, setRootPaths] = useState<string[]>(['/']);
   const [offlineDownloadPath, setOfflineDownloadPath] = useState('/');
-  const [offlineDownloadUseCustomSource, setOfflineDownloadUseCustomSource] =
-    useState(false);
-  const [offlineDownloadUrl, setOfflineDownloadUrl] = useState('');
-  const [offlineDownloadUsername, setOfflineDownloadUsername] = useState('');
-  const [offlineDownloadPassword, setOfflineDownloadPassword] = useState('');
+  const [extraSources, setExtraSources] = useState<OpenListExtraSource[]>([]);
   const [scanInterval, setScanInterval] = useState(0);
   const [scanMode, setScanMode] = useState<'torrent' | 'name' | 'hybrid'>(
     'hybrid'
@@ -3507,10 +3520,28 @@ const OpenListConfigComponent = ({
   } | null>(null);
   const [correctDialogOpen, setCorrectDialogOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
+  const [extraSourcesDialogOpen, setExtraSourcesDialogOpen] = useState(false);
+  const [extraSourceExpanded, setExtraSourceExpanded] = useState<Set<number>>(
+    new Set()
+  );
+  // 正在检查连通性的备用源索引（与主源的检查互不影响）
+  const [extraSourceChecking, setExtraSourceChecking] = useState<Set<number>>(
+    new Set()
+  );
   const [pathMetaDialogOpen, setPathMetaDialogOpen] = useState(false);
   const [pathMetaExpanded, setPathMetaExpanded] = useState<Set<number>>(
     new Set()
   );
+
+  // 根目录 / 离线下载目录可选的源名（主源 + 备用源）
+  const sourceNames = useMemo(() => {
+    const names = [MAIN_SOURCE_NAME];
+    for (const source of extraSources) {
+      const name = (source.name || '').trim();
+      if (name && !names.includes(name)) names.push(name);
+    }
+    return names;
+  }, [extraSources]);
 
   useEffect(() => {
     if (config?.OpenListConfig) {
@@ -3525,15 +3556,13 @@ const OpenListConfigComponent = ({
             : ['/'])
       );
       setOfflineDownloadPath(config.OpenListConfig.OfflineDownloadPath || '/');
-      setOfflineDownloadUseCustomSource(
-        config.OpenListConfig.OfflineDownloadUseCustomSource || false
-      );
-      setOfflineDownloadUrl(config.OpenListConfig.OfflineDownloadURL || '');
-      setOfflineDownloadUsername(
-        config.OpenListConfig.OfflineDownloadUsername || ''
-      );
-      setOfflineDownloadPassword(
-        config.OpenListConfig.OfflineDownloadPassword || ''
+      setExtraSources(
+        (config.OpenListConfig.ExtraSources || []).map((source) => ({
+          name: source.name || '',
+          url: source.url || '',
+          username: source.username || '',
+          password: source.password || '',
+        }))
       );
       setScanInterval(config.OpenListConfig.ScanInterval || 0);
       setScanMode(config.OpenListConfig.ScanMode || 'hybrid');
@@ -3615,6 +3644,30 @@ const OpenListConfigComponent = ({
           };
         }
 
+        // 备用源：清理并校验名字
+        const cleanedExtraSources = extraSources.map((source) => ({
+          name: (source.name || '').trim(),
+          url: (source.url || '').trim(),
+          username: (source.username || '').trim(),
+          password: source.password || '',
+        }));
+        const seenExtraNames = new Set<string>();
+        for (const source of cleanedExtraSources) {
+          if (!source.name) {
+            throw new Error('备用 OpenList 源的名称不能为空');
+          }
+          if (source.name.includes('@')) {
+            throw new Error(`备用源名称不能包含 @：${source.name}`);
+          }
+          if (source.name === MAIN_SOURCE_NAME) {
+            throw new Error(`备用源名称不能叫「${MAIN_SOURCE_NAME}」`);
+          }
+          if (seenExtraNames.has(source.name)) {
+            throw new Error(`备用源名称重复：${source.name}`);
+          }
+          seenExtraNames.add(source.name);
+        }
+
         const response = await fetch('/api/admin/openlist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3625,11 +3678,8 @@ const OpenListConfigComponent = ({
             Username: username,
             Password: password,
             RootPaths: rootPaths,
+            ExtraSources: cleanedExtraSources,
             OfflineDownloadPath: offlineDownloadPath,
-            OfflineDownloadUseCustomSource: offlineDownloadUseCustomSource,
-            OfflineDownloadURL: offlineDownloadUrl,
-            OfflineDownloadUsername: offlineDownloadUsername,
-            OfflineDownloadPassword: offlineDownloadPassword,
             ScanInterval: scanInterval,
             ScanMode: scanMode,
             DisableVideoPreview: disableVideoPreview,
@@ -3781,6 +3831,53 @@ const OpenListConfigComponent = ({
     });
   };
 
+  // 备用源各自独立的连通性检查，只测这一张卡片填的地址和账号
+  const handleCheckExtraSource = async (
+    index: number,
+    source: OpenListExtraSource
+  ) => {
+    const name = (source.name || '').trim();
+    if (!name) {
+      showError('请先填写源名', showAlert);
+      return;
+    }
+    if (!source.url || !source.username || !source.password) {
+      showError(`OpenList 源「${name}」配置不完整`, showAlert);
+      return;
+    }
+    setExtraSourceChecking((prev) => new Set(prev).add(index));
+    try {
+      const response = await fetch('/api/openlist/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: source.url,
+          username: source.username,
+          password: source.password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        showSuccess(`「${name}」连接成功`, showAlert);
+      } else {
+        throw new Error(data.error || '连接失败');
+      }
+    } catch (error) {
+      showError(
+        `「${name}」${error instanceof Error ? error.message : '连接失败'}`,
+        showAlert
+      );
+    } finally {
+      setExtraSourceChecking((prev) => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
+    }
+  };
+
   const handleDeleteVideo = async (key: string, title: string) => {
     // 显示确认对话框，直接在 onConfirm 中执行删除操作
     showAlert({
@@ -3882,48 +3979,372 @@ const OpenListConfigComponent = ({
 
       {/* 配置表单 */}
       <div className='space-y-4'>
-        <div>
-          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-            OpenList URL
-          </label>
-          <input
-            type='text'
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            disabled={!enabled}
-            placeholder='https://your-openlist-server.com'
-            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
-          />
-        </div>
-
-        <div className='grid grid-cols-2 gap-4'>
+        <div className='space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800'>
+          <div>
+            <h3 className='text-sm font-medium text-gray-900 dark:text-gray-100'>
+              主 OpenList 源
+            </h3>
+            <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+              扫描与播放默认使用此源，路径不写「源名@」前缀即指向主源
+            </p>
+          </div>
           <div>
             <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-              账号
+              OpenList URL
             </label>
             <input
               type='text'
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
               disabled={!enabled}
-              placeholder='admin'
+              placeholder='https://your-openlist-server.com'
               className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
             />
           </div>
-          <div>
-            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-              密码
-            </label>
-            <input
-              type='password'
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={!enabled}
-              placeholder='password'
-              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
-            />
+
+          <div className='grid grid-cols-2 gap-4'>
+            <div>
+              <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+                账号
+              </label>
+              <input
+                type='text'
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={!enabled}
+                placeholder='admin'
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+              />
+            </div>
+            <div>
+              <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+                密码
+              </label>
+              <input
+                type='password'
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={!enabled}
+                placeholder='password'
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+              />
+            </div>
           </div>
         </div>
+
+        <div className='flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700'>
+          <div>
+            <h3 className='text-sm font-medium text-gray-900 dark:text-white'>
+              备用 OpenList 源列表
+            </h3>
+            <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+              可添加多个 OpenList
+              {extraSources.length > 0
+                ? ` · 已配置 ${extraSources.length} 个`
+                : ''}
+            </p>
+          </div>
+          <button
+            type='button'
+            onClick={() => setExtraSourcesDialogOpen(true)}
+            disabled={!enabled}
+            className={`${buttonStyles.primary} text-sm ${
+              !enabled ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            设置
+          </button>
+        </div>
+
+        {extraSourcesDialogOpen &&
+          createPortal(
+            <div
+              className='fixed inset-0 bg-black bg-opacity-50 z-[10002] flex items-center justify-center p-4'
+              onClick={() => setExtraSourcesDialogOpen(false)}
+              onTouchMove={(e) => e.preventDefault()}
+              onWheel={(e) => e.preventDefault()}
+              style={{ touchAction: 'none' }}
+            >
+              <div
+                className='w-full max-w-2xl max-h-[85vh] flex flex-col rounded-xl bg-white dark:bg-gray-900 shadow-xl border border-gray-200 dark:border-gray-700'
+                onClick={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+                onWheel={(e) => e.stopPropagation()}
+                style={{ touchAction: 'auto' }}
+              >
+                <div className='flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-700'>
+                  <div className='min-w-0'>
+                    <h3 className='text-base font-semibold text-gray-900 dark:text-white'>
+                      备用 OpenList 源列表
+                    </h3>
+                    <p className='mt-0.5 text-xs text-gray-500 dark:text-gray-400'>
+                      可添加多个 OpenList
+                    </p>
+                  </div>
+                  <button
+                    type='button'
+                    onClick={() => setExtraSourcesDialogOpen(false)}
+                    className='flex-shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors'
+                    aria-label='关闭'
+                  >
+                    <X className='h-5 w-5' />
+                  </button>
+                </div>
+
+                <div className='flex justify-end px-5 pt-3'>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      setExtraSources([
+                        ...extraSources,
+                        { name: '', url: '', username: '', password: '' },
+                      ]);
+                      // 新添加的卡片默认展开，便于直接编辑
+                      setExtraSourceExpanded((prev) => {
+                        const next = new Set(prev);
+                        next.add(extraSources.length);
+                        return next;
+                      });
+                    }}
+                    className='inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800'
+                  >
+                    <Plus className='h-4 w-4' />
+                    添加
+                  </button>
+                </div>
+
+                <div className='flex-1 overflow-y-auto px-5 py-4 space-y-2.5'>
+                  {extraSources.length === 0 ? (
+                    <p className='text-sm text-gray-400 dark:text-gray-500 text-center py-8'>
+                      暂无配置，点击上方「添加」开始
+                    </p>
+                  ) : (
+                    extraSources.map((source, index) => {
+                      const expanded = extraSourceExpanded.has(index);
+                      const fieldClass =
+                        'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
+                      const updateSource = (
+                        patch: Partial<OpenListExtraSource>
+                      ) => {
+                        setExtraSources((prev) =>
+                          prev.map((item, i) =>
+                            i === index ? { ...item, ...patch } : item
+                          )
+                        );
+                      };
+                      const removeSource = () => {
+                        setExtraSources((prev) =>
+                          prev.filter((_, i) => i !== index)
+                        );
+                        // 删除后同步平移索引，避免展开 / 检查状态错位
+                        setExtraSourceExpanded((prev) =>
+                          shiftIndexSetAfterRemove(prev, index)
+                        );
+                        setExtraSourceChecking((prev) =>
+                          shiftIndexSetAfterRemove(prev, index)
+                        );
+                      };
+                      const collapseSource = () => {
+                        if (!source.name.trim()) {
+                          showError('源名不能为空', showAlert);
+                          return;
+                        }
+                        setExtraSourceExpanded((prev) => {
+                          const next = new Set(prev);
+                          next.delete(index);
+                          return next;
+                        });
+                      };
+                      const checking = extraSourceChecking.has(index);
+                      const checkButton = (
+                        <button
+                          type='button'
+                          onClick={() => handleCheckExtraSource(index, source)}
+                          disabled={checking}
+                          title={`检查「${source.name || '备用源'}」连通性`}
+                          className='inline-flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
+                        >
+                          <Wifi
+                            className={`h-4 w-4 ${checking ? 'animate-pulse' : ''}`}
+                          />
+                          <span className='hidden md:inline'>
+                            {checking ? '检查中' : '检测'}
+                          </span>
+                        </button>
+                      );
+
+                      const incomplete = (
+                        <span className='text-amber-600 dark:text-amber-400'>
+                          未填
+                        </span>
+                      );
+
+                      return (
+                        <div
+                          key={index}
+                          className='rounded-xl border border-gray-200 bg-gray-50/60 dark:border-gray-700 dark:bg-gray-800/40'
+                        >
+                          {expanded ? (
+                            <>
+                              {/* 编辑态：源名 + 检测 / 完成 / 删除 */}
+                              <div className='flex items-center gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-700'>
+                                <input
+                                  type='text'
+                                  value={source.name}
+                                  onChange={(e) =>
+                                    updateSource({ name: e.target.value })
+                                  }
+                                  placeholder='源名（如 115）'
+                                  className='min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100'
+                                />
+                                {checkButton}
+                                <button
+                                  type='button'
+                                  onClick={collapseSource}
+                                  title='完成'
+                                  className='inline-flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-green-600 transition-colors hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20'
+                                >
+                                  <Check className='h-4 w-4' />
+                                  <span className='hidden md:inline'>完成</span>
+                                </button>
+                                <button
+                                  type='button'
+                                  onClick={removeSource}
+                                  title='删除'
+                                  className='inline-flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20'
+                                >
+                                  <Trash2 className='h-4 w-4' />
+                                  <span className='hidden md:inline'>删除</span>
+                                </button>
+                              </div>
+                              <div className='space-y-3 px-3 py-3'>
+                                <div>
+                                  <label className='mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400'>
+                                    OpenList URL
+                                  </label>
+                                  <input
+                                    type='text'
+                                    value={source.url}
+                                    onChange={(e) =>
+                                      updateSource({ url: e.target.value })
+                                    }
+                                    placeholder='https://another-openlist-server.com'
+                                    className={fieldClass}
+                                  />
+                                </div>
+                                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                                  <div>
+                                    <label className='mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400'>
+                                      账号
+                                    </label>
+                                    <input
+                                      type='text'
+                                      value={source.username}
+                                      onChange={(e) =>
+                                        updateSource({
+                                          username: e.target.value,
+                                        })
+                                      }
+                                      placeholder='admin'
+                                      className={fieldClass}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className='mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400'>
+                                      密码
+                                    </label>
+                                    <input
+                                      type='password'
+                                      value={source.password}
+                                      onChange={(e) =>
+                                        updateSource({
+                                          password: e.target.value,
+                                        })
+                                      }
+                                      placeholder='password'
+                                      className={fieldClass}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            /* 展示卡：源名 + 地址 + 账号，右侧检测 / 编辑 / 删除 */
+                            <div className='flex items-start justify-between gap-3 px-4 py-3'>
+                              <div className='min-w-0 flex-1'>
+                                <p className='truncate text-sm font-semibold text-gray-900 dark:text-gray-100'>
+                                  {source.name}
+                                </p>
+                                <p className='mt-1 truncate text-xs text-gray-500 dark:text-gray-400'>
+                                  {source.url ? (
+                                    source.url
+                                  ) : (
+                                    <span className='text-amber-600 dark:text-amber-400'>
+                                      未填地址
+                                    </span>
+                                  )}
+                                </p>
+                                <p className='mt-0.5 truncate text-xs text-gray-400 dark:text-gray-500'>
+                                  账号 {source.username || incomplete} · 密码{' '}
+                                  {source.password ? '••••••' : incomplete}
+                                </p>
+                              </div>
+                              <div className='flex flex-shrink-0 items-center gap-1'>
+                                {checkButton}
+                                <button
+                                  type='button'
+                                  onClick={() =>
+                                    setExtraSourceExpanded((prev) => {
+                                      const next = new Set(prev);
+                                      next.add(index);
+                                      return next;
+                                    })
+                                  }
+                                  title='编辑'
+                                  className='inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100'
+                                >
+                                  <Pencil className='h-4 w-4' />
+                                  <span className='hidden md:inline'>编辑</span>
+                                </button>
+                                <button
+                                  type='button'
+                                  onClick={removeSource}
+                                  title='删除'
+                                  className='inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20'
+                                >
+                                  <Trash2 className='h-4 w-4' />
+                                  <span className='hidden md:inline'>删除</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className='flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-700'>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      if (
+                        extraSources.some((source) => !(source.name || '').trim())
+                      ) {
+                        showError('源名不能为空', showAlert);
+                        return;
+                      }
+                      setExtraSourcesDialogOpen(false);
+                    }}
+                    className={buttonStyles.success}
+                  >
+                    完成
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
 
         <div>
           <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
@@ -3932,18 +4353,18 @@ const OpenListConfigComponent = ({
           <div className='space-y-2'>
             {rootPaths.map((path, index) => (
               <div key={index} className='flex gap-2'>
-                <input
-                  type='text'
-                  value={path}
-                  onChange={(e) => {
-                    const newPaths = [...rootPaths];
-                    newPaths[index] = e.target.value;
-                    setRootPaths(newPaths);
-                  }}
-                  disabled={!enabled}
-                  placeholder='/'
-                  className='flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
-                />
+                <div className='flex-1 min-w-0'>
+                  <OpenListPathInput
+                    value={path}
+                    onChange={(value) => {
+                      const newPaths = [...rootPaths];
+                      newPaths[index] = value;
+                      setRootPaths(newPaths);
+                    }}
+                    sourceNames={sourceNames}
+                    disabled={!enabled}
+                  />
+                </div>
                 {rootPaths.length > 1 && (
                   <button
                     type='button'
@@ -3969,7 +4390,7 @@ const OpenListConfigComponent = ({
             </button>
           </div>
           <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-            OpenList 中的视频文件夹路径，可以配置多个根目录
+            OpenList 中的视频文件夹路径，可以配置多个根目录；可分别为每个根目录选择所在源
           </p>
         </div>
 
@@ -3977,100 +4398,15 @@ const OpenListConfigComponent = ({
           <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
             离线下载目录
           </label>
-          <input
-            type='text'
+          <OpenListPathInput
             value={offlineDownloadPath}
-            onChange={(e) => setOfflineDownloadPath(e.target.value)}
+            onChange={setOfflineDownloadPath}
+            sourceNames={sourceNames}
             disabled={!enabled}
-            placeholder='/'
-            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
           />
           <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-            动漫磁力等离线下载任务的保存目录，默认为根目录 /
+            动漫磁力等离线下载任务的保存目录，默认为根目录 /；选择的源决定任务提交到哪个 OpenList（「存到私人影库」弹窗可临时改选）
           </p>
-        </div>
-
-        <div className='space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <h3 className='text-sm font-medium text-gray-900 dark:text-gray-100'>
-                离线下载使用独立 OpenList 源
-              </h3>
-              <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                开启后，存到私人影库和追番订阅会把任务提交到下方
-                OpenList，扫描和播放仍使用上方主 OpenList
-              </p>
-            </div>
-            <button
-              type='button'
-              onClick={() =>
-                setOfflineDownloadUseCustomSource(
-                  !offlineDownloadUseCustomSource
-                )
-              }
-              disabled={!enabled}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                offlineDownloadUseCustomSource
-                  ? 'bg-blue-600'
-                  : 'bg-gray-200 dark:bg-gray-700'
-              } ${!enabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  offlineDownloadUseCustomSource
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-
-          {offlineDownloadUseCustomSource && (
-            <div className='space-y-4'>
-              <div>
-                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-                  离线下载 OpenList URL
-                </label>
-                <input
-                  type='text'
-                  value={offlineDownloadUrl}
-                  onChange={(e) => setOfflineDownloadUrl(e.target.value)}
-                  disabled={!enabled}
-                  placeholder='https://download-openlist-server.com'
-                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
-                />
-              </div>
-
-              <div className='grid grid-cols-2 gap-4'>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-                    离线下载账号
-                  </label>
-                  <input
-                    type='text'
-                    value={offlineDownloadUsername}
-                    onChange={(e) => setOfflineDownloadUsername(e.target.value)}
-                    disabled={!enabled}
-                    placeholder='admin'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
-                  />
-                </div>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-                    离线下载密码
-                  </label>
-                  <input
-                    type='password'
-                    value={offlineDownloadPassword}
-                    onChange={(e) => setOfflineDownloadPassword(e.target.value)}
-                    disabled={!enabled}
-                    placeholder='password'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <div>
@@ -4144,8 +4480,7 @@ const OpenListConfigComponent = ({
               路径元信息
             </h3>
             <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
-              为指定路径下的影片设置分类、播放时是否自动刷新链接（约 14 分钟），
-              以及是否通过服务器代理播放（可配置链接缓存时长）
+              可配置特定路径下的功能
               {pathMetaRows.length > 0
                 ? ` · 已配置 ${pathMetaRows.length} 条`
                 : ''}
@@ -4179,226 +4514,35 @@ const OpenListConfigComponent = ({
                 onWheel={(e) => e.stopPropagation()}
                 style={{ touchAction: 'auto' }}
               >
-                <div className='flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700'>
-                  <h3 className='text-base font-medium text-gray-900 dark:text-white'>
-                    路径元信息
-                  </h3>
+                <div className='flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-700'>
+                  <div className='min-w-0'>
+                    <h3 className='text-base font-semibold text-gray-900 dark:text-white'>
+                      路径元信息
+                    </h3>
+                    <p className='mt-0.5 text-xs text-gray-500 dark:text-gray-400'>
+                      为特定目录下的影片统一设置分类、刷新与代理
+                    </p>
+                  </div>
                   <button
                     type='button'
                     onClick={() => setPathMetaDialogOpen(false)}
-                    className='text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm px-2 py-1'
+                    className='flex-shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors'
+                    aria-label='关闭'
                   >
-                    关闭
+                    <X className='h-5 w-5' />
                   </button>
                 </div>
 
-                <div className='px-5 py-3 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800'>
-                  填写目录路径即可作用于其下所有影片（如 /videos）。更具体的路径优先。改完后点「保存配置」才会生效。
+                <div className='px-5 pt-3'>
+                  <div className='flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2.5 text-xs text-blue-700 dark:text-blue-300'>
+                    <Info className='mt-px h-4 w-4 flex-shrink-0' />
+                    <span>
+                      填写目录路径即可作用于其下所有影片（如 /videos）；加「源名@」前缀只对指定源生效（如 115@/videos）。更具体的路径优先。改完后点「保存配置」才会生效。
+                    </span>
+                  </div>
                 </div>
 
-                <div className='flex-1 overflow-y-auto px-5 py-4 space-y-2'>
-                  {pathMetaRows.length === 0 ? (
-                    <p className='text-sm text-gray-400 dark:text-gray-500 text-center py-8'>
-                      暂无配置，点击下方「添加」开始
-                    </p>
-                  ) : (
-                    pathMetaRows.map((row, index) => {
-                      const expanded = pathMetaExpanded.has(index);
-                      return (
-                        <div
-                          key={index}
-                          className='border border-gray-200 dark:border-gray-700 rounded-lg'
-                        >
-                          {/* 折叠头部：路径 + 展开箭头 + 删除 */}
-                          <div className='flex items-center gap-2 px-3 py-2'>
-                            <button
-                              type='button'
-                              onClick={() =>
-                                setPathMetaExpanded((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(index)) {
-                                    next.delete(index);
-                                  } else {
-                                    next.add(index);
-                                  }
-                                  return next;
-                                })
-                              }
-                              className='flex-shrink-0 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                              aria-label={expanded ? '收起' : '展开'}
-                            >
-                              {expanded ? (
-                                <ChevronUp className='h-4 w-4' />
-                              ) : (
-                                <ChevronDown className='h-4 w-4' />
-                              )}
-                            </button>
-                            <input
-                              type='text'
-                              value={row.path}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setPathMetaRows((rows) =>
-                                  rows.map((r, i) =>
-                                    i === index ? { ...r, path: value } : r
-                                  )
-                                );
-                              }}
-                              placeholder='路径，如 /videos'
-                              className='flex-1 min-w-0 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                            />
-                            <button
-                              type='button'
-                              onClick={() =>
-                                setPathMetaRows((rows) =>
-                                  rows.filter((_, i) => i !== index)
-                                )
-                              }
-                              className='flex-shrink-0 px-2 py-1 text-sm text-red-600 hover:text-red-700 dark:text-red-400'
-                            >
-                              删除
-                            </button>
-                          </div>
-
-                          {/* 展开配置区：分类、自动刷新、代理播放、代理缓存时长 */}
-                          {expanded && (
-                            <div className='border-t border-gray-200 dark:border-gray-700 px-3 py-3 space-y-3'>
-                              <div>
-                                <label className='block text-xs text-gray-500 dark:text-gray-400 mb-1'>
-                                  分类
-                                </label>
-                                <input
-                                  type='text'
-                                  value={row.category}
-                                  onChange={(e) => {
-                                    const value = e.target.value;
-                                    setPathMetaRows((rows) =>
-                                      rows.map((r, i) =>
-                                        i === index
-                                          ? { ...r, category: value }
-                                          : r
-                                      )
-                                    );
-                                  }}
-                                  placeholder='分类，如 动漫'
-                                  className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                                />
-                              </div>
-
-                              <div className='flex items-center justify-between'>
-                                <span className='text-sm text-gray-700 dark:text-gray-300'>
-                                  播放自动刷新
-                                  <span className='block text-xs text-gray-400 dark:text-gray-500'>
-                                    播放时约 14 分钟自动刷新链接
-                                  </span>
-                                </span>
-                                <button
-                                  type='button'
-                                  onClick={() =>
-                                    setPathMetaRows((rows) =>
-                                      rows.map((r, i) =>
-                                        i === index
-                                          ? {
-                                              ...r,
-                                              refresh14m: !r.refresh14m,
-                                            }
-                                          : r
-                                      )
-                                    )
-                                  }
-                                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                                    row.refresh14m
-                                      ? 'bg-blue-600'
-                                      : 'bg-gray-200 dark:bg-gray-700'
-                                  }`}
-                                  aria-label='播放自动刷新'
-                                >
-                                  <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                      row.refresh14m
-                                        ? 'translate-x-6'
-                                        : 'translate-x-1'
-                                    }`}
-                                  />
-                                </button>
-                              </div>
-
-                              <div className='flex items-center justify-between'>
-                                <span className='text-sm text-gray-700 dark:text-gray-300'>
-                                  代理播放
-                                  <span className='block text-xs text-gray-400 dark:text-gray-500'>
-                                    播放链接通过服务器代理
-                                  </span>
-                                </span>
-                                <button
-                                  type='button'
-                                  onClick={() =>
-                                    setPathMetaRows((rows) =>
-                                      rows.map((r, i) =>
-                                        i === index
-                                          ? {
-                                              ...r,
-                                              proxyPlay: !r.proxyPlay,
-                                            }
-                                          : r
-                                      )
-                                    )
-                                  }
-                                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                                    row.proxyPlay
-                                      ? 'bg-blue-600'
-                                      : 'bg-gray-200 dark:bg-gray-700'
-                                  }`}
-                                  aria-label='代理播放'
-                                >
-                                  <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                      row.proxyPlay
-                                        ? 'translate-x-6'
-                                        : 'translate-x-1'
-                                    }`}
-                                  />
-                                </button>
-                              </div>
-
-                              <div className='flex items-center gap-2'>
-                                <label className='text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap'>
-                                  代理缓存时长（分钟）
-                                </label>
-                                <input
-                                  type='number'
-                                  min={1}
-                                  max={1440}
-                                  value={row.proxyCacheMinutes}
-                                  onChange={(e) => {
-                                    const value = parseInt(e.target.value, 10);
-                                    setPathMetaRows((rows) =>
-                                      rows.map((r, i) =>
-                                        i === index
-                                          ? {
-                                              ...r,
-                                              proxyCacheMinutes:
-                                                Number.isFinite(value)
-                                                  ? value
-                                                  : 60,
-                                            }
-                                          : r
-                                      )
-                                    );
-                                  }}
-                                  placeholder='60'
-                                  className='w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                <div className='flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-700'>
+                <div className='flex justify-end px-5 pt-3'>
                   <button
                     type='button'
                     onClick={() => {
@@ -4419,10 +4563,222 @@ const OpenListConfigComponent = ({
                         return next;
                       });
                     }}
-                    className={buttonStyles.primary}
+                    className='inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800'
                   >
+                    <Plus className='h-4 w-4' />
                     添加
                   </button>
+                </div>
+
+                <div className='flex-1 overflow-y-auto px-5 py-4 space-y-2.5'>
+                  {pathMetaRows.length === 0 ? (
+                    <p className='text-sm text-gray-400 dark:text-gray-500 text-center py-8'>
+                      暂无配置，点击下方「添加」开始
+                    </p>
+                  ) : (
+                    pathMetaRows.map((row, index) => {
+                      const expanded = pathMetaExpanded.has(index);
+                      return (
+                        <div
+                          key={index}
+                          className='overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
+                        >
+                          {/* 折叠头部：展开箭头 + 路径 + 删除 */}
+                          <div className='flex items-center gap-2 bg-gray-50 px-2 py-2 dark:bg-gray-800/60 sm:px-3'>
+                            <button
+                              type='button'
+                              onClick={() =>
+                                setPathMetaExpanded((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(index)) {
+                                    next.delete(index);
+                                  } else {
+                                    next.add(index);
+                                  }
+                                  return next;
+                                })
+                              }
+                              className='flex-shrink-0 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200'
+                              aria-label={expanded ? '收起' : '展开'}
+                            >
+                              {expanded ? (
+                                <ChevronUp className='h-4 w-4' />
+                              ) : (
+                                <ChevronDown className='h-4 w-4' />
+                              )}
+                            </button>
+                            <input
+                              type='text'
+                              value={row.path}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setPathMetaRows((rows) =>
+                                  rows.map((r, i) =>
+                                    i === index ? { ...r, path: value } : r
+                                  )
+                                );
+                              }}
+                              placeholder='路径，如 /videos 或 115@/videos'
+                              className='min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100'
+                            />
+                            <button
+                              type='button'
+                              onClick={() =>
+                                setPathMetaRows((rows) =>
+                                  rows.filter((_, i) => i !== index)
+                                )
+                              }
+                              className='inline-flex flex-shrink-0 items-center justify-center rounded-lg p-1.5 text-sm text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/20'
+                              aria-label='删除'
+                            >
+                              <Trash2 className='h-4 w-4 md:hidden' />
+                              <span className='hidden md:inline'>删除</span>
+                            </button>
+                          </div>
+
+                          {/* 展开配置区：分类、自动刷新、代理播放、代理缓存时长 */}
+                          {expanded && (
+                            <div className='space-y-3 border-t border-gray-200 px-3 py-3 dark:border-gray-700'>
+                              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                                <div>
+                                  <label className='mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400'>
+                                    分类
+                                  </label>
+                                  <input
+                                    type='text'
+                                    value={row.category}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      setPathMetaRows((rows) =>
+                                        rows.map((r, i) =>
+                                          i === index
+                                            ? { ...r, category: value }
+                                            : r
+                                        )
+                                      );
+                                    }}
+                                    placeholder='分类，如 动漫'
+                                    className='w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100'
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className='mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400'>
+                                    代理缓存时长（分钟）
+                                  </label>
+                                  <input
+                                    type='number'
+                                    min={1}
+                                    max={1440}
+                                    value={row.proxyCacheMinutes}
+                                    onChange={(e) => {
+                                      const value = parseInt(e.target.value, 10);
+                                      setPathMetaRows((rows) =>
+                                        rows.map((r, i) =>
+                                          i === index
+                                            ? {
+                                                ...r,
+                                                proxyCacheMinutes:
+                                                  Number.isFinite(value)
+                                                    ? value
+                                                    : 60,
+                                              }
+                                            : r
+                                        )
+                                      );
+                                    }}
+                                    placeholder='60'
+                                    className='w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100'
+                                  />
+                                </div>
+                              </div>
+
+                              <div className='divide-y divide-gray-100 rounded-lg border border-gray-100 dark:divide-gray-800 dark:border-gray-800'>
+                                <div className='flex items-center justify-between gap-3 px-3 py-2.5'>
+                                  <span className='text-sm text-gray-700 dark:text-gray-300'>
+                                    播放自动刷新
+                                    <span className='block text-xs text-gray-400 dark:text-gray-500'>
+                                      播放时约 14 分钟自动刷新链接
+                                    </span>
+                                  </span>
+                                  <button
+                                    type='button'
+                                    onClick={() =>
+                                      setPathMetaRows((rows) =>
+                                        rows.map((r, i) =>
+                                          i === index
+                                            ? {
+                                                ...r,
+                                                refresh14m: !r.refresh14m,
+                                              }
+                                            : r
+                                        )
+                                      )
+                                    }
+                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                                      row.refresh14m
+                                        ? 'bg-blue-600'
+                                        : 'bg-gray-200 dark:bg-gray-700'
+                                    }`}
+                                    aria-label='播放自动刷新'
+                                  >
+                                    <span
+                                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                        row.refresh14m
+                                          ? 'translate-x-6'
+                                          : 'translate-x-1'
+                                      }`}
+                                    />
+                                  </button>
+                                </div>
+
+                                <div className='flex items-center justify-between gap-3 px-3 py-2.5'>
+                                  <span className='text-sm text-gray-700 dark:text-gray-300'>
+                                    代理播放
+                                    <span className='block text-xs text-gray-400 dark:text-gray-500'>
+                                      播放链接通过服务器代理
+                                    </span>
+                                  </span>
+                                  <button
+                                    type='button'
+                                    onClick={() =>
+                                      setPathMetaRows((rows) =>
+                                        rows.map((r, i) =>
+                                          i === index
+                                            ? {
+                                                ...r,
+                                                proxyPlay: !r.proxyPlay,
+                                              }
+                                            : r
+                                        )
+                                      )
+                                    }
+                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                                      row.proxyPlay
+                                        ? 'bg-blue-600'
+                                        : 'bg-gray-200 dark:bg-gray-700'
+                                    }`}
+                                    aria-label='代理播放'
+                                  >
+                                    <span
+                                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                        row.proxyPlay
+                                          ? 'translate-x-6'
+                                          : 'translate-x-1'
+                                      }`}
+                                    />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className='flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-700'>
                   <button
                     type='button'
                     onClick={() => {
@@ -4454,7 +4810,7 @@ const OpenListConfigComponent = ({
             }
             className={buttonStyles.primary}
           >
-            {isLoading('checkOpenList') ? '检查中...' : '检查连通性'}
+            {isLoading('checkOpenList') ? '检查中...' : '检查主源连通性'}
           </button>
           <button
             onClick={handleSave}
@@ -6690,6 +7046,7 @@ const VideoSourceConfig = ({
   const { isLoading, withLoading } = useLoadingState();
   const [sources, setSources] = useState<DataSource[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingSource, setEditingSource] = useState<DataSource | null>(null);
   const [orderChanged, setOrderChanged] = useState(false);
   const [newSource, setNewSource] = useState<DataSource>({
     name: '',
@@ -7036,6 +7393,27 @@ const VideoSourceConfig = ({
       setShowAddForm(false);
     }).catch(() => {
       console.error('操作失败', 'add', newSource);
+    });
+  };
+
+  const handleEditSource = (source: DataSource) => {
+    setEditingSource({ ...source });
+    setShowAddForm(false);
+  };
+
+  const handleUpdateSource = () => {
+    if (!editingSource || !editingSource.name || !editingSource.api) return;
+    withLoading('updateSource', async () => {
+      await callSourceApi({
+        action: 'update',
+        key: editingSource.key,
+        name: editingSource.name,
+        api: editingSource.api,
+        detail: editingSource.detail,
+      });
+      setEditingSource(null);
+    }).catch(() => {
+      console.error('操作失败', 'update', editingSource);
     });
   };
 
@@ -7567,17 +7945,25 @@ const VideoSourceConfig = ({
             {!source.disabled ? '禁用' : '启用'}
           </button>
           {source.from !== 'config' && (
-            <button
-              onClick={() => handleDelete(source.key)}
-              disabled={isLoading(`deleteSource_${source.key}`)}
-              className={`${buttonStyles.roundedSecondary} ${
-                isLoading(`deleteSource_${source.key}`)
-                  ? 'opacity-50 cursor-not-allowed'
-                  : ''
-              }`}
-            >
-              删除
-            </button>
+            <>
+              <button
+                onClick={() => handleEditSource(source)}
+                className={buttonStyles.roundedPrimary}
+              >
+                编辑
+              </button>
+              <button
+                onClick={() => handleDelete(source.key)}
+                disabled={isLoading(`deleteSource_${source.key}`)}
+                className={`${buttonStyles.roundedSecondary} ${
+                  isLoading(`deleteSource_${source.key}`)
+                    ? 'opacity-50 cursor-not-allowed'
+                    : ''
+                }`}
+              >
+                删除
+              </button>
+            </>
           )}
         </td>
       </tr>
@@ -8055,6 +8441,107 @@ const VideoSourceConfig = ({
               }`}
             >
               {isLoading('addSource') ? '添加中...' : '添加'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑视频源表单 */}
+      {editingSource && (
+        <div className='p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4'>
+          <div className='flex items-center justify-between'>
+            <h5 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+              编辑视频源: {editingSource.name}
+            </h5>
+            <button
+              onClick={() => setEditingSource(null)}
+              className='text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              aria-label='关闭编辑'
+            >
+              ✕
+            </button>
+          </div>
+          <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                名称
+              </label>
+              <input
+                type='text'
+                value={editingSource.name}
+                onChange={(e) =>
+                  setEditingSource((prev) =>
+                    prev ? { ...prev, name: e.target.value } : null
+                  )
+                }
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+              />
+            </div>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                Key（不可编辑）
+              </label>
+              <input
+                type='text'
+                value={editingSource.key}
+                disabled
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+              />
+            </div>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                API 地址
+              </label>
+              <input
+                type='text'
+                value={editingSource.api}
+                onChange={(e) =>
+                  setEditingSource((prev) =>
+                    prev ? { ...prev, api: e.target.value } : null
+                  )
+                }
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+              />
+            </div>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                Detail 地址（选填）
+              </label>
+              <input
+                type='text'
+                value={editingSource.detail || ''}
+                onChange={(e) =>
+                  setEditingSource((prev) =>
+                    prev ? { ...prev, detail: e.target.value } : null
+                  )
+                }
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+              />
+            </div>
+          </div>
+          <div className='flex justify-end gap-2'>
+            <button
+              onClick={() => setEditingSource(null)}
+              className={buttonStyles.secondary}
+            >
+              取消
+            </button>
+            <button
+              onClick={handleUpdateSource}
+              disabled={
+                !editingSource.name ||
+                !editingSource.api ||
+                isLoading('updateSource')
+              }
+              className={`px-4 py-2 ${
+                !editingSource.name ||
+                !editingSource.api ||
+                isLoading('updateSource')
+                  ? buttonStyles.disabled
+                  : buttonStyles.success
+              }`}
+            >
+              {isLoading('updateSource') ? '保存中...' : '保存'}
             </button>
           </div>
         </div>
@@ -9626,6 +10113,7 @@ const ConfigFileComponent = ({
   const [subscriptionUrl, setSubscriptionUrl] = useState('');
   const [autoUpdate, setAutoUpdate] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState<string>('');
+  const [subscriptionProxy, setSubscriptionProxy] = useState('');
 
   useEffect(() => {
     if (config?.ConfigFile) {
@@ -9635,6 +10123,7 @@ const ConfigFileComponent = ({
       setSubscriptionUrl(config.ConfigSubscribtion.URL);
       setAutoUpdate(config.ConfigSubscribtion.AutoUpdate);
       setLastCheckTime(config.ConfigSubscribtion.LastCheck || '');
+      setSubscriptionProxy(config.ConfigSubscribtion.Proxy || '');
     }
   }, [config]);
 
@@ -9650,7 +10139,10 @@ const ConfigFileComponent = ({
         const resp = await fetch('/api/admin/config_subscription/fetch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: subscriptionUrl }),
+          body: JSON.stringify({
+            url: subscriptionUrl,
+            proxy: subscriptionProxy,
+          }),
         });
 
         if (!resp.ok) {
@@ -9773,6 +10265,7 @@ const ConfigFileComponent = ({
             subscriptionUrl,
             autoUpdate,
             lastCheckTime: lastCheckTime || new Date().toISOString(),
+            proxy: subscriptionProxy,
           }),
         });
 
@@ -9831,6 +10324,20 @@ const ConfigFileComponent = ({
             <p className='mt-2 text-xs text-gray-500 dark:text-gray-400'>
               输入配置文件的订阅地址，要求 JSON 格式，且使用 Base58 编码
             </p>
+          </div>
+
+          {/* 拉取配置代理 */}
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3'>
+              拉取配置代理
+            </label>
+            <input
+              type='text'
+              value={subscriptionProxy}
+              onChange={(e) => setSubscriptionProxy(e.target.value)}
+              placeholder='http://127.0.0.1:7890（可选）'
+              className='w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 shadow-sm hover:border-gray-400 dark:hover:border-gray-500'
+            />
           </div>
 
           {/* 拉取配置按钮 */}

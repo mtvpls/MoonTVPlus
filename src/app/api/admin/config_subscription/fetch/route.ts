@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
+import { getConfig } from '@/lib/config';
+import { fetchConfigSubscription } from '@/lib/config-subscription';
 
 export const runtime = 'nodejs';
 
@@ -21,14 +23,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { url } = await request.json();
+    const { url, proxy } = await request.json();
 
     if (!url) {
       return NextResponse.json({ error: '缺少URL参数' }, { status: 400 });
     }
 
-    // 直接 fetch URL 获取配置内容
-    const response = await fetch(url);
+    // 直接 fetch URL 获取配置内容：优先用面板当前填写的代理，其次用已保存的
+    // 配置订阅代理，最后回退到环境变量 CONFIG_SUBSCRIPTION_PROXY
+    const config = await getConfig();
+    const response = await fetchConfigSubscription(
+      url,
+      proxy || config?.ConfigSubscribtion?.Proxy
+    );
 
     if (!response.ok) {
       return NextResponse.json(

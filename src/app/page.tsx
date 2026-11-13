@@ -654,6 +654,7 @@ function HomeClient() {
                         year={duanju.year}
                         type='tv'
                         from='search'
+                        isDuanju
                         source_name={duanju.source_name}
                         episodes={duanju.episodes?.length}
                         douban_id={duanju.douban_id}

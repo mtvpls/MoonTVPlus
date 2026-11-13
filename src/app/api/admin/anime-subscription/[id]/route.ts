@@ -6,6 +6,7 @@ import { validateKeywordExpr } from '@/lib/anime-keyword-expr';
 import { validateEpisodeRegex } from '@/lib/anime-subscription';
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { findUnknownSourceName } from '@/lib/openlist-sources';
 
 export const runtime = 'nodejs';
 
@@ -113,6 +114,20 @@ export async function PUT(
       } else {
         subscription.episodeRegex = undefined;
       }
+    }
+    if (updates.downloadPath !== undefined) {
+      const downloadPathText =
+        typeof updates.downloadPath === 'string'
+          ? updates.downloadPath.trim()
+          : '';
+      const unknownSource = findUnknownSourceName(config, downloadPathText);
+      if (unknownSource) {
+        return NextResponse.json(
+          { error: `覆盖路径引用了未知的 OpenList 源：${unknownSource}` },
+          { status: 400 }
+        );
+      }
+      subscription.downloadPath = downloadPathText || undefined;
     }
     if (updates.lastEpisode !== undefined) {
       // 验证集数为非负整数

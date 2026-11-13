@@ -2,6 +2,7 @@
 
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { fetchLive } from '@/lib/live-http';
 
 const defaultUA = 'AptvPlayer/1.4.10';
 
@@ -86,11 +87,13 @@ export async function refreshLiveChannels(liveInfo: {
     delete cachedLiveChannels[liveInfo.key];
   }
   const ua = liveInfo.ua || defaultUA;
-  const response = await fetch(liveInfo.url, {
-    headers: {
-      'User-Agent': ua,
-    },
-  });
+  const response = await fetchLive(liveInfo.url, ua);
+  if (!response.ok) {
+    const mitigated = response.headers.get('cf-mitigated');
+    throw new Error(
+      `直播源请求失败: HTTP ${response.status}${mitigated ? ' (Cloudflare challenge)' : ''}, ua=${ua}`
+    );
+  }
   const data = await response.text();
   const result = isM3UContent(data)
     ? parseM3U(liveInfo.key, data)
@@ -130,11 +133,7 @@ async function parseEpg(
   } = {};
 
   try {
-    const response = await fetch(epgUrl, {
-      headers: {
-        'User-Agent': ua,
-      },
-    });
+    const response = await fetchLive(epgUrl, ua);
     if (!response.ok) {
       return {};
     }

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { API_CONFIG, getCacheTime } from '@/lib/config';
 import { getDuanjuSources } from '@/lib/duanju';
+import { parseJsonLosslessIntegers } from '@/lib/json';
 import { SearchResult } from '@/lib/types';
 import { cleanHtmlTags } from '@/lib/utils';
 
@@ -95,7 +96,9 @@ export async function GET(request: NextRequest) {
       throw new Error('获取短剧列表失败');
     }
 
-    const videoData: CmsVideoResponse = await response.json();
+    const videoData = parseJsonLosslessIntegers<CmsVideoResponse>(
+      await response.text()
+    );
 
     const results: SearchResult[] = (videoData.list || []).map((item) => {
       const { episodes, episodesTitles } = parseEpisodes(item);

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig, refineConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { normalizeApiBaseUrl } from '@/lib/url';
 
 export const runtime = 'nodejs';
 
@@ -39,11 +40,19 @@ export async function POST(request: NextRequest) {
 
     // 获取请求体
     const body = await request.json();
-    const { configFile, subscriptionUrl, autoUpdate, lastCheckTime } = body;
+    const { configFile, subscriptionUrl, autoUpdate, lastCheckTime, proxy } =
+      body;
 
     if (!configFile || typeof configFile !== 'string') {
       return NextResponse.json(
         { error: '配置文件内容不能为空' },
+        { status: 400 }
+      );
+    }
+
+    if (proxy !== undefined && typeof proxy !== 'string') {
+      return NextResponse.json(
+        { error: '拉取配置代理地址格式错误' },
         { status: 400 }
       );
     }
@@ -64,6 +73,7 @@ export async function POST(request: NextRequest) {
         URL: '',
         AutoUpdate: false,
         LastCheck: '',
+        Proxy: '',
       };
     }
 
@@ -73,6 +83,9 @@ export async function POST(request: NextRequest) {
     }
     if (autoUpdate !== undefined) {
       adminConfig.ConfigSubscribtion.AutoUpdate = autoUpdate;
+    }
+    if (proxy !== undefined) {
+      adminConfig.ConfigSubscribtion.Proxy = normalizeApiBaseUrl(proxy);
     }
     adminConfig.ConfigSubscribtion.LastCheck = lastCheckTime || '';
 
