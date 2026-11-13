@@ -394,7 +394,6 @@ async function getInitConfig(
       : Array.isArray(cfgFile.specialSourceApis)
       ? cfgFile.specialSourceApis
       : [],
-    ClientAdSourceApis: [],
   };
 
   // 用户信息已迁移到新版数据库，不再填充 UserConfig.Users
@@ -726,12 +725,6 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   ) {
     adminConfig.SpecialSourceApis = [];
   }
-  if (
-    !adminConfig.ClientAdSourceApis ||
-    !Array.isArray(adminConfig.ClientAdSourceApis)
-  ) {
-    adminConfig.ClientAdSourceApis = [];
-  }
   adminConfig.LiveRefreshIntervalHours = normalizeLiveRefreshIntervalHours(
     adminConfig.LiveRefreshIntervalHours
   );
@@ -819,7 +812,6 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     return true;
   });
 
-  const validSourceKeys = new Set(adminConfig.SourceConfig.map((source) => source.key));
   const validSpecialSourceKeys = getAdminVideoSourceKeys(adminConfig);
   // 配置文件是采集源的权威来源，special_source_apis 同理：**老库缺字段时**从 ConfigFile 补齐。
   // 只在字段缺失时回填——否则后台把特殊源全部取消勾选（存成空数组）后，
@@ -835,9 +827,6 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
         validSpecialSourceKeys.has(key)
       )
     )
-  );
-  adminConfig.ClientAdSourceApis = Array.from(
-    new Set((adminConfig.ClientAdSourceApis || []).filter((key) => validSourceKeys.has(key)))
   );
 
   // 自定义分类去重
