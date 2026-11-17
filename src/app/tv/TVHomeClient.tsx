@@ -93,8 +93,9 @@ function favoriteToItem([key, favorite]: [string, Favorite]): TVItem {
     title: favorite.title,
     poster: favorite.cover,
     year: favorite.year,
-    rate: '收藏',
-    href: hrefFromKey(key, favorite),
+    rate: favorite.is_invalid ? undefined : '收藏',
+    isInvalid: favorite.is_invalid,
+    href: favorite.is_invalid ? undefined : hrefFromKey(key, favorite),
   };
 }
 

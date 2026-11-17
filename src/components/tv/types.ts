@@ -10,6 +10,7 @@ export interface TVItem {
   currentEpisode?: number;
   totalEpisodes?: number;
   origin?: 'vod' | 'live';
+  isInvalid?: boolean;
 }
 
 export interface TVSection {

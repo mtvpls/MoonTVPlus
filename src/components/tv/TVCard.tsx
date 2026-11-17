@@ -1,6 +1,6 @@
 'use client';
 
-import { Play, Star } from 'lucide-react';
+import { Ban, Play, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { isTVRemoteMenuKey } from '@/lib/tv-remote-core';
@@ -53,10 +53,13 @@ export default function TVCard({
   return (
     <button
       type='button'
-      aria-label={item.title}
+      aria-label={item.isInvalid ? `${item.title}，已失效` : item.title}
+      disabled={item.isInvalid}
       data-tv-record-key={onMenu ? item.id : undefined}
       aria-haspopup={onMenu ? 'dialog' : undefined}
-      onClick={() => router.push(playUrl)}
+      onClick={() => {
+        if (!item.isInvalid) router.push(playUrl);
+      }}
       onKeyDown={(event) => {
         if (!onMenu || !isTVRemoteMenuKey(event.nativeEvent)) return;
         event.preventDefault();
@@ -68,7 +71,11 @@ export default function TVCard({
         event.preventDefault();
         onMenu(item, event.currentTarget);
       }}
-      className='tv-focusable group w-44 shrink-0 cursor-pointer rounded-2xl p-2 text-left outline-none hover:bg-[#232325] focus:bg-[#232325] lg:w-52 2xl:w-56'
+      className={`tv-focusable group w-44 shrink-0 rounded-2xl p-2 text-left outline-none lg:w-52 2xl:w-56 ${
+        item.isInvalid
+          ? 'cursor-not-allowed'
+          : 'cursor-pointer hover:bg-[#232325] focus:bg-[#232325]'
+      }`}
     >
       <div className='relative aspect-[2/3] overflow-hidden rounded-lg bg-[#232325]'>
         {item.currentEpisode != null && item.totalEpisodes != null && (
@@ -87,7 +94,15 @@ export default function TVCard({
           />
         ) : (
           <div className='flex h-full w-full items-center justify-center text-[#8d8d93]'>
-            <Play className='h-12 w-12' strokeWidth={1.5} aria-hidden='true' />
+            {!item.isInvalid && (
+              <Play className='h-12 w-12' strokeWidth={1.5} aria-hidden='true' />
+            )}
+          </div>
+        )}
+        {item.isInvalid && (
+          <div className='pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-[#ededed]'>
+            <Ban className='h-12 w-12' strokeWidth={1.5} aria-hidden='true' />
+            <span className='text-xl font-medium'>已失效</span>
           </div>
         )}
         {progress !== null && Number.isFinite(progress) && (

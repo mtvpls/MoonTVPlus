@@ -49,6 +49,7 @@ export interface Favorite {
   search_title: string; // 搜索时使用的标题
   origin?: 'vod' | 'live';
   is_completed?: boolean; // 是否已完结
+  is_invalid?: boolean; // 源站标题完全变更后失效，重新收藏时恢复
   vod_remarks?: string; // 视频备注信息
 }
 

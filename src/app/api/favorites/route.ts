@@ -127,6 +127,7 @@ export async function POST(request: NextRequest) {
 
     const finalFavorite = {
       ...favorite,
+      is_invalid: false,
       save_time: favorite.save_time ?? Date.now(),
     } as Favorite;
 

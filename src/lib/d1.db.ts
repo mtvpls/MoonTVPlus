@@ -277,9 +277,9 @@ export class D1Storage implements IStorage {
           INSERT INTO favorites (
             username, key, source_name, total_episodes, title,
             year, cover, save_time, search_title, origin,
-            is_completed, vod_remarks
+            is_completed, vod_remarks, is_invalid
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(username, key) DO UPDATE SET
             source_name = excluded.source_name,
             total_episodes = excluded.total_episodes,
@@ -290,7 +290,8 @@ export class D1Storage implements IStorage {
             search_title = excluded.search_title,
             origin = excluded.origin,
             is_completed = excluded.is_completed,
-            vod_remarks = excluded.vod_remarks
+            vod_remarks = excluded.vod_remarks,
+            is_invalid = excluded.is_invalid
         `
         )
         .bind(
@@ -305,7 +306,8 @@ export class D1Storage implements IStorage {
           favorite.search_title || '',
           favorite.origin || null,
           favorite.is_completed ? 1 : 0,
-          favorite.vod_remarks || null
+          favorite.vod_remarks || null,
+          favorite.is_invalid ? 1 : 0
         )
         .run();
     } catch (err) {
@@ -1236,6 +1238,7 @@ export class D1Storage implements IStorage {
       search_title: row.search_title || '',
       origin: row.origin as 'vod' | 'live' | undefined,
       is_completed: row.is_completed === 1,
+      is_invalid: row.is_invalid === 1,
       vod_remarks: row.vod_remarks || undefined,
     };
   }

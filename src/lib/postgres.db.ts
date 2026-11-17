@@ -275,9 +275,9 @@ export class PostgresStorage implements IStorage {
           INSERT INTO favorites (
             username, key, source_name, total_episodes, title,
             year, cover, save_time, search_title, origin,
-            is_completed, vod_remarks
+            is_completed, vod_remarks, is_invalid
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           ON CONFLICT (username, key) DO UPDATE SET
             source_name = EXCLUDED.source_name,
             total_episodes = EXCLUDED.total_episodes,
@@ -288,7 +288,8 @@ export class PostgresStorage implements IStorage {
             search_title = EXCLUDED.search_title,
             origin = EXCLUDED.origin,
             is_completed = EXCLUDED.is_completed,
-            vod_remarks = EXCLUDED.vod_remarks
+            vod_remarks = EXCLUDED.vod_remarks,
+            is_invalid = EXCLUDED.is_invalid
         `
         )
         .bind(
@@ -303,7 +304,8 @@ export class PostgresStorage implements IStorage {
           favorite.search_title || '',
           favorite.origin || null,
           favorite.is_completed ? 1 : 0,
-          favorite.vod_remarks || null
+          favorite.vod_remarks || null,
+          favorite.is_invalid ? 1 : 0
         )
         .run();
     } catch (err) {
@@ -392,6 +394,7 @@ export class PostgresStorage implements IStorage {
       search_title: row.search_title || '',
       origin: row.origin as 'vod' | 'live' | undefined,
       is_completed: row.is_completed === 1,
+      is_invalid: row.is_invalid === 1,
       vod_remarks: row.vod_remarks || undefined,
     };
   }

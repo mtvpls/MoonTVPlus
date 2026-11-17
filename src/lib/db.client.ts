@@ -68,6 +68,7 @@ export interface Favorite {
   search_title?: string;
   origin?: 'vod' | 'live';
   is_completed?: boolean; // 是否已完结
+  is_invalid?: boolean; // 源站标题完全变更后失效，重新收藏时恢复
   vod_remarks?: string; // 视频备注信息
 }
 
@@ -1626,6 +1627,8 @@ export async function saveFavorite(
   favorite: Favorite
 ): Promise<void> {
   const key = generateStorageKey(source, id);
+  // 用户主动收藏相同来源和 ID 时，清除此前的失效状态。
+  favorite = { ...favorite, is_invalid: false };
 
   // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {

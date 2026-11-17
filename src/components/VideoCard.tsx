@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,react-hooks/exhaustive-deps,@typescript-eslint/no-empty-function */
 
 import {
+  Ban,
   Cloud,
   ExternalLink,
   Heart,
@@ -96,6 +97,7 @@ export interface VideoCardProps {
   typeName?: string;
   isAggregate?: boolean;
   origin?: 'vod' | 'live';
+  isInvalid?: boolean; // 收藏因源站复用 ID 而失效
   releaseDate?: string; // 上映日期，格式：YYYY-MM-DD
   isUpcoming?: boolean; // 是否为即将上映
   seasonNumber?: number; // 季度编号
@@ -144,6 +146,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       typeName,
       isAggregate = false,
       origin = 'vod',
+      isInvalid = false,
       releaseDate,
       isUpcoming = false,
       seasonNumber,
@@ -158,6 +161,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     ref
   ) {
     const router = useRouter();
+    const isInvalidFavorite = from === 'favorite' && isInvalid;
     const watchRoomContext = useWatchRoomContextSafe();
     // 观影室状态下短剧不走竖屏沉浸播放页（/duanju/play 不支持房间同步）
     const isInWatchRoom = Boolean(watchRoomContext?.currentRoom);
@@ -359,7 +363,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         try {
           // 确定当前收藏状态
           const currentFavorited =
-            from === 'search' ? searchFavorited : favorited;
+            from === 'search' ? searchFavorited : isInvalidFavorite || favorited;
 
           if (currentFavorited) {
             // 如果已收藏，删除收藏
@@ -400,6 +404,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         actualEpisodes,
         favorited,
         searchFavorited,
+        isInvalidFavorite,
       ]
     );
 
@@ -422,6 +427,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       ? `&line=${encodeURIComponent(line)}`
       : '';
     const handleClick = useCallback(() => {
+      if (isInvalidFavorite) return;
+
       // 即将上映的电影：单击显示上映倒计时提示，不跳转
       if (isUpcoming) {
         setShowUpcomingInfo(true);
@@ -502,6 +509,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         }
       }
     }, [
+      isInvalidFavorite,
       isUpcoming,
       origin,
       from,
@@ -521,6 +529,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
     // 新标签页播放处理函数
     const handlePlayInNewTab = useCallback(() => {
+      if (isInvalidFavorite) return;
+
       // 即将上映的电影不跳转
       if (isUpcoming) {
         return;
@@ -571,6 +581,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         window.open(url, '_blank');
       }
     }, [
+      isInvalidFavorite,
       isUpcoming,
       origin,
       from,
@@ -783,7 +794,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       const actions = [];
 
       // 播放操作
-      if (config.showPlayButton) {
+      if (config.showPlayButton && !isInvalidFavorite) {
         actions.push({
           id: 'play',
           label: origin === 'live' ? '观看直播' : '播放',
@@ -813,7 +824,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         actualId
       ) {
         const currentFavorited =
-          from === 'search' ? searchFavorited : favorited;
+          from === 'search' ? searchFavorited : isInvalidFavorite || favorited;
 
         if (from === 'search') {
           // 搜索结果：根据加载状态显示不同的选项
@@ -976,8 +987,11 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         });
       }
 
-      return actions;
+      return isInvalidFavorite
+        ? actions.filter((action) => action.id === 'favorite')
+        : actions;
     }, [
+      isInvalidFavorite,
       config,
       from,
       actualSource,
@@ -1006,9 +1020,12 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     return (
       <>
         <div
-          className={`group relative w-full rounded-lg bg-transparent transition-all duration-300 ease-in-out hover:scale-[1.05] hover:z-[500] ${
-            isUpcoming ? 'cursor-default' : 'cursor-pointer'
+          className={`group relative w-full rounded-lg bg-transparent transition-all duration-300 ease-in-out ${
+            isInvalidFavorite
+              ? 'cursor-not-allowed'
+              : `hover:scale-[1.05] hover:z-[500] ${isUpcoming ? 'cursor-default' : 'cursor-pointer'}`
           } ${showUpcomingInfo ? 'scale-[1.05] z-[500]' : ''}`}
+          aria-disabled={isInvalidFavorite || undefined}
           onClick={handleClick}
           {...longPressProps}
           style={
@@ -1185,8 +1202,17 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
               />
             </div>
 
-            {/* 播放按钮或上映倒计时 */}
-            {isUpcoming && daysUntilRelease !== null ? (
+            {/* 失效状态、播放按钮或上映倒计时 */}
+            {isInvalidFavorite ? (
+              <div className='pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg bg-black/60 text-white'>
+                <Ban
+                  className='h-10 w-10 sm:h-12 sm:w-12'
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                />
+                <span className='text-sm font-medium sm:text-base'>已失效</span>
+              </div>
+            ) : isUpcoming && daysUntilRelease !== null ? (
               <div
                 className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ease-in-out ${
                   showUpcomingInfo
@@ -1294,8 +1320,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
                     <Heart
                       onClick={handleToggleFavorite}
                       size={20}
-                      className={`transition-all duration-300 ease-out ${
-                        favorited
+                      className={`cursor-pointer transition-all duration-300 ease-out ${
+                        favorited || isInvalidFavorite
                           ? 'fill-red-600 stroke-red-600'
                           : 'fill-transparent stroke-white hover:stroke-red-400'
                       } hover:scale-[1.1]`}

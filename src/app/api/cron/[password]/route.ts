@@ -13,6 +13,7 @@ import {
   getBatchMangaUpdateEmailTemplate,
   MangaShelfUpdate,
 } from '@/lib/email.templates';
+import { hasFavoriteTitleChanged } from '@/lib/favorite-title';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import {
   getLastGlobalLiveRefreshTime,
@@ -516,7 +517,9 @@ async function refreshRecordAndFavorites() {
       try {
         let favorites = await db.getAllFavorites(user);
         favorites = Object.fromEntries(
-          Object.entries(favorites).filter(([_, fav]) => fav.origin !== 'live')
+          Object.entries(favorites).filter(
+            ([_, fav]) => fav.origin !== 'live' && !fav.is_invalid
+          )
         );
         const totalFavorites = Object.keys(favorites).length;
         let processedFavorites = 0;
@@ -544,9 +547,20 @@ async function refreshRecordAndFavorites() {
               continue;
             }
 
+            if (hasFavoriteTitleChanged(fav.title, favDetail.title || '')) {
+              await db.saveFavorite(user, source, id, {
+                ...fav,
+                is_invalid: true,
+              });
+              console.log(`收藏已失效 (源站标题变更): ${key} (${fav.title} -> ${favDetail.title})`);
+              processedFavorites++;
+              continue;
+            }
+
             const favEpisodeCount = favDetail.episodes?.length || 0;
             if (favEpisodeCount > 0 && favEpisodeCount !== fav.total_episodes) {
               await db.saveFavorite(user, source, id, {
+                ...fav,
                 title: favDetail.title || fav.title,
                 source_name: fav.source_name,
                 cover: favDetail.poster || fav.cover,
