@@ -4,7 +4,8 @@ import { DbManager } from '@/lib/db';
 
 const MEMORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const DATABASE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const DATABASE_CACHE_KEY_PREFIX = 'bangumi:schedule:';
+// 解析器升级后弃用旧缓存，避免旧版空时刻表持续命中 30 天。
+const DATABASE_CACHE_KEY_PREFIX = 'bangumi:schedule:v2:';
 
 export interface BangumiScheduleCacheEntry<T> {
   season: string;
@@ -33,9 +34,14 @@ function isValidEntry<T>(
   );
 }
 
-export function getBangumiScheduleMemoryCache<T>(season: string, year: number): T | null {
+export function getBangumiScheduleMemoryCache<T>(
+  season: string,
+  year: number
+): T | null {
   const key = getCacheKey(season, year);
-  const entry = memoryCache.get(key) as BangumiScheduleCacheEntry<T> | undefined;
+  const entry = memoryCache.get(key) as
+    | BangumiScheduleCacheEntry<T>
+    | undefined;
   if (!entry || !isValidEntry(entry, season, year, MEMORY_CACHE_TTL_MS)) {
     memoryCache.delete(key);
     return null;
@@ -58,7 +64,9 @@ export async function getBangumiScheduleDatabaseCache<T>(
 ): Promise<T | null> {
   try {
     const raw = await new DbManager().getGlobalValue(getCacheKey(season, year));
-    const entry = raw ? (JSON.parse(raw) as BangumiScheduleCacheEntry<T>) : null;
+    const entry = raw
+      ? (JSON.parse(raw) as BangumiScheduleCacheEntry<T>)
+      : null;
     if (!isValidEntry(entry, season, year, DATABASE_CACHE_TTL_MS)) return null;
     setBangumiScheduleMemoryCache(season, year, entry.data, entry.cachedAt);
     return entry.data;
