@@ -365,11 +365,11 @@ export default function MangaRecommendPage() {
         ) : result.mangas.length === 0 ? (
           <EmptyState
             icon={<Compass className='h-7 w-7' />}
-            title={sourceId ? '这个源暂时没有推荐' : '还没有可用的漫画源'}
+            title={sourceId ? '这个源暂时没有推荐' : '暂时没有漫画'}
             description={
               sourceId
                 ? '换一个漫画源，或稍后再试。'
-                : '在管理端配置 Suwayomi 漫画源后即可在这里浏览。'
+                : '稍后再来看看。'
             }
           />
         ) : (

@@ -35,13 +35,13 @@ function getMeta(
   searchParams: ReturnType<typeof useSearchParams>
 ) {
   if (pathname === '/manga/shelf') {
-    return { title: '漫画书架', subtitle: '集中管理收藏的漫画' };
+    return { title: '漫画书架' };
   }
   if (pathname === '/manga/history') {
-    return { title: '漫画历史', subtitle: '从上次阅读的位置继续' };
+    return { title: '漫画历史' };
   }
   if (pathname === '/manga/search') {
-    return { title: '漫画搜索', subtitle: '按标题和来源搜索漫画' };
+    return { title: '漫画搜索' };
   }
   if (pathname === '/manga/detail') {
     return {
@@ -69,7 +69,7 @@ function getMeta(
       )}&returnTo=${encodeURIComponent(returnTo)}`,
     };
   }
-  return { title: '漫画推荐', subtitle: '按来源查看热门与最新漫画' };
+  return { title: '漫画推荐' };
 }
 
 export default function MangaLayout({
