@@ -72,7 +72,7 @@ const TEXT_ACTION = cn(
 const CHAPTER_LIST = 'flex gap-2';
 
 const CHAPTER_SCROLL_AREA =
-  'overflow-x-auto overflow-y-hidden overscroll-x-contain pb-1 [scrollbar-width:thin]';
+  'overflow-x-auto overflow-y-hidden overscroll-x-contain pb-1 [scrollbar-width:thin] md:scrollbar-hide';
 
 export function MangaSearchCardSkeleton() {
   return (
@@ -216,6 +216,126 @@ export default function MangaSearchCard({
   useEffect(() => {
     if (chapterListRef.current) chapterListRef.current.scrollLeft = 0;
   }, [itemKey, descOrder]);
+
+  useEffect(() => {
+    const node = chapterListRef.current;
+    if (!node) return;
+    const desktop = window.matchMedia('(min-width: 768px)');
+    let drag: {
+      pointerId: number;
+      startX: number;
+      startScrollLeft: number;
+      moved: boolean;
+    } | null = null;
+    let suppressClick = false;
+
+    const stopDrag = () => {
+      const pointerId = drag?.pointerId;
+      drag = null;
+      node.removeAttribute('data-dragging');
+      if (pointerId !== undefined && node.hasPointerCapture(pointerId)) {
+        node.releasePointerCapture(pointerId);
+      }
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      if (!desktop.matches || event.ctrlKey || event.metaKey) return;
+      const delta =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY;
+      const unit =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 20
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? node.clientWidth
+          : 1;
+      const next = Math.max(
+        0,
+        Math.min(
+          node.scrollWidth - node.clientWidth,
+          node.scrollLeft + delta * unit
+        )
+      );
+      if (next === node.scrollLeft) return;
+      event.preventDefault();
+      node.scrollLeft = next;
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      suppressClick = false;
+      if (
+        !desktop.matches ||
+        event.pointerType !== 'mouse' ||
+        event.button !== 0 ||
+        node.scrollWidth <= node.clientWidth
+      )
+        return;
+      drag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startScrollLeft: node.scrollLeft,
+        moved: false,
+      };
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      if (!(event.buttons & 1)) {
+        stopDrag();
+        return;
+      }
+      const delta = event.clientX - drag.startX;
+      if (!drag.moved && Math.abs(delta) < 8) return;
+      if (!drag.moved) {
+        drag.moved = true;
+        suppressClick = true;
+        node.setAttribute('data-dragging', 'true');
+        // 开始拖动后才捕获指针，保留章节链接的普通点击。
+        node.setPointerCapture(event.pointerId);
+      }
+      event.preventDefault();
+      node.scrollLeft = drag.startScrollLeft - delta;
+    };
+
+    const onPointerEnd = (event: PointerEvent) => {
+      if (event.pointerId === drag?.pointerId) stopDrag();
+    };
+    const onPointerLeave = (event: PointerEvent) => {
+      if (drag && !drag.moved) onPointerEnd(event);
+    };
+    const onClick = (event: MouseEvent) => {
+      if (!suppressClick || event.detail === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClick = false;
+    };
+    const onDragStart = (event: DragEvent) => {
+      if (desktop.matches) event.preventDefault();
+    };
+
+    node.addEventListener('wheel', onWheel, { passive: false });
+    node.addEventListener('pointerdown', onPointerDown);
+    node.addEventListener('pointermove', onPointerMove);
+    node.addEventListener('pointerup', onPointerEnd);
+    node.addEventListener('pointercancel', onPointerEnd);
+    node.addEventListener('lostpointercapture', onPointerEnd);
+    node.addEventListener('pointerleave', onPointerLeave);
+    node.addEventListener('click', onClick, true);
+    node.addEventListener('dragstart', onDragStart);
+    return () => {
+      stopDrag();
+      node.removeEventListener('wheel', onWheel);
+      node.removeEventListener('pointerdown', onPointerDown);
+      node.removeEventListener('pointermove', onPointerMove);
+      node.removeEventListener('pointerup', onPointerEnd);
+      node.removeEventListener('pointercancel', onPointerEnd);
+      node.removeEventListener('lostpointercapture', onPointerEnd);
+      node.removeEventListener('pointerleave', onPointerLeave);
+      node.removeEventListener('click', onClick, true);
+      node.removeEventListener('dragstart', onDragStart);
+    };
+  }, [descOrder, itemKey, sourceChapters]);
 
   const chapterHref = (chapter: MangaChapter) =>
     mangaReadHref(
@@ -510,7 +630,10 @@ export default function MangaSearchCard({
             ref={chapterListRef}
             role='group'
             aria-label='选择章节'
-            className={CHAPTER_SCROLL_AREA}
+            className={cn(
+              CHAPTER_SCROLL_AREA,
+              'md:cursor-grab md:select-none md:[&_a]:cursor-grab data-[dragging=true]:cursor-grabbing data-[dragging=true]:[&_a]:cursor-grabbing'
+            )}
           >
             <div className={CHAPTER_LIST}>
               {chapters.map((chapter) => {
