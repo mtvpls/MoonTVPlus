@@ -11,6 +11,23 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "227.1.0",
+    date: "2026-11-22",
+    added: [
+    "<span style='color: #F7BA0B'>【重磅】</span>支持tvbox订阅源",
+    "增加收藏失效检测"
+    ],
+    changed: [
+    "Webtv界面美化",
+    "移除客户端去广告功能",
+    "漫画搜索界面改版，多源聚合结果显示",
+    "更换bangumi镜像地址"
+    ],
+    fixed: [
+    "修复时刻表失效"
+    ]
+  },
+  {
     version: "227.0.1",
     date: "2026-10-28",
     added: [

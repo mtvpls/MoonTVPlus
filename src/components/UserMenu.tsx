@@ -354,7 +354,7 @@ export const UserMenu: React.FC = () => {
   const animeDataSourceOptions = [
     { value: 'direct', label: '直连（浏览器直连 Bangumi）' },
     { value: 'server-proxy', label: '服务器代理（由服务器访问 Bangumi）' },
-    { value: 'sakura', label: '桜色镜像站（bangumi.lol）' },
+    { value: 'sakura', label: '镜像站（bgm.lat）' },
     { value: 'custom-baseurl', label: '自定义 Base URL' },
   ];
 

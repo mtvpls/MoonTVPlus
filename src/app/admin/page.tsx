@@ -12534,7 +12534,7 @@ const SiteConfigComponent = ({
               {[
                 { value: 'direct', label: '直连' },
                 { value: 'server-proxy', label: '服务器代理' },
-                { value: 'sakura', label: '桜色镜像站' },
+                { value: 'sakura', label: '镜像站' },
                 { value: 'custom-baseurl', label: '自定义 Base URL' },
               ].map((option) => (
                 <button

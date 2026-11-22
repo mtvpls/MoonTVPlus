@@ -6,9 +6,9 @@ export type AnimeDataSource =
   | 'custom-baseurl'
   | 'sakura';
 
-/** 桜色镜像站：全域名镜像 bgm.tv → bangumi.lol */
-export const BANGUMI_SAKURA_API_BASE_URL = 'https://api.bangumi.lol';
-export const BANGUMI_SAKURA_SITE_URL = 'https://bangumi.lol';
+/** 镜像站：全域名镜像 bgm.tv → bgm.lat */
+export const BANGUMI_SAKURA_API_BASE_URL = 'https://api.bgm.lat';
+export const BANGUMI_SAKURA_SITE_URL = 'https://bgm.lat';
 export const BANGUMI_OFFICIAL_SITE_URL = 'https://bgm.tv';
 
 export function isValidAnimeDataSource(
@@ -180,7 +180,7 @@ function buildBangumiUrl(source: AnimeDataSource, path: string): string {
   }
 }
 
-/** 按当前动漫数据源生成 Bangumi 条目外链（桜色镜像站 → bangumi.lol） */
+/** 按当前动漫数据源生成 Bangumi 条目外链（镜像站 → bgm.lat） */
 export function getBangumiSubjectUrl(id: string | number): string {
   const origin =
     getPrimaryAnimeDataSource() === 'sakura'

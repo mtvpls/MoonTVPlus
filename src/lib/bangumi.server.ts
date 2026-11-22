@@ -9,8 +9,8 @@ export type AnimeDataSource =
   | 'sakura';
 
 export const DEFAULT_BANGUMI_BASE_URL = 'https://api.bgm.tv';
-/** 桜色镜像站 API */
-export const BANGUMI_SAKURA_API_BASE_URL = 'https://api.bangumi.lol';
+/** 镜像站 API */
+export const BANGUMI_SAKURA_API_BASE_URL = 'https://api.bgm.lat';
 
 export function isCloudflareEnvironment(): boolean {
   return (
