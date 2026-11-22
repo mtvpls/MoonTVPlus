@@ -21,6 +21,7 @@ interface EmbyConfig {
 
 interface EmbyItem {
   Id: string;
+  ParentId?: string;
   Name: string;
   Type: 'Movie' | 'Series' | 'Season' | 'Episode';
   Overview?: string;

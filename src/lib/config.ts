@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, no-console, @typescript-eslint/no-non-null-assertion */
 
+import { getAdminVideoSourceKeys } from '@/lib/admin-video-sources';
 import { db } from '@/lib/db';
 import { normalizeApiBaseUrl } from '@/lib/url';
 
@@ -150,7 +151,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
     ? fileConfig.specialSourceApis
     : undefined;
   if (specialApisFromFile) {
-    const sourceKeys = new Set(adminConfig.SourceConfig.map((source) => source.key));
+    const sourceKeys = getAdminVideoSourceKeys(adminConfig);
     adminConfig.SpecialSourceApis = Array.from(new Set(specialApisFromFile)).filter((key) =>
       sourceKeys.has(key)
     );
@@ -223,7 +224,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   // 检查现有 LiveConfig 是否在 fileConfig.lives 中，如果不在则标记为 custom
   const livesFromFileKeys = new Set(livesFromFile.map(([key]) => key));
   currentLives.forEach((live) => {
-    if (!livesFromFileKeys.has(live.key)) {
+    if (!live.tvbox && !livesFromFileKeys.has(live.key)) {
       live.from = 'custom';
     }
   });
@@ -393,7 +394,6 @@ async function getInitConfig(
       : Array.isArray(cfgFile.specialSourceApis)
       ? cfgFile.specialSourceApis
       : [],
-    ClientAdSourceApis: [],
   };
 
   // 用户信息已迁移到新版数据库，不再填充 UserConfig.Users
@@ -725,12 +725,6 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   ) {
     adminConfig.SpecialSourceApis = [];
   }
-  if (
-    !adminConfig.ClientAdSourceApis ||
-    !Array.isArray(adminConfig.ClientAdSourceApis)
-  ) {
-    adminConfig.ClientAdSourceApis = [];
-  }
   adminConfig.LiveRefreshIntervalHours = normalizeLiveRefreshIntervalHours(
     adminConfig.LiveRefreshIntervalHours
   );
@@ -818,7 +812,7 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     return true;
   });
 
-  const validSourceKeys = new Set(adminConfig.SourceConfig.map((source) => source.key));
+  const validSpecialSourceKeys = getAdminVideoSourceKeys(adminConfig);
   // 配置文件是采集源的权威来源，special_source_apis 同理：**老库缺字段时**从 ConfigFile 补齐。
   // 只在字段缺失时回填——否则后台把特殊源全部取消勾选（存成空数组）后，
   // 每次 getConfig() 都会被配置文件又捞回来，等于关不掉。
@@ -828,10 +822,11 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     );
   }
   adminConfig.SpecialSourceApis = Array.from(
-    new Set((adminConfig.SpecialSourceApis || []).filter((key) => validSourceKeys.has(key)))
-  );
-  adminConfig.ClientAdSourceApis = Array.from(
-    new Set((adminConfig.ClientAdSourceApis || []).filter((key) => validSourceKeys.has(key)))
+    new Set(
+      (adminConfig.SpecialSourceApis || []).filter((key) =>
+        validSpecialSourceKeys.has(key)
+      )
+    )
   );
 
   // 自定义分类去重
@@ -1240,6 +1235,18 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       adminConfig.AIConfig.NewProtocol ?? 'openai-completions';
     adminConfig.AIConfig.MaxContext = adminConfig.AIConfig.MaxContext ?? 131072;
     adminConfig.AIConfig.CompressThreshold = adminConfig.AIConfig.CompressThreshold ?? 90;
+  }
+
+  if (adminConfig.TVBoxBridgeConfig) {
+    adminConfig.TVBoxBridgeConfig.BaseUrl = normalizeApiBaseUrl(
+      adminConfig.TVBoxBridgeConfig.BaseUrl
+    );
+    if (!Array.isArray(adminConfig.TVBoxBridgeConfig.Sites)) {
+      adminConfig.TVBoxBridgeConfig.Sites = [];
+    }
+    if (!Array.isArray(adminConfig.TVBoxBridgeConfig.BlockedLocalSites)) {
+      adminConfig.TVBoxBridgeConfig.BlockedLocalSites = [];
+    }
   }
 
   if (adminConfig.TelegramConfig) {

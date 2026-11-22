@@ -2,9 +2,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import {
+  findTVBoxBridgeAdminSite,
+  getAdminVideoSourceKeys,
+  setAdminVideoSourceOrder,
+} from '@/lib/admin-video-sources';
 import { getAuthInfoFromCookie } from '@/lib/auth';
-import { getConfig } from '@/lib/config';
+import { getConfig, setCachedConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { isTVBoxBridgeSource } from '@/lib/tvbox-bridge.shared';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +28,6 @@ type Action =
   | 'toggle_proxy_mode'
   | 'toggle_special_source'
   | 'set_special_sources'
-  | 'set_client_ad_sources'
   | 'update_weight'
   | 'batch_update_weights';
 
@@ -65,7 +70,6 @@ export async function POST(request: NextRequest) {
       'toggle_proxy_mode',
       'toggle_special_source',
       'set_special_sources',
-      'set_client_ad_sources',
       'update_weight',
       'batch_update_weights',
     ];
@@ -109,6 +113,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+        if (isTVBoxBridgeSource(key)) {
+          return NextResponse.json(
+            { error: 'tvbox: 开头的 key 是保留关键字，不能作为视频源 key' },
+            { status: 400 }
+          );
+        }
         if (adminConfig.SourceConfig.some((s) => s.key === key)) {
           return NextResponse.json({ error: '该源已存在' }, { status: 400 });
         }
@@ -148,6 +158,11 @@ export async function POST(request: NextRequest) {
         const { key } = body as { key?: string };
         if (!key)
           return NextResponse.json({ error: '缺少 key 参数' }, { status: 400 });
+        const site = findTVBoxBridgeAdminSite(adminConfig, key);
+        if (site) {
+          site.enabled = false;
+          break;
+        }
         const entry = adminConfig.SourceConfig.find((s) => s.key === key);
         if (!entry)
           return NextResponse.json({ error: '源不存在' }, { status: 404 });
@@ -158,6 +173,11 @@ export async function POST(request: NextRequest) {
         const { key } = body as { key?: string };
         if (!key)
           return NextResponse.json({ error: '缺少 key 参数' }, { status: 400 });
+        const site = findTVBoxBridgeAdminSite(adminConfig, key);
+        if (site) {
+          site.enabled = true;
+          break;
+        }
         const entry = adminConfig.SourceConfig.find((s) => s.key === key);
         if (!entry)
           return NextResponse.json({ error: '源不存在' }, { status: 404 });
@@ -176,12 +196,9 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: '该源不可删除' }, { status: 400 });
         }
         adminConfig.SourceConfig.splice(idx, 1);
-        adminConfig.SpecialSourceApis = (adminConfig.SpecialSourceApis || []).filter(
-          (api) => api !== key
-        );
-        adminConfig.ClientAdSourceApis = (adminConfig.ClientAdSourceApis || []).filter(
-          (api) => api !== key
-        );
+        adminConfig.SpecialSourceApis = (
+          adminConfig.SpecialSourceApis || []
+        ).filter((api) => api !== key);
 
         // 检查并清理用户组和用户的权限数组
         // 清理用户组权限
@@ -210,6 +227,8 @@ export async function POST(request: NextRequest) {
           );
         }
         keys.forEach((key) => {
+          const site = findTVBoxBridgeAdminSite(adminConfig, key);
+          if (site) site.enabled = false;
           const entry = adminConfig.SourceConfig.find((s) => s.key === key);
           if (entry) {
             entry.disabled = true;
@@ -226,6 +245,8 @@ export async function POST(request: NextRequest) {
           );
         }
         keys.forEach((key) => {
+          const site = findTVBoxBridgeAdminSite(adminConfig, key);
+          if (site) site.enabled = true;
           const entry = adminConfig.SourceConfig.find((s) => s.key === key);
           if (entry) {
             entry.disabled = false;
@@ -247,7 +268,10 @@ export async function POST(request: NextRequest) {
 
         keys.forEach((key) => {
           const entry = adminConfig.SourceConfig.find((s) => s.key === key);
-          if (entry && entry.from === 'config') {
+          if (
+            findTVBoxBridgeAdminSite(adminConfig, key) ||
+            entry?.from === 'config'
+          ) {
             skippedKeys.push(key);
           } else if (entry) {
             keysToDelete.push(key);
@@ -262,12 +286,9 @@ export async function POST(request: NextRequest) {
           }
         });
 
-        adminConfig.SpecialSourceApis = (adminConfig.SpecialSourceApis || []).filter(
-          (api) => !keysToDelete.includes(api)
-        );
-        adminConfig.ClientAdSourceApis = (adminConfig.ClientAdSourceApis || []).filter(
-          (api) => !keysToDelete.includes(api)
-        );
+        adminConfig.SpecialSourceApis = (
+          adminConfig.SpecialSourceApis || []
+        ).filter((api) => !keysToDelete.includes(api));
 
         // 检查并清理用户组和用户的权限数组
         if (keysToDelete.length > 0) {
@@ -307,20 +328,7 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const map = new Map(adminConfig.SourceConfig.map((s) => [s.key, s]));
-        const newList: typeof adminConfig.SourceConfig = [];
-        order.forEach((k) => {
-          const item = map.get(k);
-          if (item) {
-            newList.push(item);
-            map.delete(k);
-          }
-        });
-        // 未在 order 中的保持原顺序
-        adminConfig.SourceConfig.forEach((item) => {
-          if (map.has(item.key)) newList.push(item);
-        });
-        adminConfig.SourceConfig = newList;
+        setAdminVideoSourceOrder(adminConfig, order);
         break;
       }
       case 'toggle_proxy_mode': {
@@ -338,8 +346,8 @@ export async function POST(request: NextRequest) {
         const { key } = body as { key?: string };
         if (!key)
           return NextResponse.json({ error: '缺少 key 参数' }, { status: 400 });
-        const entry = adminConfig.SourceConfig.find((s) => s.key === key);
-        if (!entry)
+        const sourceKeySet = getAdminVideoSourceKeys(adminConfig);
+        if (!sourceKeySet.has(key))
           return NextResponse.json({ error: '源不存在' }, { status: 404 });
 
         const specialApis = new Set(adminConfig.SpecialSourceApis || []);
@@ -349,7 +357,7 @@ export async function POST(request: NextRequest) {
           specialApis.add(key);
         }
         adminConfig.SpecialSourceApis = Array.from(specialApis).filter((api) =>
-          adminConfig.SourceConfig.some((source) => source.key === api)
+          sourceKeySet.has(api)
         );
         break;
       }
@@ -357,28 +365,19 @@ export async function POST(request: NextRequest) {
       case 'set_special_sources': {
         const { keys } = body as { keys?: string[] };
         if (!Array.isArray(keys)) {
-          return NextResponse.json({ error: 'keys 参数格式错误' }, { status: 400 });
+          return NextResponse.json(
+            { error: 'keys 参数格式错误' },
+            { status: 400 }
+          );
         }
 
-        const sourceKeySet = new Set(adminConfig.SourceConfig.map((source) => source.key));
-        adminConfig.SpecialSourceApis = Array.from(new Set(keys)).filter((key) =>
-          sourceKeySet.has(key)
+        const sourceKeySet = getAdminVideoSourceKeys(adminConfig);
+        adminConfig.SpecialSourceApis = Array.from(new Set(keys)).filter(
+          (key) => sourceKeySet.has(key)
         );
         break;
       }
 
-      case 'set_client_ad_sources': {
-        const { keys } = body as { keys?: string[] };
-        if (!Array.isArray(keys)) {
-          return NextResponse.json({ error: 'keys 参数格式错误' }, { status: 400 });
-        }
-
-        const sourceKeySet = new Set(adminConfig.SourceConfig.map((source) => source.key));
-        adminConfig.ClientAdSourceApis = Array.from(new Set(keys)).filter((key) =>
-          sourceKeySet.has(key)
-        );
-        break;
-      }
       case 'batch_update_weights': {
         const { weights, order } = body as {
           weights?: Array<{ key?: string; weight?: number }>;
@@ -391,8 +390,9 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        const updates = [];
         for (const item of weights) {
-          if (!item?.key) {
+          if (!item || typeof item.key !== 'string' || !item.key) {
             return NextResponse.json(
               { error: 'weights 中存在无效 key' },
               { status: 400 }
@@ -400,6 +400,7 @@ export async function POST(request: NextRequest) {
           }
           if (
             typeof item.weight !== 'number' ||
+            !Number.isFinite(item.weight) ||
             item.weight < 0 ||
             item.weight > 100
           ) {
@@ -408,34 +409,24 @@ export async function POST(request: NextRequest) {
               { status: 400 }
             );
           }
-          const entry = adminConfig.SourceConfig.find(
-            (source) => source.key === item.key
-          );
+          const entry =
+            findTVBoxBridgeAdminSite(adminConfig, item.key) ||
+            adminConfig.SourceConfig.find((source) => source.key === item.key);
           if (!entry) {
             return NextResponse.json(
               { error: `源不存在: ${item.key}` },
               { status: 404 }
             );
           }
-          entry.weight = item.weight;
+          updates.push({ entry, weight: item.weight });
         }
+        // 先验证整批请求，避免失败时已修改配置缓存中的部分权重。
+        updates.forEach(({ entry, weight }) => {
+          entry.weight = weight;
+        });
 
         if (Array.isArray(order)) {
-          const map = new Map(
-            adminConfig.SourceConfig.map((source) => [source.key, source])
-          );
-          const newList: typeof adminConfig.SourceConfig = [];
-          order.forEach((key) => {
-            const item = map.get(key);
-            if (item) {
-              newList.push(item);
-              map.delete(key);
-            }
-          });
-          adminConfig.SourceConfig.forEach((item) => {
-            if (map.has(item.key)) newList.push(item);
-          });
-          adminConfig.SourceConfig = newList;
+          setAdminVideoSourceOrder(adminConfig, order);
         }
         break;
       }
@@ -448,12 +439,19 @@ export async function POST(request: NextRequest) {
             { error: '缺少 weight 参数' },
             { status: 400 }
           );
-        if (typeof weight !== 'number' || weight < 0 || weight > 100)
+        if (
+          typeof weight !== 'number' ||
+          !Number.isFinite(weight) ||
+          weight < 0 ||
+          weight > 100
+        )
           return NextResponse.json(
             { error: '权重必须是 0-100 之间的数字' },
             { status: 400 }
           );
-        const entry = adminConfig.SourceConfig.find((s) => s.key === key);
+        const entry =
+          findTVBoxBridgeAdminSite(adminConfig, key) ||
+          adminConfig.SourceConfig.find((s) => s.key === key);
         if (!entry)
           return NextResponse.json({ error: '源不存在' }, { status: 404 });
         entry.weight = weight;
@@ -465,6 +463,7 @@ export async function POST(request: NextRequest) {
 
     // 持久化到存储
     await db.saveAdminConfig(adminConfig);
+    await setCachedConfig(adminConfig);
 
     // 清除短剧视频源缓存（因为视频源发生了变动）
     try {

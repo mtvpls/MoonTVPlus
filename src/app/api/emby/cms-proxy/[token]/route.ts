@@ -1,10 +1,16 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable no-console */
 
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
 import { EmbyClient } from '@/lib/emby.client';
 import { hasFeaturePermission } from '@/lib/permissions';
+import {
+  getTVBoxCMSBaseUrl,
+  getTVBoxCMSImageUrl,
+  getTVBoxCMSPage,
+  TVBOX_CMS_PAGE_SIZE,
+} from '@/lib/tvbox-cms';
 
 export const runtime = 'nodejs';
 
@@ -23,7 +29,7 @@ export async function GET(
   const ids = searchParams.get('ids'); // 视频ID
 
   // 检查必要参数
-  if (ac !== 'videolist' && ac !== 'list' && ac !== 'detail') {
+  if (ac && ac !== 'videolist' && ac !== 'list' && ac !== 'detail') {
     return NextResponse.json(
       { code: 400, msg: '不支持的操作' },
       { status: 400 }
@@ -89,30 +95,11 @@ export async function GET(
     const client = await embyManager.getClient(embyKey);
 
     // 路由处理
-    if (wd) {
-      // 搜索模式
-      if (ac === 'detail') {
-        return await handleDetailBySearch(client, wd, requestToken, embyKey, request);
-      }
-      return await handleSearch(client, wd, requestToken);
-    } else if (ids || ac === 'detail') {
-      // 详情模式
-      if (!ids) {
-        return NextResponse.json({
-          code: 0,
-          msg: '缺少视频ID',
-          page: 1,
-          pagecount: 0,
-          limit: 0,
-          total: 0,
-          list: [],
-        });
-      }
+    if (ids) {
       return await handleDetail(client, ids, requestToken, embyKey, request);
-    } else {
-      // 列表模式
-      return await handleSearch(client, '', requestToken);
     }
+    // 不带 ac 是首页；ac=detail 没有 ids 时仍然是分类或搜索列表。
+    return await handleSearch(client, wd || '', requestToken, request);
   } catch (error) {
     console.error('[Emby CMS Proxy] 错误:', error);
     return NextResponse.json({
@@ -130,67 +117,73 @@ export async function GET(
 /**
  * 处理搜索请求
  */
-async function handleSearch(client: EmbyClient, query: string, token: string) {
+async function handleSearch(
+  client: EmbyClient,
+  query: string,
+  token: string,
+  request: NextRequest
+) {
+  const page = getTVBoxCMSPage(request.nextUrl.searchParams);
+  const category = request.nextUrl.searchParams.get('t') || '';
+  const views = (await client.getUserViews()).filter(
+    (view) =>
+      !view.CollectionType ||
+      view.CollectionType === 'movies' ||
+      view.CollectionType === 'tvshows'
+  );
+  const categories = views.map((view) => ({
+    type_id: view.Id,
+    type_name: view.Name,
+  }));
+  if (category && !views.some((view) => view.Id === category)) {
+    return NextResponse.json({
+      code: 1,
+      msg: '数据列表',
+      class: categories,
+      page,
+      pagecount: 0,
+      limit: TVBOX_CMS_PAGE_SIZE,
+      total: 0,
+      list: [],
+    });
+  }
   const result = await client.getItems({
     searchTerm: query || undefined,
+    ParentId: category || undefined,
     IncludeItemTypes: 'Movie,Series',
     Recursive: true,
     Fields: 'Overview,ProductionYear',
-    Limit: 100,
+    SortBy: 'SortName',
+    SortOrder: 'Ascending',
+    StartIndex: (page - 1) * TVBOX_CMS_PAGE_SIZE,
+    Limit: TVBOX_CMS_PAGE_SIZE,
   });
 
   const list = result.Items.map((item) => ({
     vod_id: item.Id,
     vod_name: item.Name,
-    vod_pic: client.getImageUrl(item.Id, 'Primary', undefined, token),
+    vod_pic: getTVBoxCMSImageUrl(
+      client.getImageUrl(item.Id, 'Primary', undefined, token),
+      request
+    ),
     vod_remarks: item.Type === 'Movie' ? '电影' : '剧集',
     vod_year: item.ProductionYear?.toString() || '',
     vod_content: item.Overview || '',
-    type_name: item.Type === 'Movie' ? '电影' : '电视剧',
+    type_name:
+      views.find((view) => view.Id === (category || item.ParentId))?.Name || '',
+    type_id: category || item.ParentId || '',
   }));
 
   return NextResponse.json({
     code: 1,
     msg: '数据列表',
-    page: 1,
-    pagecount: 1,
-    limit: list.length,
-    total: list.length,
+    class: categories,
+    page,
+    pagecount: Math.ceil(result.TotalRecordCount / TVBOX_CMS_PAGE_SIZE),
+    limit: TVBOX_CMS_PAGE_SIZE,
+    total: result.TotalRecordCount,
     list,
   });
-}
-
-/**
- * 处理通过搜索关键词获取详情的请求
- */
-async function handleDetailBySearch(
-  client: EmbyClient,
-  query: string,
-  token: string,
-  embyKey: string | undefined,
-  request: NextRequest
-) {
-  const result = await client.getItems({
-    searchTerm: query,
-    IncludeItemTypes: 'Movie,Series',
-    Recursive: true,
-    Fields: 'Overview,ProductionYear',
-    Limit: 1,
-  });
-
-  if (result.Items.length === 0) {
-    return NextResponse.json({
-      code: 0,
-      msg: '未找到该视频',
-      page: 1,
-      pagecount: 0,
-      limit: 0,
-      total: 0,
-      list: [],
-    });
-  }
-
-  return await handleDetail(client, result.Items[0].Id, token, embyKey, request);
 }
 
 /**
@@ -204,19 +197,19 @@ async function handleDetail(
   request: NextRequest
 ) {
   const item = await client.getItem(itemId);
+  const views = await client.getUserViews();
 
   // 获取当前请求的 baseUrl
-  const host = request.headers.get('host') || request.headers.get('x-forwarded-host');
-  const proto = request.headers.get('x-forwarded-proto') ||
-    (host?.includes('localhost') || host?.includes('127.0.0.1') ? 'http' : 'https');
-  const baseUrl = process.env.SITE_BASE || `${proto}://${host}`;
+  const baseUrl = getTVBoxCMSBaseUrl(request);
 
   const embyKeyParam = embyKey ? `&embyKey=${embyKey}` : '';
   let vodPlayUrl = '';
 
   if (item.Type === 'Movie') {
     // 电影：单个播放链接（使用代理，添加 .mp4 扩展名）
-    const proxyUrl = `${baseUrl}/api/emby/play/${encodeURIComponent(token)}/video.mp4?itemId=${item.Id}${embyKeyParam}`;
+    const proxyUrl = `${baseUrl}/api/emby/play/${encodeURIComponent(
+      token
+    )}/video.mp4?itemId=${item.Id}${embyKeyParam}`;
     vodPlayUrl = `正片$${proxyUrl}`;
   } else if (item.Type === 'Series') {
     // 剧集：获取所有集
@@ -231,7 +224,9 @@ async function handleDetail(
       })
       .map((ep) => {
         const title = `第${ep.IndexNumber}集`;
-        const proxyUrl = `${baseUrl}/api/emby/play/${encodeURIComponent(token)}/video.mp4?itemId=${ep.Id}${embyKeyParam}`;
+        const proxyUrl = `${baseUrl}/api/emby/play/${encodeURIComponent(
+          token
+        )}/video.mp4?itemId=${ep.Id}${embyKeyParam}`;
         return `${title}$${proxyUrl}`;
       });
 
@@ -249,11 +244,15 @@ async function handleDetail(
       {
         vod_id: item.Id,
         vod_name: item.Name,
-        vod_pic: client.getImageUrl(item.Id, 'Primary', undefined, token),
+        vod_pic: getTVBoxCMSImageUrl(
+          client.getImageUrl(item.Id, 'Primary', undefined, token),
+          request
+        ),
         vod_remarks: item.Type === 'Movie' ? '电影' : '剧集',
         vod_year: item.ProductionYear?.toString() || '',
         vod_content: item.Overview || '',
-        type_name: item.Type === 'Movie' ? '电影' : '电视剧',
+        type_name: views.find((view) => view.Id === item.ParentId)?.Name || '',
+        type_id: item.ParentId || '',
         vod_play_url: vodPlayUrl,
         vod_play_from: 'Emby',
       },

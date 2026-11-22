@@ -26,6 +26,7 @@ interface FavoriteItem {
   currentEpisode?: number;
   search_title?: string;
   origin?: 'vod' | 'live';
+  is_invalid?: boolean;
 }
 
 interface FavoritesPanelProps {
@@ -71,6 +72,7 @@ export const FavoritesPanel: React.FC<FavoritesPanelProps> = ({
             currentEpisode,
             search_title: fav?.search_title,
             origin: fav?.origin,
+            is_invalid: fav.is_invalid,
           } as FavoriteItem;
         });
       setFavoriteItems(sorted);
@@ -108,10 +110,12 @@ export const FavoritesPanel: React.FC<FavoritesPanelProps> = ({
 
         // 过滤掉已经不在收藏中的项目
         setFavoriteItems((prevItems) =>
-          prevItems.filter((item) => {
-            const key = `${item.source}+${item.id}`;
-            return currentKeys.includes(key);
-          })
+          prevItems
+            .filter((item) => currentKeys.includes(`${item.source}+${item.id}`))
+            .map((item) => ({
+              ...item,
+              is_invalid: newFavorites[`${item.source}+${item.id}`].is_invalid,
+            }))
         );
       }
     });
@@ -182,6 +186,7 @@ export const FavoritesPanel: React.FC<FavoritesPanelProps> = ({
                     query={item.search_title}
                     {...item}
                     from='favorite'
+                    isInvalid={item.is_invalid}
                     type={item.episodes && item.episodes > 1 ? 'tv' : ''}
                   />
                 </div>

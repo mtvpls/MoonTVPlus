@@ -14,33 +14,55 @@ import {
 import { cn } from '@/lib/cn';
 import {
   deleteMangaShelf,
+  getAllMangaReadRecords,
   getAllMangaShelf,
   saveMangaShelf,
 } from '@/lib/db.client';
 import {
+  MangaDetail,
+  MangaReadRecord,
   MangaSearchItem,
   MangaShelfItem,
   MangaSource,
 } from '@/lib/manga.types';
-
 import {
-  mangaCardItem,
-  mangaItemDetailHref,
-} from '@/components/media/adapters';
+  getMangaSearchSourceFilters,
+  getSelectedMangaSearchItem,
+  groupMangaSearchResults,
+  mangaSearchItemKey,
+  sortMangaChapters,
+  sortMangaSearchGroups,
+} from '@/lib/manga-search';
+
+import MangaSearchCard, {
+  MangaSearchCardSkeleton,
+} from '@/components/manga/MangaSearchCard';
+import MangaSearchScope from '@/components/manga/MangaSearchScope';
 import EmptyState from '@/components/media/EmptyState';
 import {
   LIBRARY_BUTTON,
   LIBRARY_FIELD,
   LIBRARY_MUTED,
-  LIBRARY_PANEL,
+  LIBRARY_TEXT,
+  LIBRARY_TEXT_TAB,
+  LIBRARY_TEXT_TAB_ACTIVE,
+  LIBRARY_TEXT_TAB_IDLE,
 } from '@/components/media/library';
-import MediaCard from '@/components/media/MediaCard';
-import MediaGrid from '@/components/media/MediaGrid';
-import MediaGridSkeleton from '@/components/media/MediaGridSkeleton';
-import MediaSectionHeader from '@/components/media/MediaSectionHeader';
-import ShelfChipButton from '@/components/media/ShelfChipButton';
 
 const MANGA_SEARCH_STATE_KEY = 'manga_search_state';
+const MANGA_SEARCH_VIEW_KEY = 'manga_search_view';
+
+interface MangaSearchViewState {
+  searchKey: string;
+  filterSourceId: string;
+  selectedKeys: Record<string, string>;
+}
+
+const emptySearchView = (searchKey: string): MangaSearchViewState => ({
+  searchKey,
+  filterSourceId: '',
+  selectedKeys: {},
+});
 
 export default function MangaSearchPage() {
   const router = useRouter();
@@ -53,6 +75,10 @@ export default function MangaSearchPage() {
   const [sourceId, setSourceId] = useState('');
   const [results, setResults] = useState<MangaSearchItem[]>([]);
   const [shelf, setShelf] = useState<Record<string, MangaShelfItem>>({});
+  const [history, setHistory] = useState<Record<string, MangaReadRecord>>({});
+  const [searchView, setSearchView] = useState<MangaSearchViewState>(() =>
+    emptySearchView('')
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
@@ -209,10 +235,24 @@ export default function MangaSearchPage() {
     getAllMangaShelf()
       .then(setShelf)
       .catch(() => undefined);
+    getAllMangaReadRecords()
+      .then(setHistory)
+      .catch(() => undefined);
+
+    const onShelfUpdated = (event: Event) =>
+      setShelf((event as CustomEvent<Record<string, MangaShelfItem>>).detail);
+    const onHistoryUpdated = (event: Event) =>
+      setHistory(
+        (event as CustomEvent<Record<string, MangaReadRecord>>).detail
+      );
+    window.addEventListener('mangaShelfUpdated', onShelfUpdated);
+    window.addEventListener('mangaHistoryUpdated', onHistoryUpdated);
 
     return () => {
       closeEventSource();
       clearPendingResults();
+      window.removeEventListener('mangaShelfUpdated', onShelfUpdated);
+      window.removeEventListener('mangaHistoryUpdated', onHistoryUpdated);
     };
   }, [clearPendingResults, closeEventSource, readFluidSearchSetting]);
 
@@ -474,7 +514,127 @@ export default function MangaSearchPage() {
     return queryString ? `/manga/search?${queryString}` : '/manga/search';
   }, [lastSearchedQuery, lastSearchedSourceId]);
 
-  const toggleShelf = async (item: MangaSearchItem) => {
+  const viewSearchKey = `${lastSearchedSourceId}::${lastSearchedQuery}`;
+  const currentView =
+    searchView.searchKey === viewSearchKey
+      ? searchView
+      : emptySearchView(viewSearchKey);
+
+  useEffect(() => {
+    let nextView = emptySearchView(viewSearchKey);
+    try {
+      const saved = JSON.parse(
+        sessionStorage.getItem(MANGA_SEARCH_VIEW_KEY) || 'null'
+      ) as MangaSearchViewState | null;
+      if (saved?.searchKey === viewSearchKey) {
+        nextView = {
+          ...nextView,
+          filterSourceId:
+            typeof saved.filterSourceId === 'string'
+              ? saved.filterSourceId
+              : '',
+          selectedKeys: saved.selectedKeys || {},
+        };
+      }
+    } catch {
+      // ignore invalid session state
+    }
+    setSearchView(nextView);
+  }, [viewSearchKey]);
+
+  useEffect(() => {
+    if (!lastSearchedQuery || searchView.searchKey !== viewSearchKey) return;
+    try {
+      sessionStorage.setItem(MANGA_SEARCH_VIEW_KEY, JSON.stringify(searchView));
+    } catch {
+      // ignore session cache failures
+    }
+  }, [lastSearchedQuery, searchView, viewSearchKey]);
+
+  const groupedResults = useMemo(
+    () => groupMangaSearchResults(results),
+    [results]
+  );
+  const sourceFilters = useMemo(
+    () => getMangaSearchSourceFilters(groupedResults),
+    [groupedResults]
+  );
+  const visibleGroups = useMemo(
+    () =>
+      sortMangaSearchGroups(
+        groupedResults.filter(
+          (group) =>
+            !currentView.filterSourceId ||
+            group.items.some(
+              (item) => item.sourceId === currentView.filterSourceId
+            )
+        ),
+        lastSearchedQuery
+      ),
+    [currentView.filterSourceId, groupedResults, lastSearchedQuery]
+  );
+
+  useEffect(() => {
+    setSearchView((prev) => {
+      const view =
+        prev.searchKey === viewSearchKey
+          ? prev
+          : emptySearchView(viewSearchKey);
+      let selectedKeys = view.selectedKeys;
+      for (const group of visibleGroups) {
+        const item = getSelectedMangaSearchItem(
+          group,
+          view.selectedKeys[group.key],
+          view.filterSourceId
+        );
+        const itemKey = mangaSearchItemKey(item);
+        if (selectedKeys[group.key] === itemKey) continue;
+        if (selectedKeys === view.selectedKeys) {
+          selectedKeys = { ...selectedKeys };
+        }
+        // 固定已显示的来源；保存的来源尚未返回时，也不在后续结果中自动切换。
+        selectedKeys[group.key] = itemKey;
+      }
+      return selectedKeys === view.selectedKeys
+        ? prev
+        : { ...view, selectedKeys };
+    });
+  }, [viewSearchKey, visibleGroups]);
+
+  const selectSource = (groupKey: string, itemKey: string) => {
+    setSearchView((prev) => {
+      const view =
+        prev.searchKey === viewSearchKey
+          ? prev
+          : emptySearchView(viewSearchKey);
+      if (view.selectedKeys[groupKey] === itemKey) return prev;
+      return {
+        ...view,
+        selectedKeys: { ...view.selectedKeys, [groupKey]: itemKey },
+      };
+    });
+  };
+
+  const filterBySource = (filterSourceId: string) => {
+    setSearchView((prev) => {
+      const view =
+        prev.searchKey === viewSearchKey
+          ? prev
+          : emptySearchView(viewSearchKey);
+      const selectedKeys = { ...view.selectedKeys };
+      if (filterSourceId) {
+        for (const group of groupedResults) {
+          const item = group.items.find(
+            (candidate) => candidate.sourceId === filterSourceId
+          );
+          if (item) selectedKeys[group.key] = mangaSearchItemKey(item);
+        }
+      }
+      return { ...view, filterSourceId, selectedKeys };
+    });
+  };
+
+  const toggleShelf = async (item: MangaSearchItem, detail?: MangaDetail) => {
     const key = `${item.sourceId}+${item.id}`;
     if (shelf[key]) {
       await deleteMangaShelf(item.sourceId, item.id);
@@ -486,6 +646,10 @@ export default function MangaSearchPage() {
       return;
     }
 
+    const chronologicalChapters = sortMangaChapters(detail?.chapters || []);
+    const latestChapter =
+      chronologicalChapters[chronologicalChapters.length - 1];
+    const currentRecord = history[key];
     const shelfItem: MangaShelfItem = {
       title: item.title,
       cover: item.cover,
@@ -496,93 +660,153 @@ export default function MangaSearchPage() {
       description: item.description,
       author: item.author,
       status: item.status,
+      lastChapterId: currentRecord?.chapterId,
+      lastChapterName: currentRecord?.chapterName,
+      latestChapterId: latestChapter?.id,
+      latestChapterName: latestChapter?.name,
+      latestChapterCount: detail ? chronologicalChapters.length : undefined,
+      unreadChapterCount: 0,
     };
     await saveMangaShelf(item.sourceId, item.id, shelfItem);
     setShelf((prev) => ({ ...prev, [key]: shelfItem }));
   };
 
   return (
-    <div className='space-y-6'>
-      {/* 搜索框做成纸面书案的样式：一个实心纸面板托着输入、来源与搜索键。 */}
-      <form
-        className={cn(LIBRARY_PANEL, 'mx-auto max-w-4xl p-3 sm:p-4')}
-        onSubmit={handleSearch}
-      >
-        <div className='flex flex-col gap-3 lg:flex-row'>
-          <div className='flex-1'>
+    <div className={cn(LIBRARY_TEXT, 'mx-auto max-w-5xl space-y-6 font-sans')}>
+      <form onSubmit={handleSearch}>
+        <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-3'>
+          <div
+            className={cn(
+              LIBRARY_FIELD,
+              'flex h-12 min-w-0 items-center bg-library-card p-0 focus-within:border-library-ochre dark:bg-library-night-card dark:focus-within:border-library-night-ochre'
+            )}
+          >
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder='搜索漫画标题'
               aria-label='搜索漫画标题'
-              className={LIBRARY_FIELD}
+              className='h-full min-w-0 flex-1 rounded-l-md border-0 bg-transparent pl-4 pr-2 text-base outline-none placeholder:text-library-muted dark:placeholder:text-library-night-muted sm:text-sm'
+            />
+            <MangaSearchScope
+              sources={sources}
+              value={sourceId}
+              onChange={setSourceId}
             />
           </div>
-          <select
-            value={sourceId}
-            onChange={(e) => setSourceId(e.target.value)}
-            aria-label='选择漫画来源'
-            className={cn(LIBRARY_FIELD, 'cursor-pointer lg:w-56')}
+          <button
+            type='submit'
+            aria-label='搜索'
+            className={cn(
+              LIBRARY_BUTTON,
+              'min-h-12 w-12 cursor-pointer px-0 py-3 text-library-chip dark:text-library-night md:w-auto md:px-4 lg:w-24'
+            )}
           >
-            <option value=''>全部来源</option>
-            {sources.map((source) => (
-              <option key={source.id} value={source.id}>
-                {source.displayName || source.name}
-              </option>
-            ))}
-          </select>
-          <button className={cn(LIBRARY_BUTTON, 'lg:w-32')}>
-            <Search className='h-4 w-4' /> 搜索
+            <Search className='h-4 w-4' strokeWidth={1.5} aria-hidden />
+            <span className='hidden md:inline'>搜索</span>
           </button>
         </div>
       </form>
 
       <section className='space-y-4'>
-        <MediaSectionHeader
-          title={`搜索结果${results.length > 0 ? `（${results.length}）` : ''}`}
-          action={
-            loading && useFluidSearch && totalSources > 0 ? (
-              <span className={cn('shrink-0 text-xs', LIBRARY_MUTED)}>
-                搜索中 {completedSources}/{totalSources}
-              </span>
-            ) : undefined
-          }
-        />
+        <div>
+          <div className='flex min-h-11 flex-wrap items-center justify-between gap-x-4'>
+            <div className='flex min-w-0 items-center gap-3'>
+              <h2 className='text-sm font-medium'>搜索结果</h2>
+              {groupedResults.length > 0 && (
+                <span className={cn(LIBRARY_MUTED, 'text-sm tabular-nums')}>
+                  {visibleGroups.length} 部
+                </span>
+              )}
+              {loading && useFluidSearch && totalSources > 0 && (
+                <span
+                  role='status'
+                  className={cn(LIBRARY_MUTED, 'text-xs tabular-nums')}
+                >
+                  搜索中 {completedSources}/{totalSources}
+                </span>
+              )}
+            </div>
+          </div>
+          {groupedResults.length > 0 && (
+            <div
+              role='group'
+              aria-label='筛选搜索来源'
+              className='flex min-w-0 gap-3 overflow-x-auto border-b border-library-edge dark:border-library-night-edge [scrollbar-width:thin]'
+            >
+              <button
+                type='button'
+                onClick={() => filterBySource('')}
+                aria-pressed={!currentView.filterSourceId}
+                className={cn(
+                  LIBRARY_TEXT_TAB,
+                  !currentView.filterSourceId
+                    ? LIBRARY_TEXT_TAB_ACTIVE
+                    : LIBRARY_TEXT_TAB_IDLE
+                )}
+              >
+                全部
+              </button>
+              {sourceFilters.map((source) => (
+                <button
+                  key={source.sourceId}
+                  type='button'
+                  onClick={() => filterBySource(source.sourceId)}
+                  aria-pressed={currentView.filterSourceId === source.sourceId}
+                  className={cn(
+                    LIBRARY_TEXT_TAB,
+                    currentView.filterSourceId === source.sourceId
+                      ? LIBRARY_TEXT_TAB_ACTIVE
+                      : LIBRARY_TEXT_TAB_IDLE
+                  )}
+                >
+                  {source.sourceName}
+                  <span className={cn(LIBRARY_MUTED, 'text-xs tabular-nums')}>
+                    {source.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {error && <EmptyState tone='error' description={error} />}
         {loading && results.length === 0 ? (
-          <MediaGridSkeleton count={12} />
+          <div className='space-y-4' role='status' aria-label='正在搜索漫画'>
+            {Array.from({ length: 3 }, (_, index) => (
+              <MangaSearchCardSkeleton key={index} />
+            ))}
+          </div>
         ) : results.length === 0 ? (
           <EmptyState
-            icon={<Search className='h-7 w-7' />}
+            icon={<Search className='h-7 w-7' strokeWidth={1.5} />}
             title={hasSearched ? '没有找到相关漫画' : '还没有开始搜索'}
             description={
               hasSearched
                 ? '试试更短的关键词，或把来源切到「全部来源」。'
-                : '在上面的输入框里输入标题，或直接回车搜索全部漫画源。'
+                : '输入漫画标题，回车即可搜索'
             }
           />
+        ) : visibleGroups.length === 0 ? (
+          <EmptyState
+            title='该来源暂无匹配结果'
+            description='切换到「全部」查看其他来源的漫画。'
+          />
         ) : (
-          <MediaGrid>
-            {results.map((item) => {
-              const key = `${item.sourceId}+${item.id}`;
-              return (
-                <MediaCard
-                  key={key}
-                  item={{
-                    ...mangaCardItem(item),
-                    subtitle: item.author || item.status || item.description,
-                  }}
-                  href={mangaItemDetailHref(item, returnTo)}
-                  overlayAction={
-                    <ShelfChipButton
-                      active={Boolean(shelf[key])}
-                      onClick={() => toggleShelf(item)}
-                    />
-                  }
-                />
-              );
-            })}
-          </MediaGrid>
+          <div className='space-y-4'>
+            {visibleGroups.map((group) => (
+              <MangaSearchCard
+                key={group.key}
+                group={group}
+                selectedKey={currentView.selectedKeys[group.key]}
+                preferredSourceId={currentView.filterSourceId}
+                onSelectSource={(itemKey) => selectSource(group.key, itemKey)}
+                shelf={shelf}
+                history={history}
+                returnTo={returnTo}
+                onToggleShelf={toggleShelf}
+              />
+            ))}
+          </div>
         )}
       </section>
     </div>

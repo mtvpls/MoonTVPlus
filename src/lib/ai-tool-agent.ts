@@ -25,6 +25,7 @@ import {
   VideoContext,
 } from '@/lib/ai-orchestrator';
 import { db } from '@/lib/db';
+import { callParallelSearch, createSearchContext, SearchContext } from '@/lib/parallel-search';
 import { validateProxyUrlServerSide } from '@/lib/server/ssrf';
 import {
   getTMDBTrendingContent,
@@ -108,7 +109,7 @@ interface ProviderAdapter {
 /** 新版模式可用的数据源凭据（由路由从 AIConfig 组装） */
 export interface ToolDataSources {
   webSearch?: {
-    provider: 'tavily' | 'serper' | 'serpapi' | 'bing';
+    provider: 'parallel' | 'tavily' | 'serper' | 'serpapi' | 'bing';
     apiKey: string;
   };
   tmdb?: {
@@ -436,7 +437,8 @@ async function fetchPageText(urlStr: string): Promise<string> {
 async function dispatchTool(
   name: string,
   args: any,
-  dataSources: ToolDataSources
+  dataSources: ToolDataSources,
+  searchContext: SearchContext
 ): Promise<ToolResult> {
   try {
     if (name === 'get_current_time') {
@@ -458,15 +460,22 @@ async function dispatchTool(
       const raw = await fetchWebSearch(
         query,
         dataSources.webSearch.provider,
-        dataSources.webSearch.apiKey
+        dataSources.webSearch.apiKey,
+        searchContext
       );
       const formatted = formatSearchResults(raw, dataSources.webSearch.provider);
       return { name, ok: !!formatted, text: formatted || '无搜索结果。' };
     }
 
     if (name === 'fetch_page') {
+      if (!dataSources.webSearch) return { name, ok: false, text: '联网搜索未启用，无法执行。' };
       const url = String(args?.url || '').trim();
       if (!url) return { name, ok: false, text: '缺少要抓取的 URL。' };
+      if (dataSources.webSearch.provider === 'parallel') {
+        if (!await validateProxyUrlServerSide(url)) return { name, ok: false, text: '目标地址未通过安全校验。' };
+        const text = await callParallelSearch('web_fetch', { urls: [url] }, searchContext);
+        return { name, ok: true, text };
+      }
       const text = await fetchPageText(url);
       return { name, ok: true, text };
     }
@@ -1637,6 +1646,8 @@ export interface RunToolAgentOptions {
   message: string;
   tools: AgentToolDef[];
   dataSources: ToolDataSources;
+  /** Stable opaque ID supplied by the chat that owns the history. */
+  searchSessionId?: string;
   signal?: AbortSignal;
   /** 上下文窗口 token 上限，默认 131072（128k） */
   maxContext?: number;
@@ -1656,6 +1667,7 @@ export type RunToolAgentResult =
  * - streaming=false 时同样跑完整循环，累积文本返回 { content }。
  */
 export async function runToolAgent(opts: RunToolAgentOptions): Promise<RunToolAgentResult> {
+  const searchContext = createSearchContext(opts.searchSessionId, opts.model, opts.signal);
   const adapter = getAdapter(opts.protocol);
   const transcript = adapter.buildInitialTranscript({
     systemPrompt: opts.systemPrompt,
@@ -1729,7 +1741,7 @@ export async function runToolAgent(opts: RunToolAgentOptions): Promise<RunToolAg
       allText += round.assistantText;
       if (round.toolCalls.length === 0) break;
       const results = await Promise.all(
-        round.toolCalls.map((tc) => dispatchTool(tc.name, tc.args, opts.dataSources))
+        round.toolCalls.map((tc) => dispatchTool(tc.name, tc.args, opts.dataSources, searchContext))
       );
       const resultMsgs = adapter.buildToolResultMessages(round.toolCalls, results);
       transcript.push(...resultMsgs);
@@ -1783,7 +1795,7 @@ export async function runToolAgent(opts: RunToolAgentOptions): Promise<RunToolAg
           }
           const results = await Promise.all(
             round.toolCalls.map(async (tc) => {
-              const result = await dispatchTool(tc.name, tc.args, opts.dataSources);
+              const result = await dispatchTool(tc.name, tc.args, opts.dataSources, searchContext);
               send(
                 JSON.stringify({
                   type: 'tool',

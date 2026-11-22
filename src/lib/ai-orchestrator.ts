@@ -7,6 +7,8 @@
 import { fetchDoubanData as fetchDoubanAPI } from '@/lib/douban';
 import { getNextApiKey } from '@/lib/tmdb.client';
 import { normalizeApiBaseUrl } from '@/lib/url';
+import { callParallelSearch, createSearchContext, SearchContext } from '@/lib/parallel-search';
+import { resolveWebSearch } from '@/lib/web-search-config';
 import { parseStringPromise } from 'xml2js';
 
 export interface VideoContext {
@@ -139,10 +141,14 @@ function extractEntities(message: string): Array<{ type: string; value: string }
  */
 export async function fetchWebSearch(
   query: string,
-  provider: 'tavily' | 'serper' | 'serpapi' | 'bing',
-  apiKey: string
+  provider: 'parallel' | 'tavily' | 'serper' | 'serpapi' | 'bing',
+  apiKey: string,
+  searchContext = createSearchContext()
 ): Promise<any> {
   try {
+    if (provider === 'parallel') {
+      return { text: await callParallelSearch('web_search', { objective: query, search_queries: [query] }, searchContext) };
+    }
     if (provider === 'tavily') {
       const response = await fetch('https://api.tavily.com/search', {
         method: 'POST',
@@ -322,9 +328,10 @@ export async function fetchTMDBData(
  */
 export function formatSearchResults(
   results: any,
-  provider: 'tavily' | 'serper' | 'serpapi' | 'bing'
+  provider: 'parallel' | 'tavily' | 'serper' | 'serpapi' | 'bing'
 ): string {
   if (!results) return '';
+  if (provider === 'parallel') return typeof results.text === 'string' ? results.text : '';
 
   try {
     if (provider === 'tavily' && results.results) {
@@ -553,10 +560,11 @@ export async function orchestrateDataSources(
   context?: VideoContext,
   config?: {
     enableWebSearch: boolean;
-    webSearchProvider?: 'tavily' | 'serper' | 'serpapi' | 'bing';
+    webSearchProvider?: 'parallel' | 'tavily' | 'serper' | 'serpapi' | 'bing';
     tavilyApiKey?: string;
     serperApiKey?: string;
     serpApiKey?: string;
+    searchContext?: SearchContext;
     // TMDB 配置
     tmdbApiKey?: string;
     tmdbProxy?: string;
@@ -569,6 +577,14 @@ export async function orchestrateDataSources(
     decisionModel?: string;
   }
 ): Promise<OrchestrationResult> {
+  const webSearch = resolveWebSearch({
+    EnableWebSearch: config?.enableWebSearch,
+    WebSearchProvider: config?.webSearchProvider,
+    TavilyApiKey: config?.tavilyApiKey,
+    SerperApiKey: config?.serperApiKey,
+    SerpApiKey: config?.serpApiKey,
+  });
+  const searchContext = config?.searchContext ?? createSearchContext();
   let intent: IntentAnalysisResult;
 
   // 1. 使用决策模型或传统意图分析
@@ -577,14 +593,7 @@ export async function orchestrateDataSources(
     console.log('🤖 使用决策模型分析...');
 
     // 确定哪些数据源是可用的
-    const hasWebSearchProvider = !!(config.enableWebSearch &&
-      config.webSearchProvider &&
-      (
-        (config.webSearchProvider === 'tavily' && config.tavilyApiKey) ||
-        (config.webSearchProvider === 'serper' && config.serperApiKey) ||
-        (config.webSearchProvider === 'serpapi' && config.serpApiKey) ||
-        config.webSearchProvider === 'bing'
-      ));
+    const hasWebSearchProvider = !!webSearch;
 
     const hasTMDB = !!(config.tmdbApiKey);
 
@@ -641,27 +650,10 @@ export async function orchestrateDataSources(
   let tmdbPromise: Promise<any> | null = null;
 
   // 联网搜索
-  if (
-    intent.needWebSearch &&
-    config?.enableWebSearch &&
-    config.webSearchProvider
-  ) {
-    const provider = config.webSearchProvider;
-    const apiKey =
-      provider === 'tavily'
-        ? config.tavilyApiKey
-        : provider === 'serper'
-          ? config.serperApiKey
-          : provider === 'serpapi'
-            ? config.serpApiKey
-            : '';
-
-    if (apiKey || provider === 'bing') {
-      // 使用决策模型优化的查询，如果没有则使用原始消息
-      const searchQuery = (intent as any).optimizedWebSearchQuery || userMessage;
-      webSearchPromise = fetchWebSearch(searchQuery, provider, apiKey || '');
-      dataPromises.push(webSearchPromise);
-    }
+  if (intent.needWebSearch && webSearch) {
+    const searchQuery = (intent as any).optimizedWebSearchQuery || userMessage;
+    webSearchPromise = fetchWebSearch(searchQuery, webSearch.provider, webSearch.apiKey, searchContext);
+    dataPromises.push(webSearchPromise);
   }
 
   // 豆瓣数据
@@ -757,10 +749,10 @@ ${today}
 `;
 
   // 添加联网搜索结果
-  if (webSearchData && config?.webSearchProvider) {
+  if (webSearchData && webSearch) {
     const formattedSearch = formatSearchResults(
       webSearchData,
-      config.webSearchProvider
+      webSearch.provider
     );
     if (formattedSearch) {
       systemPrompt += `\n## 【联网搜索结果】（最新实时信息）\n${formattedSearch}\n`;

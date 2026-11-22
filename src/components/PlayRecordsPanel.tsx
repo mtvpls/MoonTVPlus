@@ -266,6 +266,7 @@ export default function PlayRecordsPanel({
                       progress={getProgress(record)}
                       episodes={record.total_episodes}
                       currentEpisode={record.index}
+                      line={record.line}
                       query={record.search_title}
                       from='playrecord'
                       onDelete={() =>

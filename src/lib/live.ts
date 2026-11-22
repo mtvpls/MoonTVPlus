@@ -3,6 +3,17 @@
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { fetchLive } from '@/lib/live-http';
+import { parseLivePlaylist, parseTVBoxLiveGroups } from '@/lib/live-playlist';
+import {
+  fetchLiveSource,
+  getLiveSource,
+  LiveSource,
+  syncTVBoxLiveSources,
+} from '@/lib/tvbox-live.server';
+import {
+  buildLocalTVBoxLiveUrl,
+  isTVBoxLiveProxyUrl,
+} from '@/lib/tvbox-live.shared';
 
 const defaultUA = 'AptvPlayer/1.4.10';
 
@@ -10,7 +21,9 @@ export const DEFAULT_LIVE_REFRESH_INTERVAL_HOURS = 12;
 
 let lastGlobalLiveRefreshTime = 0;
 
-export function getLiveRefreshIntervalHours(refreshIntervalHours?: number): number {
+export function getLiveRefreshIntervalHours(
+  refreshIntervalHours?: number
+): number {
   const normalizedInterval = Number(refreshIntervalHours);
 
   if (!Number.isFinite(normalizedInterval) || normalizedInterval <= 0) {
@@ -49,55 +62,88 @@ export interface LiveChannels {
 }
 
 const cachedLiveChannels: { [key: string]: LiveChannels } = {};
+const cachedLiveRevisions: { [key: string]: string } = {};
+const liveRefreshes = new Map<string, Promise<number>>();
 
 export function deleteCachedLiveChannels(key: string) {
   delete cachedLiveChannels[key];
+  delete cachedLiveRevisions[key];
 }
 
 export async function getCachedLiveChannels(
   key: string
 ): Promise<LiveChannels | null> {
-  if (!cachedLiveChannels[key]) {
-    const config = await getConfig();
-    const liveInfo = config.LiveConfig?.find((live) => live.key === key);
-    if (!liveInfo) {
-      return null;
+  if (key.startsWith('tvbox-live:')) await syncTVBoxLiveSources();
+  const liveInfo = await getLiveSource(key);
+  if (!liveInfo) return null;
+  const revision = JSON.stringify([
+    liveInfo.url,
+    liveInfo.ua,
+    liveInfo.epg,
+    liveInfo.tvbox,
+  ]);
+  if (!cachedLiveChannels[key] || cachedLiveRevisions[key] !== revision) {
+    const refreshKey = `${key}:${revision}`;
+    let refresh = liveRefreshes.get(refreshKey);
+    if (!refresh) {
+      refresh = refreshLiveChannels(liveInfo);
+      liveRefreshes.set(refreshKey, refresh);
     }
-    const channelNum = await refreshLiveChannels(liveInfo);
+    let channelNum: number;
+    try {
+      channelNum = await refresh;
+    } finally {
+      liveRefreshes.delete(refreshKey);
+    }
     if (channelNum === 0) {
       return null;
     }
+    const config = await getConfig();
     liveInfo.channelNumber = channelNum;
     await db.saveAdminConfig(config);
   }
   return cachedLiveChannels[key] || null;
 }
 
-export async function refreshLiveChannels(liveInfo: {
-  key: string;
-  name: string;
-  url: string;
-  ua?: string;
-  epg?: string;
-  from: 'config' | 'custom';
-  channelNumber?: number;
-  disabled?: boolean;
-}): Promise<number> {
+export async function refreshLiveChannels(
+  liveInfo: LiveSource
+): Promise<number> {
   if (cachedLiveChannels[liveInfo.key]) {
     delete cachedLiveChannels[liveInfo.key];
   }
   const ua = liveInfo.ua || defaultUA;
-  const response = await fetchLive(liveInfo.url, ua);
-  if (!response.ok) {
-    const mitigated = response.headers.get('cf-mitigated');
-    throw new Error(
-      `直播源请求失败: HTTP ${response.status}${mitigated ? ' (Cloudflare challenge)' : ''}, ua=${ua}`
+  let result;
+  if (liveInfo.tvbox?.channels && !liveInfo.url) {
+    result = parseTVBoxLiveGroups(
+      liveInfo.key,
+      liveInfo.tvbox.channels,
+      liveInfo.tvbox.configUrl
+    );
+  } else {
+    const response = await fetchLiveSource(liveInfo, liveInfo.url);
+    if (!response.ok) {
+      const mitigated = response.headers.get('cf-mitigated');
+      throw new Error(
+        `直播源请求失败: HTTP ${response.status}${
+          mitigated ? ' (Cloudflare challenge)' : ''
+        }, ua=${ua}`
+      );
+    }
+    const data = await response.text();
+    result = parseLivePlaylist(
+      liveInfo.key,
+      data,
+      response.url || liveInfo.tvbox?.configUrl || liveInfo.url
     );
   }
-  const data = await response.text();
-  const result = isM3UContent(data)
-    ? parseM3U(liveInfo.key, data)
-    : parseTxtLive(liveInfo.key, data);
+  if (liveInfo.tvbox) {
+    for (const channel of result.channels) {
+      if (isTVBoxLiveProxyUrl(channel.url))
+        channel.url = buildLocalTVBoxLiveUrl(liveInfo.key, channel.url);
+      if (channel.logo && isTVBoxLiveProxyUrl(channel.logo))
+        channel.logo = buildLocalTVBoxLiveUrl(liveInfo.key, channel.logo);
+    }
+  }
   const epgUrl = liveInfo.epg || result.tvgUrl;
   const tvgIds = result.channels
     .map((channel) => channel.tvgId)
@@ -109,6 +155,12 @@ export async function refreshLiveChannels(liveInfo: {
     epgUrl: epgUrl,
     epgs: epgs,
   };
+  cachedLiveRevisions[liveInfo.key] = JSON.stringify([
+    liveInfo.url,
+    liveInfo.ua,
+    liveInfo.epg,
+    liveInfo.tvbox,
+  ]);
   return result.channels.length;
 }
 
@@ -388,189 +440,6 @@ function parseEpgLines(
   }
 
   return result;
-}
-
-function stripBom(value: string) {
-  return value.replace(/^\uFEFF/, '');
-}
-
-function isM3UContent(content: string) {
-  const normalized = stripBom(content).trim();
-  return normalized.includes('#EXTM3U') || normalized.includes('#EXTINF');
-}
-
-function isHttpUrl(value: string) {
-  return /^https?:\/\//i.test(value);
-}
-
-function parseTxtLive(
-  sourceKey: string,
-  txtContent: string
-): {
-  tvgUrl: string;
-  channels: {
-    id: string;
-    tvgId: string;
-    name: string;
-    logo: string;
-    group: string;
-    url: string;
-  }[];
-} {
-  const channels: {
-    id: string;
-    tvgId: string;
-    name: string;
-    logo: string;
-    group: string;
-    url: string;
-  }[] = [];
-
-  const lines = txtContent
-    .split('\n')
-    .map((line) => stripBom(line).trim())
-    .filter((line) => line.length > 0);
-
-  let currentGroup = '无分组';
-  let channelIndex = 0;
-
-  for (const line of lines) {
-    const commaIndex = line.indexOf(',');
-    if (commaIndex === -1) {
-      continue;
-    }
-
-    const name = line.slice(0, commaIndex).trim();
-    const value = line.slice(commaIndex + 1).trim();
-
-    if (!name) {
-      continue;
-    }
-
-    if (value === '#genre#') {
-      currentGroup = name;
-      continue;
-    }
-
-    if (!value || !isHttpUrl(value)) {
-      continue;
-    }
-
-    channels.push({
-      id: `${sourceKey}-${channelIndex}`,
-      tvgId: name,
-      name,
-      logo: '',
-      group: currentGroup,
-      url: value,
-    });
-    channelIndex++;
-  }
-
-  return { tvgUrl: '', channels };
-}
-
-/**
- * 解析M3U文件内容，提取频道信息
- * @param m3uContent M3U文件的内容字符串
- * @returns 频道信息数组
- */
-function parseM3U(
-  sourceKey: string,
-  m3uContent: string
-): {
-  tvgUrl: string;
-  channels: {
-    id: string;
-    tvgId: string;
-    name: string;
-    logo: string;
-    group: string;
-    url: string;
-  }[];
-} {
-  const channels: {
-    id: string;
-    tvgId: string;
-    name: string;
-    logo: string;
-    group: string;
-    url: string;
-  }[] = [];
-
-  const lines = m3uContent
-    .split('\n')
-    .map((line) => stripBom(line).trim())
-    .filter((line) => line.length > 0);
-
-  let tvgUrl = '';
-  let channelIndex = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // 检查是否是 #EXTM3U 行，提取 tvg-url
-    if (line.startsWith('#EXTM3U')) {
-      // 支持两种格式：x-tvg-url 和 url-tvg
-      const tvgUrlMatch = line.match(/(?:x-tvg-url|url-tvg)="([^"]*)"/);
-      tvgUrl = tvgUrlMatch ? tvgUrlMatch[1].split(',')[0].trim() : '';
-      continue;
-    }
-
-    // 检查是否是 #EXTINF 行
-    if (line.startsWith('#EXTINF:')) {
-      // 提取 tvg-id
-      const tvgIdMatch = line.match(/tvg-id="([^"]*)"/);
-      let tvgId = tvgIdMatch ? tvgIdMatch[1] : '';
-
-      // 提取 tvg-name
-      const tvgNameMatch = line.match(/tvg-name="([^"]*)"/);
-      const tvgName = tvgNameMatch ? tvgNameMatch[1] : '';
-
-      // 提取 tvg-logo
-      const tvgLogoMatch = line.match(/tvg-logo="([^"]*)"/);
-      const logo = tvgLogoMatch ? tvgLogoMatch[1] : '';
-
-      // 提取 group-title
-      const groupTitleMatch = line.match(/group-title="([^"]*)"/);
-      const group = groupTitleMatch ? groupTitleMatch[1] : '无分组';
-
-      // 提取标题（#EXTINF 行最后的逗号后面的内容）
-      const titleMatch = line.match(/,([^,]*)$/);
-      const title = titleMatch ? titleMatch[1].trim() : '';
-
-      // 优先使用 tvg-name，如果没有则使用标题
-      const name = title || tvgName || '';
-
-      // 如果 tvg-id 为空，使用 tvg-name 或频道名称作为备用
-      // 这样可以支持没有 tvg-id 的M3U文件
-      if (!tvgId) {
-        tvgId = tvgName || name;
-      }
-
-      // 检查下一行是否是URL
-      if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
-        const url = lines[i + 1];
-
-        // 只有当有名称和URL时才添加到结果中
-        if (name && url) {
-          channels.push({
-            id: `${sourceKey}-${channelIndex}`,
-            tvgId,
-            name,
-            logo,
-            group,
-            url,
-          });
-          channelIndex++;
-        }
-
-        // 跳过下一行，因为已经处理了
-        i++;
-      }
-    }
-  }
-
-  return { tvgUrl, channels };
 }
 
 // utils/urlResolver.js

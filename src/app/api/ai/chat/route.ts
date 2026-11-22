@@ -16,7 +16,9 @@ import {
 } from '@/lib/ai-tool-agent';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
+import { createSearchContext } from '@/lib/parallel-search';
 import { hasFeaturePermission } from '@/lib/permissions';
+import { resolveWebSearch } from '@/lib/web-search-config';
 
 export const runtime = 'nodejs';
 
@@ -34,6 +36,7 @@ interface ChatRequest {
   message: string;
   context?: VideoContext;
   history?: HistoryTurn[];
+  searchSessionId?: string;
 }
 
 /**
@@ -273,20 +276,7 @@ async function handleNewMode(
 
   // 组装数据源
   const dataSources: ToolDataSources = {
-    webSearch:
-      aiConfig.EnableWebSearch && aiConfig.WebSearchProvider
-        ? {
-            provider: aiConfig.WebSearchProvider,
-            apiKey:
-              aiConfig.WebSearchProvider === 'tavily'
-                ? aiConfig.TavilyApiKey
-                : aiConfig.WebSearchProvider === 'serper'
-                  ? aiConfig.SerperApiKey
-                  : aiConfig.WebSearchProvider === 'serpapi'
-                    ? aiConfig.SerpApiKey
-                    : '',
-          }
-        : undefined,
+    webSearch: resolveWebSearch(aiConfig),
     tmdb:
       adminConfig?.SiteConfig?.TMDBApiKey
         ? {
@@ -297,10 +287,6 @@ async function handleNewMode(
         : undefined,
     username,
   };
-  // 无 key 时不注册 web_search 工具
-  if (dataSources.webSearch && !dataSources.webSearch.apiKey && dataSources.webSearch.provider !== 'bing') {
-    dataSources.webSearch = undefined;
-  }
 
   const systemPrompt = buildAgentSystemPrompt({
     customSystemPrompt: aiConfig.SystemPrompt,
@@ -317,6 +303,7 @@ async function handleNewMode(
     maxContext: aiConfig.MaxContext ?? 131072,
     compressThreshold: aiConfig.CompressThreshold ?? 90,
     streaming: aiConfig.EnableStreaming !== false,
+    searchSessionId: body.searchSessionId,
     systemPrompt,
     history,
     message,
@@ -391,6 +378,7 @@ export async function POST(request: NextRequest) {
       message,
       context,
       {
+        searchContext: createSearchContext(body.searchSessionId, aiConfig.CustomModel, request.signal),
         enableWebSearch: aiConfig.EnableWebSearch,
         webSearchProvider: aiConfig.WebSearchProvider,
         tavilyApiKey: aiConfig.TavilyApiKey,

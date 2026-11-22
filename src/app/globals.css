@@ -302,58 +302,45 @@ div[data-media-provider] video {
 }
 
 
-/* TV 端遥控器焦点：深色选中 + 放大，而不是细边框 */
+/* 遥控器焦点不改变尺寸，避免相邻控件重叠；白框同时适用于键盘与电视遥控器。 */
 .tv-focusable {
   position: relative;
-  scroll-margin-top: 150px;
+  scroll-margin-top: 112px;
   scroll-margin-bottom: 96px;
   scroll-margin-left: 48px;
   scroll-margin-right: 48px;
-  transform-origin: center;
-  scale: 1;
   transition:
-    scale 180ms ease,
-    background-color 180ms ease,
-    color 180ms ease,
-    box-shadow 180ms ease,
-    opacity 180ms ease;
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 播放页用绿色标明已开启或已选中的按钮，白框继续表示遥控器焦点。 */
+[data-tv-player-root] button.tv-focusable[aria-pressed='true']:not(:disabled) {
+  background-color: #047857;
+  color: #ffffff;
+}
+
+[data-tv-player-root] button.tv-focusable[aria-pressed='true']:not(:disabled):hover {
+  background-color: #065f46;
 }
 
 .tv-focusable:focus,
 .tv-focusable:focus-visible,
 .tv-focused {
-  outline: none !important;
-  scale: 1.055;
-  background-color: rgba(15, 23, 42, 0.96) !important;
-  color: #ffffff !important;
-  box-shadow:
-    0 18px 44px rgba(0, 0, 0, 0.68),
-    0 0 26px rgba(225, 29, 72, 0.38) !important;
+  outline: 3px solid #ededed !important;
+  outline-offset: 4px;
+  box-shadow: none !important;
   z-index: 30;
 }
 
-/* 白底卡片（如二维码）聚焦时保持浅色，避免扫码区域被深色焦点样式盖住 */
+/* 白底卡片（如二维码）聚焦时保持原本的浅色扫码区域。 */
 .tv-focusable.tv-focusable-light:focus,
 .tv-focusable.tv-focusable-light:focus-visible,
 .tv-focusable.tv-focusable-light.tv-focused {
   background-color: #ffffff !important;
   color: #0f172a !important;
-}
-
-.tv-focusable:focus::after,
-.tv-focusable:focus-visible::after,
-.tv-focused::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(225,29,72,0.28));
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-.tv-focusable:active {
-  scale: 1.03;
 }
 
 @media (prefers-reduced-motion: reduce) {

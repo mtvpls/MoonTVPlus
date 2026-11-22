@@ -48,6 +48,7 @@ import {
   Plus,
   Search,
   Send,
+  Server,
   Settings,
   Smartphone,
   Tablet,
@@ -72,7 +73,12 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 
-import { AdminConfig, AdminConfigResult, OpenListExtraSource } from '@/lib/admin.types';
+import {
+  AdminConfig,
+  AdminConfigResult,
+  OpenListExtraSource,
+} from '@/lib/admin.types';
+import { getAdminVideoSources } from '@/lib/admin-video-sources';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { BookSource } from '@/lib/book.types';
 import {
@@ -80,12 +86,15 @@ import {
   FEATURE_PERMISSION_OPTIONS,
 } from '@/lib/feature-permissions';
 import { MAIN_SOURCE_NAME } from '@/lib/openlist-sources';
+import { isTVBoxBridgeSource } from '@/lib/tvbox-bridge.shared';
+import { getWebSearchProvider } from '@/lib/web-search-config';
 
 import AnimeSubscriptionComponent from '@/components/AnimeSubscriptionComponent';
 import CorrectDialog from '@/components/CorrectDialog';
 import DataMigration from '@/components/DataMigration';
 import OpenListPathInput from '@/components/OpenListPathInput';
 import PageLayout from '@/components/PageLayout';
+import TVBoxBridgeAdminComponent from '@/components/TVBoxBridgeAdminComponent';
 
 // 统一按钮样式系统
 const buttonStyles = {
@@ -149,6 +158,13 @@ const buttonStyles = {
 };
 
 const DEFAULT_GROUP_PERMISSIONS = [...ALL_FEATURE_PERMISSION_KEYS];
+
+/** 用户及用户组共用同一份可用视频源列表。 */
+const getPermissionSourceOptions = (config: AdminConfig | null) =>
+  getAdminVideoSources(config).filter(
+    (source) =>
+      !isTVBoxBridgeSource(source.key) || config?.TVBoxBridgeConfig?.Enabled
+  );
 
 /**
  * 备用源列表按索引存展开 / 检测状态，删除某项后需要平移索引，否则状态会错位到别的卡片上。
@@ -468,6 +484,7 @@ interface LiveDataSource {
   disabled?: boolean;
   from: 'config' | 'custom';
   proxyMode?: 'full' | 'm3u8-only' | 'direct'; // 代理模式
+  tvbox?: NonNullable<AdminConfig['LiveConfig']>[number]['tvbox'];
 }
 
 // 自定义分类数据类型
@@ -487,6 +504,7 @@ interface CollapsibleTabProps {
   onToggle: () => void;
   children: React.ReactNode;
   isParent?: boolean;
+  contentClassName?: string;
 }
 
 const CollapsibleTab = ({
@@ -496,6 +514,7 @@ const CollapsibleTab = ({
   onToggle,
   children,
   isParent = false,
+  contentClassName,
 }: CollapsibleTabProps) => {
   return (
     <div
@@ -537,7 +556,12 @@ const CollapsibleTab = ({
       </button>
 
       {isExpanded && (
-        <div className={isParent ? 'px-0.5 md:px-6 py-4' : 'px-6 py-4'}>
+        <div
+          className={
+            contentClassName ||
+            (isParent ? 'px-0.5 md:px-6 py-4' : 'px-6 py-4')
+          }
+        >
           {children}
         </div>
       )}
@@ -2334,7 +2358,7 @@ const UserConfig = ({
                     选择可用的采集源：
                   </h4>
                   <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-                    {config?.SourceConfig?.map((source) => (
+                    {getPermissionSourceOptions(config).map((source) => (
                       <label
                         key={source.key}
                         className='flex items-center space-x-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors'
@@ -2357,11 +2381,15 @@ const UserConfig = ({
                           <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>
                             {source.name}
                           </div>
-                          {source.api && (
+                          {source.api ? (
                             <div className='text-xs text-gray-500 dark:text-gray-400 truncate'>
                               {extractDomain(source.api)}
                             </div>
-                          )}
+                          ) : isTVBoxBridgeSource(source.key) ? (
+                            <div className='text-xs text-emerald-600 dark:text-emerald-400 truncate'>
+                              TVBox 桥接
+                            </div>
+                          ) : null}
                         </div>
                       </label>
                     ))}
@@ -2379,10 +2407,9 @@ const UserConfig = ({
                     </button>
                     <button
                       onClick={() => {
-                        const allApis =
-                          config?.SourceConfig?.filter(
-                            (source) => !source.disabled
-                          ).map((s) => s.key) || [];
+                        const allApis = getPermissionSourceOptions(config)
+                          .filter((source) => !source.disabled)
+                          .map((s) => s.key);
                         setSelectedApis(allApis);
                       }}
                       className={buttonStyles.quickAction}
@@ -2584,7 +2611,7 @@ const UserConfig = ({
                       可用视频源
                     </label>
                     <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'>
-                      {config?.SourceConfig?.map((source) => (
+                      {getPermissionSourceOptions(config).map((source) => (
                         <label
                           key={source.key}
                           className='flex items-center space-x-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors'
@@ -2618,11 +2645,15 @@ const UserConfig = ({
                             <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>
                               {source.name}
                             </div>
-                            {source.api && (
+                            {source.api ? (
                               <div className='text-xs text-gray-500 dark:text-gray-400 truncate'>
                                 {extractDomain(source.api)}
                               </div>
-                            )}
+                            ) : isTVBoxBridgeSource(source.key) ? (
+                              <div className='text-xs text-emerald-600 dark:text-emerald-400 truncate'>
+                                TVBox 桥接
+                              </div>
+                            ) : null}
                           </div>
                         </label>
                       ))}
@@ -2643,10 +2674,9 @@ const UserConfig = ({
                       </button>
                       <button
                         onClick={() => {
-                          const allApis =
-                            config?.SourceConfig?.filter(
-                              (source) => !source.disabled
-                            ).map((s) => s.key) || [];
+                          const allApis = getPermissionSourceOptions(config)
+                            .filter((source) => !source.disabled)
+                            .map((s) => s.key);
                           setNewUserGroup((prev) => ({
                             ...prev,
                             enabledApis: allApis,
@@ -2749,7 +2779,7 @@ const UserConfig = ({
                       可用视频源
                     </label>
                     <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'>
-                      {config?.SourceConfig?.map((source) => (
+                      {getPermissionSourceOptions(config).map((source) => (
                         <label
                           key={source.key}
                           className='flex items-center space-x-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors'
@@ -2791,11 +2821,15 @@ const UserConfig = ({
                             <div className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>
                               {source.name}
                             </div>
-                            {source.api && (
+                            {source.api ? (
                               <div className='text-xs text-gray-500 dark:text-gray-400 truncate'>
                                 {extractDomain(source.api)}
                               </div>
-                            )}
+                            ) : isTVBoxBridgeSource(source.key) ? (
+                              <div className='text-xs text-emerald-600 dark:text-emerald-400 truncate'>
+                                TVBox 桥接
+                              </div>
+                            ) : null}
                           </div>
                         </label>
                       ))}
@@ -2815,10 +2849,9 @@ const UserConfig = ({
                       </button>
                       <button
                         onClick={() => {
-                          const allApis =
-                            config?.SourceConfig?.filter(
-                              (source) => !source.disabled
-                            ).map((s) => s.key) || [];
+                          const allApis = getPermissionSourceOptions(config)
+                            .filter((source) => !source.disabled)
+                            .map((s) => s.key);
                           setEditingUserGroup((prev) =>
                             prev ? { ...prev, enabledApis: allApis } : null
                           );
@@ -7086,9 +7119,7 @@ const VideoSourceConfig = ({
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [showSpecialSourcesModal, setShowSpecialSourcesModal] = useState(false);
-  const [showClientAdSourcesModal, setShowClientAdSourcesModal] = useState(false);
   const [specialSourceDraftApis, setSpecialSourceDraftApis] = useState<string[]>([]);
-  const [clientAdSourceDraftApis, setClientAdSourceDraftApis] = useState<string[]>([]);
   const [weightDraftSources, setWeightDraftSources] = useState<DataSource[]>(
     []
   );
@@ -7140,7 +7171,7 @@ const VideoSourceConfig = ({
   // 初始化
   useEffect(() => {
     if (config?.SourceConfig) {
-      setSources(config.SourceConfig);
+      setSources(getAdminVideoSources(config));
       // 进入时重置 orderChanged
       setOrderChanged(false);
       // 重置选择状态
@@ -7263,33 +7294,10 @@ const VideoSourceConfig = ({
     });
   };
 
-  const openClientAdSourcesModal = () => {
-    setClientAdSourceDraftApis(config?.ClientAdSourceApis || []);
-    setShowClientAdSourcesModal(true);
-  };
-
-  const closeClientAdSourcesModal = () => {
-    setShowClientAdSourcesModal(false);
-    setClientAdSourceDraftApis([]);
-  };
-
-  const handleSaveClientAdSources = async () => {
-    await withLoading('saveClientAdSources', async () => {
-      await callSourceApi({
-        action: 'set_client_ad_sources',
-        keys: clientAdSourceDraftApis,
-      });
-      closeClientAdSourcesModal();
-    }).catch(() => {
-      console.error('操作失败', 'set_client_ad_sources');
-    });
-  };
-
   const handleSaveSpecialSources = async () => {
-    const enabledSourceKeys =
-      config?.SourceConfig?.filter((source) => !source.disabled).map(
-        (source) => source.key
-      ) || [];
+    const enabledSourceKeys = sources
+      .filter((source) => !source.disabled)
+      .map((source) => source.key);
     const selectedSet = new Set(specialSourceDraftApis);
     const selectedAllEnabledSources =
       enabledSourceKeys.length > 0 &&
@@ -7563,14 +7571,17 @@ const VideoSourceConfig = ({
       setValidationResults([]); // 清空之前的结果
       setShowValidationModal(false); // 立即关闭弹窗
 
-      // 初始化所有视频源为检测中状态
-      const initialResults = sources.map((source) => ({
-        key: source.key,
-        name: source.name,
-        status: 'validating' as const,
-        message: '检测中...',
-        resultCount: 0,
-      }));
+      // CMS 有效性检测不走桥接接口。
+      const initialResults = sources
+        .filter((source) => !isTVBoxBridgeSource(source.key))
+        .map((source) => ({
+          key: source.key,
+          name: source.name,
+          status: 'validating' as const,
+          message: '检测中...',
+          resultCount: 0,
+        }));
+
       setValidationResults(initialResults);
 
       try {
@@ -7864,7 +7875,7 @@ const VideoSourceConfig = ({
           className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 max-w-[12rem] truncate'
           title={source.api}
         >
-          {source.api}
+          {isTVBoxBridgeSource(source.key) ? 'TVBox 桥接' : source.api}
         </td>
         <td
           className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 max-w-[8rem] truncate'
@@ -7884,49 +7895,57 @@ const VideoSourceConfig = ({
           </span>
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-center'>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleToggleProxyMode(source.key);
-            }}
-            disabled={isLoading(`toggleProxyMode_${source.key}`)}
-            className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${
-              source.proxyMode
-                ? 'bg-blue-600 dark:bg-blue-500'
-                : 'bg-gray-200 dark:bg-gray-700'
-            } ${
-              isLoading(`toggleProxyMode_${source.key}`)
-                ? 'opacity-50 cursor-not-allowed'
-                : 'cursor-pointer'
-            }`}
-            title={source.proxyMode ? '代理模式已启用' : '代理模式已禁用'}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                source.proxyMode ? 'translate-x-6' : 'translate-x-1'
+          {isTVBoxBridgeSource(source.key) ? (
+            <span className='text-gray-400'>—</span>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleProxyMode(source.key);
+              }}
+              disabled={isLoading(`toggleProxyMode_${source.key}`)}
+              className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${
+                source.proxyMode
+                  ? 'bg-blue-600 dark:bg-blue-500'
+                  : 'bg-gray-200 dark:bg-gray-700'
+              } ${
+                isLoading(`toggleProxyMode_${source.key}`)
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'cursor-pointer'
               }`}
-            />
-          </button>
+              title={source.proxyMode ? '代理模式已启用' : '代理模式已禁用'}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  source.proxyMode ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          )}
         </td>
         <td className='px-6 py-4 whitespace-nowrap max-w-[1rem]'>
-          {(() => {
-            const status = getValidationStatus(source.key);
-            if (!status) {
+          {isTVBoxBridgeSource(source.key) ? (
+            <span className='text-gray-400'>—</span>
+          ) : (
+            (() => {
+              const status = getValidationStatus(source.key);
+              if (!status) {
+                return (
+                  <span className='px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-900/20 text-gray-600 dark:text-gray-400'>
+                    未检测
+                  </span>
+                );
+              }
               return (
-                <span className='px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-900/20 text-gray-600 dark:text-gray-400'>
-                  未检测
+                <span
+                  className={`px-2 py-1 text-xs rounded-full ${status.className}`}
+                  title={status.message}
+                >
+                  {status.icon} {status.text}
                 </span>
               );
-            }
-            return (
-              <span
-                className={`px-2 py-1 text-xs rounded-full ${status.className}`}
-                title={status.message}
-              >
-                {status.icon} {status.text}
-              </span>
-            );
-          })()}
+            })()
+          )}
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2'>
           <button
@@ -8254,19 +8273,6 @@ const VideoSourceConfig = ({
                 >
                   <Settings size={14} />
                   <span>权重设置</span>
-                </button>
-                <button
-                  onClick={openClientAdSourcesModal}
-                  className={`${buttonStyles.secondary} flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
-                  title='选择在手机/电视客户端播放时自动去广告的视频源'
-                >
-                  <Settings size={14} />
-                  <span>客户端广告配置</span>
-                  {(config?.ClientAdSourceApis?.length || 0) > 0 && (
-                    <span className='rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'>
-                      {config?.ClientAdSourceApis?.length}
-                    </span>
-                  )}
                 </button>
               </div>
             </div>
@@ -8632,12 +8638,12 @@ const VideoSourceConfig = ({
                     配置说明
                   </div>
                   <p className='mt-1 text-sm text-rose-700 dark:text-rose-400'>
-                    这里维护的是特殊源列表，不是用户权限；TVBox、OrionTV、WebTV 始终不会使用这些特殊源。
+                    TVBox 客户端、OrionTV、WebTV 的订阅不会包含特殊源。
                   </p>
                 </div>
 
                 <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
-                  {config?.SourceConfig?.map((source) => (
+                  {sources.map((source) => (
                     <label
                       key={source.key}
                       className='flex cursor-pointer items-center space-x-3 rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-900/50'
@@ -8681,10 +8687,9 @@ const VideoSourceConfig = ({
                   </button>
                   <button
                     onClick={() => {
-                      const allApis =
-                        config?.SourceConfig?.filter((source) => !source.disabled).map(
-                          (source) => source.key
-                        ) || [];
+                      const allApis = sources
+                        .filter((source) => !source.disabled)
+                        .map((source) => source.key);
                       setSpecialSourceDraftApis(allApis);
                     }}
                     className={buttonStyles.quickAction}
@@ -8712,119 +8717,6 @@ const VideoSourceConfig = ({
                     }`}
                   >
                     {isLoading('saveSpecialSources') ? '保存中...' : '保存'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-      {showClientAdSourcesModal &&
-        createPortal(
-          <div
-            className='fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm'
-            onClick={closeClientAdSourcesModal}
-          >
-            <div
-              className='flex max-h-[84vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800'
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className='flex items-start justify-between gap-4 border-b border-gray-200 px-6 py-5 dark:border-gray-700'>
-                <div>
-                  <h3 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>
-                    客户端去广告配置
-                  </h3>
-                  <p className='mt-1 text-sm text-amber-500 dark:text-amber-400'>
-                    ⚠️客户端已具备本地去广告功能，该功能可能在未来移除
-                  </p>
-                </div>
-                <button
-                  onClick={closeClientAdSourcesModal}
-                  className='text-2xl leading-none text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300'
-                  aria-label='关闭客户端去广告配置弹窗'
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className='min-h-0 flex-1 overflow-y-auto px-6 py-5'>
-                <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
-                  {config?.SourceConfig?.map((source) => (
-                    <label
-                      key={source.key}
-                      className='flex cursor-pointer items-center space-x-3 rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-900/50'
-                    >
-                      <input
-                        type='checkbox'
-                        checked={clientAdSourceDraftApis.includes(source.key)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setClientAdSourceDraftApis((prev) =>
-                              prev.includes(source.key) ? prev : [...prev, source.key]
-                            );
-                          } else {
-                            setClientAdSourceDraftApis((prev) =>
-                              prev.filter((api) => api !== source.key)
-                            );
-                          }
-                        }}
-                        className='rounded border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700'
-                      />
-                      <div className='min-w-0 flex-1'>
-                        <div className='truncate text-sm font-medium text-gray-900 dark:text-gray-100'>
-                          {source.name}
-                        </div>
-                        <div className='truncate text-xs text-gray-500 dark:text-gray-400'>
-                          {source.key}
-                        </div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className='flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-900/30'>
-                <div className='flex flex-wrap gap-2'>
-                  <button
-                    onClick={() => setClientAdSourceDraftApis([])}
-                    className={buttonStyles.quickAction}
-                  >
-                    全不选
-                  </button>
-                  <button
-                    onClick={() => {
-                      const allApis =
-                        config?.SourceConfig?.filter((source) => !source.disabled).map(
-                          (source) => source.key
-                        ) || [];
-                      setClientAdSourceDraftApis(allApis);
-                    }}
-                    className={buttonStyles.quickAction}
-                  >
-                    全选启用源
-                  </button>
-                </div>
-                <div className='flex items-center gap-3'>
-                  <span className='text-sm text-gray-600 dark:text-gray-400'>
-                    已选择：
-                    <span className='font-medium text-amber-600 dark:text-amber-400'>
-                      {clientAdSourceDraftApis.length} 个源
-                    </span>
-                  </span>
-                  <button onClick={closeClientAdSourcesModal} className={buttonStyles.secondary}>
-                    取消
-                  </button>
-                  <button
-                    onClick={handleSaveClientAdSources}
-                    disabled={isLoading('saveClientAdSources')}
-                    className={`px-4 py-2 ${
-                      isLoading('saveClientAdSources')
-                        ? buttonStyles.disabled
-                        : buttonStyles.success
-                    }`}
-                  >
-                    {isLoading('saveClientAdSources') ? '保存中...' : '保存'}
                   </button>
                 </div>
               </div>
@@ -12642,7 +12534,7 @@ const SiteConfigComponent = ({
               {[
                 { value: 'direct', label: '直连' },
                 { value: 'server-proxy', label: '服务器代理' },
-                { value: 'sakura', label: '桜色镜像站' },
+                { value: 'sakura', label: '镜像站' },
                 { value: 'custom-baseurl', label: '自定义 Base URL' },
               ].map((option) => (
                 <button
@@ -16836,8 +16728,8 @@ const AIConfigComponent = ({
   // 联网搜索配置
   const [enableWebSearch, setEnableWebSearch] = useState(false);
   const [webSearchProvider, setWebSearchProvider] = useState<
-    'tavily' | 'serper' | 'serpapi' | 'bing'
-  >('tavily');
+    'parallel' | 'tavily' | 'serper' | 'serpapi' | 'bing'
+  >('parallel');
   const [tavilyApiKey, setTavilyApiKey] = useState('');
   const [serperApiKey, setSerperApiKey] = useState('');
   const [serpApiKey, setSerpApiKey] = useState('');
@@ -16885,7 +16777,7 @@ const AIConfigComponent = ({
       setCustomModel(config.AIConfig.CustomModel || '');
       setDecisionCustomModel(config.AIConfig.DecisionCustomModel || '');
       setEnableWebSearch(config.AIConfig.EnableWebSearch || false);
-      setWebSearchProvider(config.AIConfig.WebSearchProvider || 'tavily');
+      setWebSearchProvider(getWebSearchProvider(config.AIConfig));
       setTavilyApiKey(config.AIConfig.TavilyApiKey || '');
       setSerperApiKey(config.AIConfig.SerperApiKey || '');
       setSerpApiKey(config.AIConfig.SerpApiKey || '');
@@ -17358,12 +17250,19 @@ const AIConfigComponent = ({
                 onChange={(e) => setWebSearchProvider(e.target.value as any)}
                 className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
               >
-                <option value='tavily'>Tavily (推荐)</option>
+                <option value='parallel'>Parallel Search MCP（免费，无需 API Key）</option>
+                <option value='tavily'>Tavily</option>
                 <option value='serper'>Serper.dev</option>
                 <option value='serpapi'>SerpAPI</option>
                 <option value='bing'>Bing RSS（免费，无需 API Key）</option>
               </select>
             </div>
+
+            {webSearchProvider === 'parallel' && (
+              <p className='text-xs text-gray-500 dark:text-gray-400'>
+                使用 Parallel Search MCP 搜索（Fast 模式）并提取网页内容，无需注册或 API Key。搜索词和抓取链接会发送至 Parallel。
+              </p>
+            )}
 
             {webSearchProvider === 'tavily' && (
               <div>
@@ -18140,11 +18039,12 @@ const LiveSourceConfig = ({
         }
 
         // 刷新成功后重新获取配置
+        const data = await response.json();
         await refreshConfig();
         showAlert({
           type: 'success',
           title: '刷新成功',
-          message: '直播源已刷新',
+          message: data.message || '直播源已刷新',
           timer: 2000,
         });
       } catch (err) {
@@ -18252,6 +18152,7 @@ const LiveSourceConfig = ({
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100'>
           {liveSource.name}
+          {liveSource.tvbox && <span className='ml-2 text-xs text-blue-600 dark:text-blue-400'>TVBox</span>}
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100'>
           {liveSource.key}
@@ -18327,7 +18228,7 @@ const LiveSourceConfig = ({
           >
             {!liveSource.disabled ? '禁用' : '启用'}
           </button>
-          {liveSource.from !== 'config' && (
+          {!liveSource.tvbox && liveSource.from !== 'config' && (
             <>
               <button
                 onClick={() => setEditingLiveSource(liveSource)}
@@ -18401,11 +18302,18 @@ const LiveSourceConfig = ({
             </button>
           </div>
         </div>
-        <div className='flex items-center justify-between'>
+        <div className='flex flex-wrap items-center justify-between gap-2'>
           <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
             直播源列表
           </h4>
-          <div className='flex items-center space-x-2'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <button
+              onClick={() => withLoading('syncTVBoxLives', () => callLiveSourceApi({ action: 'sync-tvbox' })).catch(() => undefined)}
+              disabled={!config.TVBoxBridgeConfig?.Enabled || isLoading('syncTVBoxLives')}
+              className={`px-3 py-1.5 text-sm ${!config.TVBoxBridgeConfig?.Enabled || isLoading('syncTVBoxLives') ? buttonStyles.disabled : buttonStyles.primary}`}
+            >
+              {isLoading('syncTVBoxLives') ? '读取中...' : '读取 TVBox 直播源'}
+            </button>
             <button
               onClick={handleRefreshLiveSources}
               disabled={isRefreshing || isLoading('refreshLiveSources')}
@@ -19237,9 +19145,11 @@ function AdminPageClient() {
   const [role, setRole] = useState<'owner' | 'admin' | null>(null);
   const [showResetConfigModal, setShowResetConfigModal] = useState(false);
   const [expandedTabs, setExpandedTabs] = useState<{ [key: string]: boolean }>({
+    viewingSources: false,
     userConfig: false,
     videoSource: false,
     sourceScriptLab: false,
+    tvboxBridge: false,
     musicConfig: false,
     mediaLibrary: false,
     openListConfig: false,
@@ -19273,7 +19183,7 @@ function AdminPageClient() {
   // PC 侧边栏中分组的展开状态
   const [expandedGroups, setExpandedGroups] = useState<{
     [key: string]: boolean;
-  }>({ mediaLibrary: true });
+  }>({ viewingSources: true, mediaLibrary: true });
 
   // 获取管理员配置
   // showLoading 用于控制是否在请求期间显示整体加载骨架。
@@ -19521,13 +19431,53 @@ function AdminPageClient() {
   const navIconClass = 'text-gray-600 dark:text-gray-400';
   const navItems: AdminNavItem[] = [
     {
-      key: 'configFile',
-      title: '配置文件',
-      ownerOnly: true,
-      icon: <FileText size={20} className={navIconClass} />,
-      render: () => (
-        <ConfigFileComponent config={config} refreshConfig={fetchConfig} />
-      ),
+      key: 'viewingSources',
+      title: '观影源配置',
+      icon: <Video size={20} className={navIconClass} />,
+      children: [
+        {
+          key: 'configFile',
+          title: '配置文件',
+          ownerOnly: true,
+          icon: <FileText size={20} className={navIconClass} />,
+          render: () => (
+            <ConfigFileComponent config={config} refreshConfig={fetchConfig} />
+          ),
+        },
+        {
+          key: 'videoSource',
+          title: '视频源配置',
+          icon: <Video size={20} className={navIconClass} />,
+          render: () => (
+            <VideoSourceConfig config={config} refreshConfig={fetchConfig} />
+          ),
+        },
+        {
+          key: 'sourceScriptLab',
+          title: '视频源脚本',
+          icon: <Bot size={20} className={navIconClass} />,
+          render: () => <VideoSourceScriptLab />,
+        },
+        {
+          key: 'tvboxBridge',
+          title: 'TVBox 桥接',
+          icon: <Server size={20} className={navIconClass} />,
+          render: () => (
+            <TVBoxBridgeAdminComponent
+              config={config}
+              refreshConfig={fetchConfig}
+            />
+          ),
+        },
+        {
+          key: 'liveSource',
+          title: '电视直播源配置',
+          icon: <Tv size={20} className={navIconClass} />,
+          render: () => (
+            <LiveSourceConfig config={config} refreshConfig={fetchConfig} />
+          ),
+        },
+      ],
     },
     {
       key: 'siteConfig',
@@ -19577,20 +19527,6 @@ function AdminPageClient() {
       ),
     },
     {
-      key: 'videoSource',
-      title: '视频源配置',
-      icon: <Video size={20} className={navIconClass} />,
-      render: () => (
-        <VideoSourceConfig config={config} refreshConfig={fetchConfig} />
-      ),
-    },
-    {
-      key: 'sourceScriptLab',
-      title: '视频源脚本',
-      icon: <Bot size={20} className={navIconClass} />,
-      render: () => <VideoSourceScriptLab />,
-    },
-    {
       key: 'musicConfig',
       title: '音乐配置',
       icon: (
@@ -19628,14 +19564,6 @@ function AdminPageClient() {
       icon: <BookMarked size={20} className={navIconClass} />,
       render: () => (
         <OPDSConfigComponent config={config} refreshConfig={fetchConfig} />
-      ),
-    },
-    {
-      key: 'liveSource',
-      title: '电视直播源配置',
-      icon: <Tv size={20} className={navIconClass} />,
-      render: () => (
-        <LiveSourceConfig config={config} refreshConfig={fetchConfig} />
       ),
     },
     {
@@ -19782,9 +19710,18 @@ function AdminPageClient() {
     },
   ];
 
+  const visibleNavItems = navItems
+    .filter((item) => !item.ownerOnly || role === 'owner')
+    .map((item) => ({
+      ...item,
+      children: item.children?.filter(
+        (child) => !child.ownerOnly || role === 'owner'
+      ),
+    }));
+
   // 根据 key 查找区块（含分组子项）
   const findNavItem = (key: string): AdminNavItem | undefined => {
-    for (const it of navItems) {
+    for (const it of visibleNavItems) {
       if (it.key === key) return it;
       const child = it.children?.find((c) => c.key === key);
       if (child) return child;
@@ -19792,8 +19729,8 @@ function AdminPageClient() {
     return undefined;
   };
 
-  const visibleNavItems = navItems.filter(
-    (it) => !it.ownerOnly || role === 'owner'
+  const viewingSourcesItem = visibleNavItems.find(
+    (item) => item.key === 'viewingSources'
   );
   const activeItem = findNavItem(activeKey);
 
@@ -19946,25 +19883,28 @@ function AdminPageClient() {
 
           {/* 移动端 / 窄屏：保留原有手风琴 */}
           <div className='lg:hidden'>
-          {/* 配置文件标签 - 仅站长可见 */}
-          {role === 'owner' && (
-            <CollapsibleTab
-              title='配置文件'
-              icon={
-                <FileText
-                  size={20}
-                  className='text-gray-600 dark:text-gray-400'
-                />
-              }
-              isExpanded={expandedTabs.configFile}
-              onToggle={() => toggleTab('configFile')}
-            >
-              <ConfigFileComponent
-                config={config}
-                refreshConfig={fetchConfig}
-              />
-            </CollapsibleTab>
-          )}
+          {/* 观影源配置大类 */}
+          <CollapsibleTab
+            title='观影源配置'
+            icon={<Video size={20} className={navIconClass} />}
+            isExpanded={expandedTabs.viewingSources}
+            onToggle={() => toggleTab('viewingSources')}
+            contentClassName='px-0.5 md:px-6 py-4'
+          >
+            <div className='space-y-4'>
+              {viewingSourcesItem?.children?.map((item) => (
+                <CollapsibleTab
+                  key={item.key}
+                  title={item.title}
+                  icon={item.icon}
+                  isExpanded={expandedTabs[item.key]}
+                  onToggle={() => toggleTab(item.key)}
+                >
+                  {item.render?.()}
+                </CollapsibleTab>
+              ))}
+            </div>
+          </CollapsibleTab>
 
           {/* 站点配置标签 */}
           <CollapsibleTab
@@ -20036,29 +19976,6 @@ function AdminPageClient() {
               />
             </CollapsibleTab>
 
-            {/* 视频源配置标签 */}
-            <CollapsibleTab
-              title='视频源配置'
-              icon={
-                <Video size={20} className='text-gray-600 dark:text-gray-400' />
-              }
-              isExpanded={expandedTabs.videoSource}
-              onToggle={() => toggleTab('videoSource')}
-            >
-              <VideoSourceConfig config={config} refreshConfig={fetchConfig} />
-            </CollapsibleTab>
-
-            <CollapsibleTab
-              title='视频源脚本'
-              icon={
-                <Bot size={20} className='text-gray-600 dark:text-gray-400' />
-              }
-              isExpanded={expandedTabs.sourceScriptLab}
-              onToggle={() => toggleTab('sourceScriptLab')}
-            >
-              <VideoSourceScriptLab />
-            </CollapsibleTab>
-
             <CollapsibleTab
               title='音乐配置'
               icon={
@@ -20119,18 +20036,6 @@ function AdminPageClient() {
                 config={config}
                 refreshConfig={fetchConfig}
               />
-            </CollapsibleTab>
-
-            {/* 电视直播源配置标签 */}
-            <CollapsibleTab
-              title='电视直播源配置'
-              icon={
-                <Tv size={20} className='text-gray-600 dark:text-gray-400' />
-              }
-              isExpanded={expandedTabs.liveSource}
-              onToggle={() => toggleTab('liveSource')}
-            >
-              <LiveSourceConfig config={config} refreshConfig={fetchConfig} />
             </CollapsibleTab>
 
             {/* 网络直播配置标签 */}

@@ -7,6 +7,7 @@ import {
 } from '@/lib/ai-comment-generator';
 import { ToolDataSources } from '@/lib/ai-tool-agent';
 import { getConfig } from '@/lib/config';
+import { resolveWebSearch } from '@/lib/web-search-config';
 
 export const runtime = 'nodejs';
 
@@ -129,25 +130,7 @@ export async function GET(request: NextRequest) {
         // 工具式调用所需的数据源（联网搜索 + TMDB），与 /api/ai/chat 保持一致
         let toolDataSources: ToolDataSources | undefined;
         if (useToolMode) {
-          const webSearch =
-            aiConfig.EnableWebSearch && aiConfig.WebSearchProvider
-              ? {
-                  provider: aiConfig.WebSearchProvider,
-                  apiKey:
-                    (aiConfig.WebSearchProvider === 'tavily'
-                      ? aiConfig.TavilyApiKey
-                      : aiConfig.WebSearchProvider === 'serper'
-                        ? aiConfig.SerperApiKey
-                        : aiConfig.WebSearchProvider === 'serpapi'
-                          ? aiConfig.SerpApiKey
-                          : '') || '',
-                }
-              : undefined;
-          // 无 key 时不注册 web_search 工具（bing 无需 key）
-          const usableWebSearch =
-            webSearch && (webSearch.apiKey || webSearch.provider === 'bing')
-              ? webSearch
-              : undefined;
+          const usableWebSearch = resolveWebSearch(aiConfig);
 
           toolDataSources = {
             webSearch: usableWebSearch,

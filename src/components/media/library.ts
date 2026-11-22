@@ -124,6 +124,16 @@ export const SPINE_TAB_ACTIVE =
 export const SPINE_TAB_IDLE =
   'text-library-muted hover:bg-library-ochre-tint/50 hover:text-library-ochre dark:text-library-night-muted dark:hover:bg-library-night-ochre-tint/50 dark:hover:text-library-night-ochre';
 
+/** 目录里的文字切源：保留点击区域，选中时只在文字下留一道短线。 */
+export const LIBRARY_TEXT_TAB =
+  'relative inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap px-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-library-ochre dark:focus-visible:ring-library-night-ochre';
+
+export const LIBRARY_TEXT_TAB_ACTIVE =
+  'font-medium text-library-ochre after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-library-ochre dark:text-library-night-ochre dark:after:bg-library-night-ochre';
+
+export const LIBRARY_TEXT_TAB_IDLE =
+  'text-library-muted hover:text-library-ochre dark:text-library-night-muted dark:hover:text-library-night-ochre';
+
 /**
  * 阅读器：页面图像下方的衬底。原来是一块中性灰，换成纸的暗部，
  * 翻页时露出的"桌面"也跟着进了暖色系。

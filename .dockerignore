@@ -6,3 +6,4 @@ public/screenshot3.png
 
 # Android/TV native app sources are not needed in Docker image builds
 apps/
+mocks/

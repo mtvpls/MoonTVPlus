@@ -134,7 +134,10 @@ export default async function RootLayout({
   let analyticsWebsiteId = '';
   let analyticsCustomScript = '';
   let musicFeatureEnabled = false;
-  let suwayomiEnabled = false;
+  let suwayomiEnabled = !!(
+    process.env.SUWAYOMI_ENABLED === 'true' &&
+    (process.env.SUWAYOMI_URL || process.env.NEXT_PUBLIC_SUWAYOMI_URL)
+  );
   let booksEnabled =
     process.env.OPDS_ENABLED === 'true' ||
     process.env.LEGADO_ENABLED === 'true';

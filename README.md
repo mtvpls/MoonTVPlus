@@ -511,6 +511,8 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 | ENABLE_TVBOX_SUBSCRIBE                   | 是否启用 TVBOX 订阅功能                                      | true/false                  | false                                                        |
 | TVBOX_SUBSCRIBE_TOKEN                    | TVBOX 订阅 API 访问 Token，如启用TVBOX功能必须设置该项       | 任意字符串                  | (空)                                                         |
 | TVBOX_BLOCKED_SOURCES                    | TVBOX 订阅屏蔽源列表（多个源用逗号分隔，匹配视频源的 key）   | 逗号分隔的源 key            | (空)                                                         |
+| TVBOX_BRIDGE_URL                         | TVBox 桥接服务地址；后台启用桥接且桥接地址留空时使用          | HTTP/HTTPS URL              | (空)                                                         |
+| TVBOX_BRIDGE_TOKEN                       | TVBox 桥接认证 Token；后台 Token 留空时使用                 | 任意字符串                  | (空)                                                         |
 | WATCH_ROOM_ENABLED                       | 是否启用观影室功能（vercel部署不支持该功能，可使用外部服务器） | true/false                  | false                                                        |
 | WATCH_ROOM_SERVER_TYPE                   | 观影室服务器类型                                             | internal/external           | internal                                                     |
 | WATCH_ROOM_EXTERNAL_SERVER_URL           | 外部观影室服务器地址（当 SERVER_TYPE 为 external 时必填）    | WebSocket URL               | (空)                                                         |
@@ -660,6 +662,14 @@ NEXT_PUBLIC_VOICE_CHAT_STRATEGY 选项解释：
 2. 重启应用后，登录网站，点击用户菜单中的"电视访问"按钮
 
 3. 复制生成的订阅链接到 TVBOX 应用中使用
+
+### 读取 TVBox 订阅中的电视直播
+
+在管理面板的「TVBox 桥接」中启用桥接、配置服务地址与 Token，并加载 TVBox 订阅。上游服务需要提供 `/api/lives` 和 `/api/live/proxy` 接口。
+
+订阅中的直播源会自动加入「电视直播源配置」，也可以点击「读取 TVBox 直播源」重新同步。普通 M3U/TXT 列表直接读取，支持订阅内嵌频道分组；牛播一这类 `127.0.0.1:9978/proxy` 地址则由上游初始化代理并获取频道。读取源列表时不会初始化代理，首次进入代理源或刷新频道时可能需要几分钟。
+
+代理频道的播放清单、分片、密钥和媒体流通过本项目转发，桥接 Token 留在服务端。更新同一订阅会保留源的禁用状态、排序和代理模式，同时刷新频道缓存；切换订阅会移除旧订阅的直播源，保留手工添加的直播源。
 
 ## 安全与隐私提醒
 

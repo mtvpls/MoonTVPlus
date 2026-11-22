@@ -29,7 +29,8 @@
     "edgeone:login": "edgeone login",
     "edgeone:link": "edgeone makers link",
     "edgeone:build": "node scripts/edgeone-build.mjs",
-    "deploy:edgeone:auto": "edgeone makers deploy"
+    "deploy:edgeone:auto": "edgeone makers deploy",
+    "mock:manga": "node mocks/suwayomi/server.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

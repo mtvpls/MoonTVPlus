@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AdminConfigResult } from '@/lib/admin.types';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
+import { syncTVBoxLiveSources } from '@/lib/tvbox-live.server';
 
 export const runtime = 'nodejs';
 
@@ -48,6 +49,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    try { await syncTVBoxLiveSources(); } catch (error) {
+      console.warn('同步 TVBox 直播源失败:', error);
+    }
     return NextResponse.json(result, {
       headers: {
         'Cache-Control': 'no-store', // 管理员配置不缓存

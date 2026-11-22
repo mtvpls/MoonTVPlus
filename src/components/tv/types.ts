@@ -6,8 +6,12 @@ export interface TVItem {
   year?: string;
   type?: 'movie' | 'tv';
   href?: string;
+  detailHref?: string;
+  currentEpisode?: number;
+  totalEpisodes?: number;
+  origin?: 'vod' | 'live';
+  isInvalid?: boolean;
 }
-
 
 export interface TVSection {
   title: string;

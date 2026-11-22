@@ -2,10 +2,8 @@
 
 import {
   AlertTriangle,
-  ArrowLeft,
   Heart,
   Info,
-  Layers,
   ListVideo,
   Loader2,
   Maximize,
@@ -34,6 +32,7 @@ import {
   useState,
 } from 'react';
 
+import { isAnimeCategoryText } from '@/lib/anime-keyword-expr';
 import {
   convertDanmakuFormat,
   getDanmakuById,
@@ -43,24 +42,36 @@ import {
   saveDanmakuDisplayState,
   searchAnime,
 } from '@/lib/danmaku/api';
-import { isAnimeCategoryText } from '@/lib/anime-keyword-expr';
 import {
-  deleteFavorite,
+  type PlayRecord,
   generateStorageKey,
   getAllPlayRecords,
   getSkipConfig,
-  isFavorited,
-  saveFavorite,
   savePlayRecord,
 } from '@/lib/db.client';
 import { loadTVPlayerUpDownAction } from '@/lib/tv-preferences';
-import { SearchResult } from '@/lib/types';
+import {
+  mergeTVBoxBridgePlaybackSources,
+  restoreTVBoxBridgePlaybackLine,
+} from '@/lib/tvbox-bridge.playback';
+import {
+  getActiveTVBoxBridgeLine,
+  getTVBoxBridgeLines,
+  isTVBoxBridgeSource,
+  resolveEpisodeIndexForLine,
+} from '@/lib/tvbox-bridge.shared';
+import type { SearchResult } from '@/lib/types';
+import { useTVFavorite } from '@/hooks/useTVFavorite';
 
+import { scrollTVPlayerControlIntoView } from '@/components/tv/player/focus';
 import TVNativeVideo from '@/components/tv/player/TVNativeVideo';
 import {
+  type TVEpisodePlayback,
   fetchTVDetail,
+  fetchTVSourceDetail,
   formatTVTime,
-  resolveTVEpisodeUrl,
+  getTVErrorMessage,
+  resolveTVEpisodePlayback,
 } from '@/components/tv/player/utils';
 import TVVirtualRemote from '@/components/tv/TVVirtualRemote';
 
@@ -74,9 +85,16 @@ const TV_MUTED_KEY = 'tv_player_muted';
 const REMOTE_KEY_DEDUPE_MS = 350;
 const TV_EPISODE_GRID_COLUMNS = 4;
 
-const TV_EPISODE_FOCUS_GROUPS = ['sources', 'pages', 'episodes'] as const;
+const TV_EPISODE_FOCUS_GROUPS = [
+  'close',
+  'sources',
+  'lines',
+  'pages',
+  'episodes',
+] as const;
 type TVEpisodeFocusGroup = (typeof TV_EPISODE_FOCUS_GROUPS)[number];
 type TVEpisodeFocusDirection = 'up' | 'down' | 'left' | 'right';
+type TVPlayerDialog = 'episodes' | 'detail' | 'danmaku';
 
 type TVDanmakuSettings = {
   fontSize: number;
@@ -149,11 +167,7 @@ function blurTVPlayerControl() {
 function scrollFocusedControlIntoView(event: FocusEvent<HTMLElement>) {
   const target = event.target;
   if (target instanceof HTMLElement) {
-    target.scrollIntoView({
-      block: 'nearest',
-      inline: 'center',
-      behavior: 'smooth',
-    });
+    scrollTVPlayerControlIntoView(target);
   }
 }
 
@@ -227,7 +241,7 @@ function getEpisodePanelGroupElements(
 ) {
   return Array.from(
     panel.querySelectorAll<HTMLElement>(
-      `[data-tv-episode-focus-group="${group}"]`
+      `[data-tv-episode-focus-group="${group}"]:not([disabled])`
     )
   );
 }
@@ -243,11 +257,7 @@ function getEpisodePanelFirstElement(panel: HTMLElement) {
 function focusEpisodePanelElement(element: HTMLElement | null | undefined) {
   if (!element) return false;
   element.focus({ preventScroll: true });
-  element.scrollIntoView({
-    block: 'nearest',
-    inline: 'nearest',
-    behavior: 'smooth',
-  });
+  scrollTVPlayerControlIntoView(element);
   return true;
 }
 
@@ -329,18 +339,21 @@ function moveFocusWithinEpisodePanel(
     return;
   }
 
+  const gridColumns =
+    group === 'episodes' && activeElement.parentElement
+      ? window
+          .getComputedStyle(activeElement.parentElement)
+          .gridTemplateColumns.trim()
+          .split(/\s+/).length
+      : TV_EPISODE_GRID_COLUMNS;
   let target: HTMLElement | null = activeElement;
 
   if (direction === 'left' || direction === 'right') {
     const delta = direction === 'right' ? 1 : -1;
 
     if (group === 'episodes') {
-      const rowStart =
-        Math.floor(index / TV_EPISODE_GRID_COLUMNS) * TV_EPISODE_GRID_COLUMNS;
-      const rowEnd = Math.min(
-        rowStart + TV_EPISODE_GRID_COLUMNS - 1,
-        elements.length - 1
-      );
+      const rowStart = Math.floor(index / gridColumns) * gridColumns;
+      const rowEnd = Math.min(rowStart + gridColumns - 1, elements.length - 1);
       const nextIndex = Math.max(rowStart, Math.min(rowEnd, index + delta));
       target = elements[nextIndex] || activeElement;
     } else {
@@ -357,59 +370,32 @@ function moveFocusWithinEpisodePanel(
 
   if (group === 'episodes') {
     const nextIndex =
-      direction === 'up'
-        ? index - TV_EPISODE_GRID_COLUMNS
-        : index + TV_EPISODE_GRID_COLUMNS;
+      direction === 'up' ? index - gridColumns : index + gridColumns;
 
     if (nextIndex >= 0 && nextIndex < elements.length) {
-      target = elements[nextIndex] || activeElement;
-    } else if (direction === 'up') {
-      target =
-        getClosestByHorizontalCenter(
-          getEpisodePanelGroupElements(panel, 'pages'),
-          activeElement
-        ) ||
-        getClosestByHorizontalCenter(
-          getEpisodePanelGroupElements(panel, 'sources'),
-          activeElement
-        ) ||
-        activeElement;
+      focusEpisodePanelElement(elements[nextIndex]);
+      return;
     }
-
-    focusEpisodePanelElement(target);
-    return;
   }
 
-  if (group === 'pages') {
-    target =
-      direction === 'up'
-        ? getClosestByHorizontalCenter(
-            getEpisodePanelGroupElements(panel, 'sources'),
-            activeElement
-          ) || activeElement
-        : getSelectedEpisodePanelButton(panel, episodeIndex) ||
-          getClosestByHorizontalCenter(
-            getEpisodePanelGroupElements(panel, 'episodes'),
-            activeElement
-          ) ||
-          activeElement;
-    focusEpisodePanelElement(target);
-    return;
+  const delta = direction === 'down' ? 1 : -1;
+  for (
+    let groupIndex = TV_EPISODE_FOCUS_GROUPS.indexOf(group) + delta;
+    groupIndex >= 0 && groupIndex < TV_EPISODE_FOCUS_GROUPS.length;
+    groupIndex += delta
+  ) {
+    const nextGroup = TV_EPISODE_FOCUS_GROUPS[groupIndex];
+    const nextElements = getEpisodePanelGroupElements(panel, nextGroup);
+    const nextTarget =
+      (nextGroup === 'episodes'
+        ? getSelectedEpisodePanelButton(panel, episodeIndex)
+        : null) || getClosestByHorizontalCenter(nextElements, activeElement);
+    if (nextTarget) {
+      target = nextTarget;
+      break;
+    }
   }
 
-  target =
-    direction === 'down'
-      ? getClosestByHorizontalCenter(
-          getEpisodePanelGroupElements(panel, 'pages'),
-          activeElement
-        ) ||
-        getSelectedEpisodePanelButton(panel, episodeIndex) ||
-        getClosestByHorizontalCenter(
-          getEpisodePanelGroupElements(panel, 'episodes'),
-          activeElement
-        ) ||
-        activeElement
-      : activeElement;
   focusEpisodePanelElement(target);
 }
 
@@ -419,7 +405,8 @@ function TVPlayClient() {
   const [detail, setDetail] = useState<SearchResult | null>(null);
   const [sources, setSources] = useState<SearchResult[]>([]);
   const [episodeIndex, setEpisodeIndex] = useState(0);
-  const [videoUrl, setVideoUrl] = useState('');
+  const [playback, setPlayback] = useState<TVEpisodePlayback | null>(null);
+  const videoUrl = playback?.url || '';
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState('');
@@ -435,7 +422,10 @@ function TVPlayClient() {
   const [playbackError, setPlaybackError] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [favorited, setFavorited] = useState(false);
+  const { favorited, toggleFavorite: updateFavorite } = useTVFavorite(
+    detail?.source,
+    detail?.id
+  );
   const [initialVolumeState] = useState(loadTVVolumeState);
   const [muted, setMuted] = useState(initialVolumeState.muted);
   const [volume, setVolume] = useState(initialVolumeState.volume);
@@ -485,12 +475,17 @@ function TVPlayClient() {
   } | null>(null);
   const [time, setTime] = useState({ current: 0, duration: 0 });
   const timeRef = useRef({ current: 0, duration: 0 });
+  const playPauseButtonRef = useRef<HTMLButtonElement | null>(null);
   const episodesPanelRef = useRef<HTMLElement | null>(null);
   const episodeButtonRefs = useRef<Record<number, HTMLButtonElement | null>>(
     {}
   );
   const detailCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const danmakuFontSizeInputRef = useRef<HTMLInputElement | null>(null);
+  const dialogReturnFocusRef = useRef<{
+    trigger: HTMLElement;
+    dialog: TVPlayerDialog;
+  } | null>(null);
   const digitTimerRef = useRef<number | null>(null);
   const idleTimerRef = useRef<number | null>(null);
   const volumeHintTimerRef = useRef<number | null>(null);
@@ -500,12 +495,15 @@ function TVPlayClient() {
   const lastDanmakuTimeRef = useRef(0);
   const skippedIntroRef = useRef('');
   const skippedOutroRef = useRef('');
+  const manualPlaybackParamsRef = useRef<string | null>(null);
+  const progressSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const lastSavedRef = useRef<{
     source: string;
     id: string;
     index: number;
     playTime: number;
     totalTime: number;
+    line?: string;
   } | null>(null);
 
   const source = searchParams.get('source');
@@ -513,74 +511,124 @@ function TVPlayClient() {
   const title = searchParams.get('title');
   const fileName = searchParams.get('fileName');
   const initialIndex = Number(searchParams.get('index') || '0');
+  const explicitIndex = searchParams.has('index');
+  const requestedLine = searchParams.get('line');
+  const year = searchParams.get('year');
+  const stype = searchParams.get('stype');
+  const searchQuery = searchParams.get('q');
+  const playbackParams = searchParams.toString();
+  const bridgeLines = getTVBoxBridgeLines(detail || {});
+  const activeBridgeLine = getActiveTVBoxBridgeLine(detail || {});
 
   useEffect(() => {
+    // 手动切源/线路已经更新详情，URL 同步后无需再加载默认线路。
+    if (manualPlaybackParamsRef.current === playbackParams) {
+      manualPlaybackParamsRef.current = null;
+      return;
+    }
+    manualPlaybackParamsRef.current = null;
     let alive = true;
     setLoading(true);
     setError('');
-    fetchTVDetail({ source, id, title, fileName })
-      .then((data) => {
+    setDetail(null);
+    setPlayback(null);
+    fetchTVDetail({
+      source,
+      id,
+      title,
+      fileName,
+      line: requestedLine,
+      year,
+      stype,
+      searchQuery,
+    })
+      .then(async (data) => {
         if (!alive) return;
-        setDetail(data.detail);
-        setSources(data.sources);
-        const maxIndex = Math.max(0, (data.detail.episodes?.length || 1) - 1);
-        const explicitIndex = searchParams.has('index');
-        const safeIndex = Math.max(
-          0,
-          Math.min(
-            initialIndex || data.detail.initialEpisodeIndex || 0,
-            maxIndex
-          )
-        );
-        if (!explicitIndex && data.detail.source && data.detail.id) {
-          getAllPlayRecords()
-            .then((records) => {
-              if (!alive) return;
-              const record =
-                records[generateStorageKey(data.detail.source, data.detail.id)];
-              if (record?.index) {
-                const rememberedIndex = Math.max(
-                  0,
-                  Math.min(maxIndex, record.index - 1)
-                );
-                setEpisodeIndex(rememberedIndex);
-                setStartTime(record.play_time > 1 ? record.play_time : 0);
-              }
-            })
-            .catch(() => undefined);
-        } else {
-          setStartTime(0);
+        let record: PlayRecord | undefined;
+        try {
+          const records = await getAllPlayRecords();
+          record =
+            records[generateStorageKey(data.detail.source, data.detail.id)];
+        } catch {
+          // 播放记录不可用时使用请求指定的线路与集数。
         }
+        const selectedDetail = await restoreTVBoxBridgePlaybackLine(
+          data.detail,
+          requestedLine,
+          async () => record?.line
+        );
+        if (!alive) return;
+        const desiredIndex = explicitIndex
+          ? initialIndex
+          : record?.index
+          ? record.index - 1
+          : selectedDetail.initialEpisodeIndex || 0;
+        const safeIndex = resolveEpisodeIndexForLine(
+          selectedDetail.episodes.length,
+          Number.isFinite(desiredIndex) ? desiredIndex : 0
+        );
+        setDetail(selectedDetail);
+        setSources(
+          mergeTVBoxBridgePlaybackSources(data.sources, selectedDetail)
+        );
         setEpisodeIndex(safeIndex);
+        setEpisodePage(Math.floor(safeIndex / 30));
+        setStartTime(
+          !explicitIndex &&
+            record?.index === safeIndex + 1 &&
+            record.play_time > 1
+            ? record.play_time
+            : 0
+        );
       })
       .catch(
         (err) =>
           alive &&
-          setError(err instanceof Error ? err.message : '加载播放信息失败')
+          setError(getTVErrorMessage(err, '加载播放信息失败，请稍后重试'))
       )
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [source, id, title, fileName, initialIndex]);
+  }, [
+    source,
+    id,
+    title,
+    fileName,
+    initialIndex,
+    explicitIndex,
+    requestedLine,
+    year,
+    stype,
+    searchQuery,
+    playbackParams,
+  ]);
 
   useEffect(() => {
     let alive = true;
     async function resolve() {
-      if (!detail?.episodes?.[episodeIndex]) return;
-      setResolving(true);
-      setVideoUrl('');
+      setPlayback(null);
+      if (loading || !detail) return;
+      setError('');
       setPlaybackError(false);
+      timeRef.current = { current: startTime, duration: 0 };
+      setTime(timeRef.current);
+      if (!detail.episodes?.[episodeIndex]) {
+        setResolving(false);
+        setError('该线路没有可播放的剧集');
+        return;
+      }
+      setResolving(true);
       try {
-        const url = await resolveTVEpisodeUrl(
+        const result = await resolveTVEpisodePlayback(
           detail.episodes[episodeIndex],
           detail.source,
           detail.proxyMode
         );
-        if (alive) setVideoUrl(url);
+        if (alive) setPlayback(result);
       } catch (err) {
         if (alive)
-          setError(err instanceof Error ? err.message : '获取播放地址失败');
+          setError(getTVErrorMessage(err, '获取播放地址失败，请尝试其他线路'));
       } finally {
         if (alive) setResolving(false);
       }
@@ -589,7 +637,7 @@ function TVPlayClient() {
     return () => {
       alive = false;
     };
-  }, [detail, episodeIndex, retryNonce]);
+  }, [detail, episodeIndex, retryNonce, loading, startTime]);
 
   const episodeTitle = useMemo(
     () =>
@@ -734,9 +782,6 @@ function TVPlayClient() {
 
   useEffect(() => {
     if (!detail?.source || !detail?.id) return;
-    isFavorited(detail.source, detail.id)
-      .then(setFavorited)
-      .catch(() => undefined);
     getSkipConfig(detail.source, detail.id)
       .then(setSkipConfig)
       .catch(() => setSkipConfig(null));
@@ -763,8 +808,8 @@ function TVPlayClient() {
         '[data-tv-player-root] video'
       );
       if (!video) return;
-      const episodeKey = `${detail?.source || ''}-${
-        detail?.id || ''
+      const episodeKey = `${detail?.source || ''}-${detail?.id || ''}-${
+        detail?.activeLine || ''
       }-${episodeIndex}`;
       const intro = Math.max(0, skipConfig.intro_time || 0);
       if (
@@ -794,13 +839,18 @@ function TVPlayClient() {
   );
 
   useEffect(() => {
-    if (!detail) return;
-    const saveProgress = () => {
-      const playTime = Math.floor(timeRef.current.current || 0);
-      const totalTime = Math.floor(timeRef.current.duration || 0);
+    if (loading || !detail) return;
+    const line = getActiveTVBoxBridgeLine(detail)?.name;
+    const saveProgress = (saveLine = false) => {
+      const playTime = Number.isFinite(timeRef.current.current)
+        ? Math.floor(timeRef.current.current || 0)
+        : 0;
+      const totalTime = Number.isFinite(timeRef.current.duration)
+        ? Math.floor(timeRef.current.duration || 0)
+        : 0;
 
       // 参考 /play：无有效进度时不保存；同一秒/同一集重复触发不保存，避免网络里刷 /api/playrecords。
-      if (playTime <= 0 && totalTime <= 0) return;
+      if (!saveLine && playTime <= 0 && totalTime <= 0) return;
 
       const last = lastSavedRef.current;
       if (
@@ -808,6 +858,7 @@ function TVPlayClient() {
         last.source === detail.source &&
         last.id === detail.id &&
         last.index === episodeIndex + 1 &&
+        last.line === line &&
         last.playTime === playTime &&
         last.totalTime === totalTime
       ) {
@@ -820,9 +871,10 @@ function TVPlayClient() {
         index: episodeIndex + 1,
         playTime,
         totalTime,
+        line,
       };
 
-      savePlayRecord(detail.source, detail.id, {
+      const record: PlayRecord = {
         title: detail.title,
         source_name: detail.source_name,
         year: detail.year || '',
@@ -834,9 +886,15 @@ function TVPlayClient() {
         save_time: Date.now(),
         search_title: title || detail.title,
         is_anime: isAnimeCategoryText(detail.type_name, detail.class),
-      }).catch(() => undefined);
+        line,
+      };
+      // 旧线路的清理保存先完成，避免覆盖刚选中的线路记录。
+      progressSaveQueueRef.current = progressSaveQueueRef.current
+        .then(() => savePlayRecord(detail.source, detail.id, record))
+        .catch(() => undefined);
     };
 
+    if (line) saveProgress(true);
     const timer = window.setInterval(() => {
       saveProgress();
     }, 20000);
@@ -844,7 +902,7 @@ function TVPlayClient() {
       window.clearInterval(timer);
       saveProgress();
     };
-  }, [detail, episodeIndex, title]);
+  }, [detail, episodeIndex, title, startTime, loading]);
 
   const showSeekOverlay = (
     current: number,
@@ -921,32 +979,73 @@ function TVPlayClient() {
   const revealPanel = useCallback(() => {
     setShowPanel(true);
     if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current);
+    if (showEpisodes || showDetail || showDanmakuSettings) return;
     idleTimerRef.current = window.setTimeout(() => {
       setShowPanel(false);
-      setShowEpisodes(false);
-      setShowDanmakuSettings(false);
       blurTVPlayerControl();
     }, 10000);
-  }, []);
+  }, [showDanmakuSettings, showDetail, showEpisodes]);
 
-  const toggleFavorite = async () => {
-    if (!detail) return;
-    if (favorited) {
-      await deleteFavorite(detail.source, detail.id);
-      setFavorited(false);
-    } else {
-      await saveFavorite(detail.source, detail.id, {
-        title: detail.title,
-        source_name: detail.source_name || detail.source,
-        year: detail.year || '',
-        cover: detail.poster || '',
-        total_episodes: detail.episodes?.length || 1,
-        save_time: Date.now(),
-        search_title: title || detail.title,
-        vod_remarks: detail.vod_remarks,
-      });
-      setFavorited(true);
+  const openPlayerDialog = (dialog: TVPlayerDialog, trigger: HTMLElement) => {
+    dialogReturnFocusRef.current = { trigger, dialog };
+    setShowEpisodes(dialog === 'episodes');
+    setShowDetail(dialog === 'detail');
+    setShowDanmakuSettings(dialog === 'danmaku');
+    revealPanel();
+  };
+
+  const closePlayerDialog = useCallback(() => {
+    setShowEpisodes(false);
+    setShowDetail(false);
+    setShowDanmakuSettings(false);
+    revealPanel();
+  }, [revealPanel]);
+
+  useEffect(() => {
+    if (showEpisodes || showDetail || showDanmakuSettings) return;
+    const returnFocus = dialogReturnFocusRef.current;
+    if (!showPanel) {
+      dialogReturnFocusRef.current = null;
+      return;
     }
+    // 等按钮重新出现再聚焦；错误提示继续使用自己的操作焦点。
+    if (loading || playbackError || error) return;
+
+    const raf = window.requestAnimationFrame(() => {
+      dialogReturnFocusRef.current = null;
+      const trigger = returnFocus
+        ? returnFocus.trigger.isConnected
+          ? returnFocus.trigger
+          : document.querySelector<HTMLElement>(
+              `[data-tv-player-dialog-trigger="${returnFocus.dialog}"]`
+            )
+        : playPauseButtonRef.current;
+      trigger?.focus({ preventScroll: true });
+      if (trigger) scrollTVPlayerControlIntoView(trigger);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [
+    error,
+    loading,
+    playbackError,
+    showDanmakuSettings,
+    showDetail,
+    showEpisodes,
+    showPanel,
+  ]);
+
+  const toggleFavorite = () => {
+    if (!detail) return;
+    updateFavorite({
+      title: detail.title,
+      source_name: detail.source_name || detail.source,
+      year: detail.year || '',
+      cover: detail.poster || '',
+      total_episodes: detail.episodes?.length || 1,
+      save_time: Date.now(),
+      search_title: title || detail.title,
+      vod_remarks: detail.vod_remarks,
+    });
   };
 
   const cyclePlaybackRate = () => {
@@ -968,11 +1067,69 @@ function TVPlayClient() {
   }, [muted, videoUrl, volume]);
 
   useEffect(() => {
-    if (showPanel || showEpisodes || showDanmakuSettings) revealPanel();
+    if (showPanel || showEpisodes || showDetail || showDanmakuSettings)
+      revealPanel();
     return () => {
       if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current);
     };
-  }, [revealPanel, showDanmakuSettings, showEpisodes, showPanel]);
+  }, [revealPanel, showDanmakuSettings, showDetail, showEpisodes, showPanel]);
+
+  const updatePlaybackUrl = (target: SearchResult, index: number) => {
+    const nextUrl = new URL(window.location.href);
+    const previousParams = nextUrl.searchParams.toString();
+    if (
+      nextUrl.searchParams.get('source') !== target.source ||
+      nextUrl.searchParams.get('id') !== target.id
+    ) {
+      nextUrl.searchParams.delete('fileName');
+    }
+    nextUrl.searchParams.set('source', target.source);
+    nextUrl.searchParams.set('id', target.id);
+    nextUrl.searchParams.set('title', title || target.title);
+    const line = getActiveTVBoxBridgeLine(target)?.name;
+    if (line) nextUrl.searchParams.set('line', line);
+    else nextUrl.searchParams.delete('line');
+    if (nextUrl.searchParams.has('index'))
+      nextUrl.searchParams.set('index', String(index));
+    const nextParams = nextUrl.searchParams.toString();
+    if (nextParams === previousParams) return;
+    manualPlaybackParamsRef.current = nextParams;
+    // Next.js 会保留内部 history 状态，并把外部 URL 更新同步到 useSearchParams。
+    window.history.replaceState(null, '', nextUrl.toString());
+  };
+
+  const switchLine = (name: string) => {
+    if (!detail || activeBridgeLine?.name === name) return;
+    const line = bridgeLines.find((item) => item.name === name);
+    if (!line?.episodes.length) return;
+    const nextDetail: SearchResult = {
+      ...detail,
+      activeLine: line.name,
+      episodes: line.episodes,
+      episodes_titles: line.episodes_titles,
+      vod_total: line.episodes.length,
+    };
+    const targetIndex = resolveEpisodeIndexForLine(
+      line.episodes.length,
+      episodeIndex
+    );
+    const video = document.querySelector<HTMLVideoElement>(
+      '[data-tv-player-root] video'
+    );
+    const currentTime = video?.currentTime || timeRef.current.current || 0;
+    setStartTime(targetIndex === episodeIndex ? currentTime : 0);
+    setEpisodeIndex(targetIndex);
+    setEpisodePage(Math.floor(targetIndex / 30));
+    setDetail(nextDetail);
+    setSources((current) =>
+      mergeTVBoxBridgePlaybackSources(current, nextDetail)
+    );
+    setPlayback(null);
+    setError('');
+    setPlaybackError(false);
+    revealPanel();
+    updatePlaybackUrl(nextDetail, targetIndex);
+  };
 
   const switchSource = async (item: SearchResult) => {
     if (!detail) return;
@@ -981,35 +1138,48 @@ function TVPlayClient() {
     setShowEpisodes(false);
     setLoading(true);
     setIsBuffering(false);
+    setError('');
     try {
       let next = item;
-      if (!item.episodes?.length) {
-        const data = await fetchTVDetail({
+      if (
+        !item.episodes?.length ||
+        (isTVBoxBridgeSource(item.source) &&
+          getTVBoxBridgeLines(item).length === 0)
+      ) {
+        next = await fetchTVSourceDetail({
           source: item.source,
           id: item.id,
           title: item.title,
         });
-        next = data.detail;
       }
-      const maxIndex = Math.max(0, (next.episodes?.length || 1) - 1);
-      let targetIndex = Math.max(0, Math.min(episodeIndex, maxIndex));
-      let targetStartTime = 0;
+      let record: PlayRecord | undefined;
       try {
         const records = await getAllPlayRecords();
-        const record = records[generateStorageKey(next.source, next.id)];
-        if (record?.index) {
-          targetIndex = Math.max(0, Math.min(maxIndex, record.index - 1));
-          targetStartTime = record.play_time > 1 ? record.play_time : 0;
-        }
+        record = records[generateStorageKey(next.source, next.id)];
       } catch {
         // 读取播放记录失败时保留当前集数，避免切源失败。
       }
+      next = await restoreTVBoxBridgePlaybackLine(
+        next,
+        null,
+        async () => record?.line
+      );
+      const targetIndex = resolveEpisodeIndexForLine(
+        next.episodes.length,
+        record?.index ? record.index - 1 : episodeIndex
+      );
+      const targetStartTime =
+        record?.index === targetIndex + 1 && record.play_time > 1
+          ? record.play_time
+          : 0;
       setDetail(next);
+      setSources((current) => mergeTVBoxBridgePlaybackSources(current, next));
       setEpisodeIndex(targetIndex);
       setStartTime(targetStartTime);
       setEpisodePage(Math.floor(targetIndex / 30));
+      updatePlaybackUrl(next, targetIndex);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '切换播放源失败');
+      setError(getTVErrorMessage(err, '切换播放源失败，请尝试其他源'));
     } finally {
       setLoading(false);
     }
@@ -1017,34 +1187,43 @@ function TVPlayClient() {
 
   useEffect(() => {
     if (showDetail) {
-      window.requestAnimationFrame(() =>
+      const raf = window.requestAnimationFrame(() =>
         detailCloseButtonRef.current?.focus({ preventScroll: true })
       );
+      return () => window.cancelAnimationFrame(raf);
     }
   }, [showDetail]);
 
   useEffect(() => {
     if (showDanmakuSettings) {
-      window.requestAnimationFrame(() =>
+      const raf = window.requestAnimationFrame(() =>
         danmakuFontSizeInputRef.current?.focus({ preventScroll: true })
       );
+      return () => window.cancelAnimationFrame(raf);
     }
   }, [showDanmakuSettings]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (showDetail && event.key === 'Escape') {
-        event.preventDefault();
-        setShowDetail(false);
-        revealPanel();
-        return;
-      }
+      // 虚拟遥控器会在多个目标派发同一个事件，每个按键只能处理一次。
+      if (event.defaultPrevented) return;
 
-      if (showDanmakuSettings && event.key === 'Escape') {
+      // 错误提示中的按钮继续接收方向键和确认键。
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest('[data-tv-player-alert]') &&
+        (event.key.startsWith('Arrow') ||
+          event.key === 'Enter' ||
+          event.key === 'Tab')
+      )
+        return;
+
+      if (
+        (showEpisodes || showDetail || showDanmakuSettings) &&
+        event.key === 'Escape'
+      ) {
         event.preventDefault();
-        setShowDanmakuSettings(false);
-        blurTVPlayerControl();
-        revealPanel();
+        closePlayerDialog();
         return;
       }
 
@@ -1169,14 +1348,7 @@ function TVPlayClient() {
       }
       if (event.key === 'Escape') {
         event.preventDefault();
-        if (showDetail) setShowDetail(false);
-        else if (showDanmakuSettings) {
-          setShowDanmakuSettings(false);
-          blurTVPlayerControl();
-        } else if (showEpisodes) {
-          setShowEpisodes(false);
-          blurTVPlayerControl();
-        } else if (showPanel) {
+        if (showPanel) {
           setShowPanel(false);
           blurTVPlayerControl();
         } else router.back();
@@ -1187,6 +1359,7 @@ function TVPlayClient() {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [
+    closePlayerDialog,
     detail?.episodes?.length,
     digitBuffer,
     episodeIndex,
@@ -1205,9 +1378,10 @@ function TVPlayClient() {
     const targetPage = Math.floor(episodeIndex / 30);
     setEpisodePage(targetPage);
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-    window.requestAnimationFrame(() => {
+    const raf = window.requestAnimationFrame(() => {
       focusEpisodePanelElement(episodeButtonRefs.current[episodeIndex]);
     });
+    return () => window.cancelAnimationFrame(raf);
   }, [episodeIndex, showEpisodes]);
 
   useEffect(() => {
@@ -1262,40 +1436,60 @@ function TVPlayClient() {
 
   if (loading) {
     return (
-      <main className='fixed inset-0 flex items-center justify-center bg-black text-3xl font-bold text-white'>
-        <Loader2 className='mr-4 h-10 w-10 animate-spin text-rose-500' />
-        正在进入电视播放...
+      <main className='fixed inset-0 flex items-center justify-center bg-black text-xl text-[#ededed]'>
+        <Loader2
+          strokeWidth={1.5}
+          aria-hidden='true'
+          className='mr-4 h-[18px] w-[18px] animate-spin motion-reduce:animate-none text-[#a1a1a6]'
+        />
+        正在进入电视播放
       </main>
     );
   }
 
-  if (error || !detail) {
+  if (!detail) {
     return (
-      <main className='fixed inset-0 flex items-center justify-center bg-black p-10 text-center text-white'>
+      <main
+        data-tv-player-root
+        data-tv-controls-open='true'
+        className='fixed inset-0 flex items-center justify-center bg-black p-6 text-center text-[#ededed]'
+      >
         <section
           role='alert'
-          className='max-w-3xl rounded-[36px] border border-red-500/40 bg-red-950/50 p-10 shadow-2xl shadow-red-950/40'
+          data-tv-player-alert
+          data-tv-focus-scope='active'
+          className='max-w-3xl rounded-2xl border border-rose-300/20 bg-[#19191b] p-6'
         >
-          <AlertTriangle className='mx-auto mb-5 h-16 w-16 text-red-300' />
-          <h1 className='text-4xl font-black text-red-100'>
+          <AlertTriangle
+            strokeWidth={1.5}
+            aria-hidden='true'
+            className='mx-auto mb-5 h-16 w-16 text-[#ededed]'
+          />
+          <h1 className='text-3xl font-medium text-[#ededed]'>
             {error || '播放信息不存在'}
           </h1>
           <div className='mt-8 flex justify-center gap-4'>
             <button
+              autoFocus
               onClick={() => window.location.reload()}
-              className='tv-focusable flex cursor-pointer items-center gap-3 rounded-2xl bg-rose-600 px-7 py-4 text-2xl font-black outline-none focus:ring-4 focus:ring-rose-300'
+              className='tv-focusable flex cursor-pointer items-center gap-3 rounded-lg bg-[#ededed] px-5 py-3 text-xl font-medium text-[#141415] outline-none hover:bg-white'
             >
-              <RotateCcw className='h-7 w-7' />
+              <RotateCcw
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
               重试
             </button>
             <button
               onClick={() => router.back()}
-              className='tv-focusable rounded-2xl bg-white/10 px-7 py-4 text-2xl font-black outline-none focus:ring-4 focus:ring-white/40'
+              className='tv-focusable rounded-lg bg-[#232325] px-5 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
             >
               返回
             </button>
           </div>
         </section>
+        <TVVirtualRemote />
       </main>
     );
   }
@@ -1323,27 +1517,38 @@ function TVPlayClient() {
           revealPanel();
         }
       }}
-      className='fixed inset-0 overflow-hidden bg-black text-white'
+      className='fixed inset-0 overflow-hidden bg-black text-[#ededed]'
     >
       {videoUrl ? (
         <TVNativeVideo
           key={`${videoUrl}-${retryNonce}`}
           url={videoUrl}
+          sourceType={playback?.sourceType}
+          live={playback?.live}
           poster={detail.poster}
           title={detail.title}
           onTime={onTime}
           command={toggleCommand}
           startTime={startTime}
-          onError={() => setPlaybackError(true)}
+          onError={() => {
+            setPlaybackError(true);
+            setShowEpisodes(false);
+            setShowDanmakuSettings(false);
+            setShowDetail(false);
+          }}
           onPlayingChange={setIsPlaying}
           onBufferingChange={setIsBuffering}
           adFilterEnabled={adFilterEnabled}
           playbackRate={playbackRate}
         />
       ) : (
-        <div className='flex h-full w-full items-center justify-center text-3xl font-bold text-white'>
-          <Loader2 className='mr-4 h-10 w-10 animate-spin text-rose-500' />
-          {resolving ? '正在解析播放地址...' : '准备播放...'}
+        <div className='flex h-full w-full items-center justify-center text-xl text-[#ededed]'>
+          <Loader2
+            strokeWidth={1.5}
+            aria-hidden='true'
+            className='mr-4 h-[18px] w-[18px] animate-spin motion-reduce:animate-none text-[#a1a1a6]'
+          />
+          {resolving ? '正在解析播放地址' : '准备播放'}
         </div>
       )}
       {activeDanmakuItems.length > 0 && (
@@ -1386,38 +1591,56 @@ function TVPlayClient() {
         </div>
       )}
 
-      {playbackError && (
+      {(playbackError || error) && !resolving && (
         <div
           role='alert'
-          className='absolute inset-0 z-30 flex items-center justify-center bg-black/72 p-8 text-white backdrop-blur-sm'
+          data-tv-player-alert
+          data-tv-focus-scope='active'
+          className='absolute inset-0 z-30 flex items-center justify-center bg-black/70 p-8 text-[#ededed]'
         >
-          <section className='max-w-3xl rounded-[36px] border border-white/10 bg-slate-950/92 p-9 text-center shadow-2xl shadow-black/70'>
-            <AlertTriangle className='mx-auto mb-5 h-14 w-14 text-amber-300' />
-            <h2 className='text-4xl font-black'>当前视频加载失败</h2>
-            <p className='mt-3 text-2xl text-slate-300'>
-              可以重试当前地址，或打开选集与线路面板切换播放源。
+          <section className='max-w-3xl rounded-2xl border border-white/[0.08] bg-[#19191b] p-8 text-center'>
+            <AlertTriangle
+              strokeWidth={1.5}
+              aria-hidden='true'
+              className='mx-auto mb-5 h-14 w-14 text-[#ededed]'
+            />
+            <h2 className='text-3xl font-medium'>当前视频加载失败</h2>
+            <p className='mt-3 text-xl leading-8 text-[#a1a1a6]'>
+              {error ||
+                '可以重试当前地址，或打开选集与线路面板切换播放源或线路。'}
             </p>
             <div className='mt-8 flex justify-center gap-4'>
               <button
+                autoFocus
                 onClick={() => {
                   setPlaybackError(false);
+                  setError('');
+                  setStartTime(timeRef.current.current);
                   setRetryNonce((v) => v + 1);
                 }}
-                className='tv-focusable flex cursor-pointer items-center gap-3 rounded-2xl bg-rose-600 px-7 py-4 text-2xl font-black outline-none focus:ring-4 focus:ring-rose-300'
+                className='tv-focusable flex cursor-pointer items-center gap-3 rounded-lg bg-[#303033] px-5 py-3 text-xl font-medium outline-none'
               >
-                <RotateCcw className='h-7 w-7' />
+                <RotateCcw
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                  className='h-[18px] w-[18px]'
+                />
                 重试
               </button>
               <button
-                onClick={() => {
+                onClick={(event) => {
                   setPlaybackError(false);
-                  setShowPanel(true);
-                  setShowEpisodes(true);
+                  setError('');
+                  openPlayerDialog('episodes', event.currentTarget);
                 }}
-                className='tv-focusable flex cursor-pointer items-center gap-3 rounded-2xl bg-white/10 px-7 py-4 text-2xl font-black outline-none focus:ring-4 focus:ring-white/40'
+                className='tv-focusable flex cursor-pointer items-center gap-3 rounded-lg bg-[#232325] px-5 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
               >
-                <ListVideo className='h-7 w-7' />
-                换源/选集
+                <ListVideo
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                  className='h-[18px] w-[18px]'
+                />
+                换源/线路/选集
               </button>
             </div>
           </section>
@@ -1425,8 +1648,8 @@ function TVPlayClient() {
       )}
 
       <div
-        className={`absolute inset-0 pointer-events-none transition-opacity duration-300 ${
-          showPanel ? 'opacity-100' : 'opacity-0'
+        className={`absolute inset-0 pointer-events-none transition-opacity duration-[160ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+          showPanel ? 'opacity-100' : 'invisible pointer-events-none opacity-0'
         }`}
       >
         <div className='absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-black/90 to-transparent' />
@@ -1434,23 +1657,15 @@ function TVPlayClient() {
       </div>
 
       <div
-        className={`absolute left-8 right-8 top-8 flex items-center justify-between transition-opacity duration-300 ${
-          showPanel ? 'opacity-100' : 'opacity-0'
+        className={`absolute left-6 right-6 top-6 flex justify-end lg:left-8 lg:right-8 lg:top-8 transition-opacity duration-[160ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+          showPanel ? 'opacity-100' : 'invisible pointer-events-none opacity-0'
         }`}
       >
-        <button
-          onClick={() => router.back()}
-          data-tv-player-control
-          className='tv-focusable flex cursor-pointer items-center gap-3 rounded-2xl bg-black/70 px-5 py-4 text-2xl font-black outline-none backdrop-blur'
-        >
-          <ArrowLeft className='h-7 w-7' />
-          返回
-        </button>
-        <div className='rounded-2xl bg-black/70 px-6 py-4 text-right backdrop-blur'>
-          <div className='max-w-[60vw] truncate text-3xl font-black'>
+        <div className='min-w-0 rounded-2xl bg-[#19191b]/95 px-4 py-3 text-right'>
+          <div className='max-w-[60vw] truncate text-2xl font-medium'>
             {detail.title}
           </div>
-          <div className='mt-1 text-xl text-slate-300'>
+          <div className='mt-1 max-w-[60vw] truncate text-lg text-[#a1a1a6]'>
             {episodeTitle} · {detail.source_name}
           </div>
         </div>
@@ -1458,136 +1673,199 @@ function TVPlayClient() {
 
       <div
         data-tv-player-control
-        className={`absolute bottom-8 left-8 right-8 transition-opacity duration-300 ${
-          showPanel ? 'opacity-100' : 'pointer-events-none opacity-0'
+        className={`absolute bottom-6 left-6 right-6 lg:left-8 lg:right-8 transition-opacity duration-[160ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+          showPanel ? 'opacity-100' : 'invisible pointer-events-none opacity-0'
         }`}
       >
-        <div className='rounded-[28px] bg-black/75 p-4 backdrop-blur'>
+        <div className='rounded-2xl border border-white/[0.08] bg-[#19191b]/95 p-2'>
           <div
             onFocusCapture={scrollFocusedControlIntoView}
-            className='flex items-center gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&_button]:shrink-0 [&_button]:whitespace-nowrap'
+            className='flex items-center gap-2 overflow-x-auto overscroll-x-contain p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&_button]:shrink-0 [&_button]:whitespace-nowrap'
           >
             <button
               onClick={() => switchEpisode(episodeIndex - 1)}
               data-tv-player-control
-              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl bg-white/10 px-5 py-4 text-xl font-bold outline-none'
+              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-lg bg-[#232325] px-4 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
             >
-              <SkipBack className='h-6 w-6' />
+              <SkipBack
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
               上一集
             </button>
             <button
+              ref={playPauseButtonRef}
               onClick={() => setToggleCommand((value) => value + 1)}
               data-tv-player-control
-              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl bg-rose-600 px-6 py-4 text-xl font-black outline-none'
+              className='tv-focusable tv-focusable-light flex min-h-14 cursor-pointer items-center gap-2 rounded-lg bg-[#ededed] px-5 py-3 text-xl font-medium text-[#141415] outline-none hover:bg-white'
             >
               {isPlaying ? (
-                <Pause className='h-6 w-6' />
+                <Pause
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                  className='h-[18px] w-[18px]'
+                />
               ) : (
-                <Play className='h-6 w-6 fill-current' />
+                <Play
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                  className='h-[18px] w-[18px] fill-current'
+                />
               )}
               {isPlaying ? '暂停' : '播放'}
             </button>
             <button
               onClick={() => switchEpisode(episodeIndex + 1)}
               data-tv-player-control
-              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl bg-white/10 px-5 py-4 text-xl font-bold outline-none'
+              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-lg bg-[#232325] px-4 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
             >
               下一集
-              <SkipForward className='h-6 w-6' />
+              <SkipForward
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
             </button>
             <button
-              onClick={() => setShowEpisodes((v) => !v)}
+              onClick={(event) =>
+                openPlayerDialog('episodes', event.currentTarget)
+              }
+              data-tv-player-dialog-trigger='episodes'
               data-tv-player-control
-              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl bg-white/10 px-5 py-4 text-xl font-bold outline-none'
+              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-lg bg-[#232325] px-4 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
             >
-              <ListVideo className='h-6 w-6' />
+              <ListVideo
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
               选集
             </button>
             <button
+              aria-pressed={favorited}
               onClick={toggleFavorite}
               data-tv-player-control
-              className={`tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-4 text-xl font-bold outline-none ${
-                favorited ? 'bg-rose-600' : 'bg-white/10'
+              className={`tv-focusable flex cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-xl font-medium outline-none ${
+                favorited ? 'bg-[#303033]' : 'bg-[#232325]'
               }`}
             >
-              <Heart className={`h-6 w-6 ${favorited ? 'fill-current' : ''}`} />
+              <Heart
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className={`h-[18px] w-[18px] ${
+                  favorited ? 'fill-current' : ''
+                }`}
+              />
               收藏
             </button>
             <button
-              onClick={() => {
-                setShowDetail(true);
-                revealPanel();
-              }}
+              onClick={(event) =>
+                openPlayerDialog('detail', event.currentTarget)
+              }
+              data-tv-player-dialog-trigger='detail'
               data-tv-player-control
-              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl bg-white/10 px-5 py-4 text-xl font-bold outline-none'
+              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-lg bg-[#232325] px-4 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
             >
-              <Info className='h-6 w-6' />
+              <Info
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
               详情
             </button>
             <button
+              aria-pressed={danmakuEnabled}
               onClick={() => setDanmakuEnabled((v) => !v)}
               data-tv-player-control
-              className={`tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-4 text-xl font-bold outline-none ${
-                danmakuEnabled ? 'bg-rose-600' : 'bg-white/10'
+              className={`tv-focusable flex cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-xl font-medium outline-none ${
+                danmakuEnabled ? 'bg-[#303033]' : 'bg-[#232325]'
               }`}
             >
-              <MessageCircle className='h-6 w-6' />
+              <MessageCircle
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
               弹幕
             </button>
             <button
-              onClick={() => {
-                setShowEpisodes(false);
-                setShowDanmakuSettings(true);
-                revealPanel();
-              }}
+              onClick={(event) =>
+                openPlayerDialog('danmaku', event.currentTarget)
+              }
+              data-tv-player-dialog-trigger='danmaku'
               data-tv-player-control
-              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl bg-white/10 px-5 py-4 text-xl font-bold outline-none'
+              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-lg bg-[#232325] px-4 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
             >
-              <SlidersHorizontal className='h-6 w-6' />
+              <SlidersHorizontal
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
               弹幕设置
             </button>
             <button
+              aria-pressed={adFilterEnabled}
               onClick={() => setAdFilterEnabled((v) => !v)}
               data-tv-player-control
-              className={`tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-4 text-xl font-bold outline-none ${
-                adFilterEnabled ? 'bg-rose-600' : 'bg-white/10'
+              className={`tv-focusable flex cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-xl font-medium outline-none ${
+                adFilterEnabled ? 'bg-[#303033]' : 'bg-[#232325]'
               }`}
             >
-              <ShieldOff className='h-6 w-6' />
+              <ShieldOff
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
               去广告
             </button>
             <button
               onClick={cyclePlaybackRate}
               data-tv-player-control
-              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-2xl bg-white/10 px-5 py-4 text-xl font-bold outline-none'
+              className='tv-focusable flex cursor-pointer items-center gap-2 rounded-lg bg-[#232325] px-4 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
             >
               {playbackRate}x
             </button>
             <button
+              aria-label={muted ? '取消静音' : '静音'}
+              aria-pressed={muted}
               onClick={toggleMute}
               data-tv-player-control
-              className='tv-focusable rounded-2xl bg-white/10 p-4 outline-none'
+              className='tv-focusable h-14 w-14 rounded-lg bg-[#232325] p-4 outline-none hover:bg-[#303033]'
               title='静音'
             >
               {muted ? (
-                <VolumeX className='h-6 w-6' />
+                <VolumeX
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                  className='h-[18px] w-[18px]'
+                />
               ) : (
-                <Volume2 className='h-6 w-6' />
+                <Volume2
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                  className='h-[18px] w-[18px]'
+                />
               )}
             </button>
             <button
+              aria-label='全屏'
               onClick={toggleFullscreen}
               data-tv-player-control
-              className='tv-focusable rounded-2xl bg-white/10 p-4 outline-none'
+              className='tv-focusable h-14 w-14 rounded-lg bg-[#232325] p-4 outline-none hover:bg-[#303033]'
             >
-              <Maximize className='h-6 w-6' />
+              <Maximize
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
             </button>
-            <span className='shrink-0 whitespace-nowrap px-2 text-xl font-bold text-slate-200'>
+            <span className='shrink-0 whitespace-nowrap px-2 text-lg tabular-nums text-[#a1a1a6]'>
               {formatTVTime(time.current)} / {formatTVTime(time.duration)}
             </span>
           </div>
         </div>
-        <div className='mt-4 rounded-3xl bg-black/70 p-4 backdrop-blur'>
+        <div className='mt-3 rounded-2xl bg-[#19191b]/95 p-4'>
           <input
             aria-label='播放进度'
             data-tv-no-focus='true'
@@ -1598,9 +1876,9 @@ function TVPlayClient() {
             step='1'
             value={Math.min(time.current, time.duration || time.current)}
             onChange={(e) => seekTo(Number(e.target.value))}
-            className='h-3 w-full cursor-pointer accent-rose-600'
+            className='h-6 w-full cursor-pointer accent-[#ededed]'
           />
-          <div className='mt-2 flex items-center justify-between text-lg font-bold text-slate-200'>
+          <div className='mt-1 flex items-center justify-between text-lg tabular-nums text-[#a1a1a6]'>
             <span>{formatTVTime(time.current)}</span>
             <span>
               {time.duration
@@ -1619,46 +1897,97 @@ function TVPlayClient() {
         <aside
           ref={episodesPanelRef}
           data-tv-episode-panel
-          className='absolute bottom-40 right-8 max-h-[55vh] w-[560px] overflow-y-auto rounded-[34px] border border-white/10 bg-slate-950/92 p-6 shadow-2xl shadow-black/70 backdrop-blur-2xl'
+          data-tv-focus-scope='active'
+          role='dialog'
+          aria-modal='true'
+          aria-label='选集与线路'
+          className='absolute inset-y-6 right-6 z-20 w-[min(640px,calc(100vw-48px))] overflow-y-auto overscroll-contain rounded-2xl border border-white/[0.08] bg-[#19191b] p-6 lg:right-8'
         >
-          <h2 className='mb-5 flex items-center gap-3 text-3xl font-black'>
-            <Layers className='h-8 w-8 text-rose-500' />
-            选集与线路
-          </h2>
+          <div className='mb-5 flex items-center justify-between gap-3'>
+            <h2 className='text-2xl font-medium'>选集与线路</h2>
+            <button
+              type='button'
+              aria-label='关闭选集'
+              data-tv-player-control
+              data-tv-episode-focus-group='close'
+              onClick={closePlayerDialog}
+              className='tv-focusable flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#232325] outline-none hover:bg-[#303033]'
+            >
+              <X
+                strokeWidth={1.5}
+                aria-hidden='true'
+                className='h-[18px] w-[18px]'
+              />
+            </button>
+          </div>
           <div className='mb-6'>
-            <div className='mb-2 text-xl font-black text-slate-300'>播放源</div>
-            <div className='flex gap-3 overflow-x-auto px-2 py-3 [scrollbar-width:none]'>
+            <div className='mb-2 text-xl font-medium text-[#a1a1a6]'>
+              播放源
+            </div>
+            <div className='-mx-2 flex gap-3 overflow-x-auto overscroll-x-contain p-2 [scrollbar-width:none]'>
               {sources.length > 0 ? (
                 sources.map((item) => (
                   <button
                     key={`${item.source}-${item.id}`}
                     onClick={() => switchSource(item)}
                     data-tv-player-control
-                    data-tv-episode-focus-group='sources'
-                    className={`tv-focusable shrink-0 cursor-pointer rounded-2xl px-5 py-3 text-xl font-bold outline-none focus:ring-4 focus:ring-rose-300 ${
+                    aria-pressed={
                       detail.source === item.source && detail.id === item.id
-                        ? 'bg-rose-600'
-                        : 'bg-white/10'
+                    }
+                    title={item.source_name || item.source}
+                    data-tv-episode-focus-group='sources'
+                    className={`tv-focusable min-h-14 max-w-[calc(100vw-112px)] shrink-0 cursor-pointer truncate rounded-lg px-4 py-3 lg:max-w-80 text-xl font-medium outline-none hover:bg-[#303033] ${
+                      detail.source === item.source && detail.id === item.id
+                        ? 'bg-[#303033]'
+                        : 'bg-[#232325]'
                     }`}
                   >
                     {item.source_name || item.source}
                   </button>
                 ))
               ) : (
-                <span className='text-xl text-slate-400'>暂无其他播放源</span>
+                <span className='text-xl text-[#8d8d93]'>暂无其他播放源</span>
               )}
             </div>
           </div>
+          {bridgeLines.length > 0 && (
+            <div className='mb-6'>
+              <div className='mb-2 text-xl font-medium text-[#a1a1a6]'>
+                播放线路
+              </div>
+              <div className='-mx-2 flex gap-3 overflow-x-auto overscroll-x-contain p-2 [scrollbar-width:none]'>
+                {bridgeLines.map((line, index) => (
+                  <button
+                    key={`${line.name}-${index}`}
+                    onClick={() => switchLine(line.name)}
+                    disabled={line.episodes.length === 0}
+                    aria-pressed={activeBridgeLine?.name === line.name}
+                    data-tv-player-control
+                    title={line.name}
+                    data-tv-episode-focus-group='lines'
+                    className={`tv-focusable min-h-14 max-w-[calc(100vw-112px)] shrink-0 cursor-pointer truncate rounded-lg px-4 py-3 lg:max-w-80 text-xl font-medium outline-none hover:bg-[#303033] disabled:cursor-default disabled:opacity-40 ${
+                      activeBridgeLine?.name === line.name
+                        ? 'bg-[#303033]'
+                        : 'bg-[#232325]'
+                    }`}
+                  >
+                    {line.name} · {line.episodes.length} 集
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {episodePages > 1 && (
-            <div className='mb-5 flex gap-3 overflow-x-auto px-2 py-2 [scrollbar-width:none]'>
+            <div className='-mx-2 mb-5 flex gap-3 overflow-x-auto overscroll-x-contain p-2 [scrollbar-width:none]'>
               {Array.from({ length: episodePages }, (_, page) => (
                 <button
                   key={page}
                   onClick={() => setEpisodePage(page)}
                   data-tv-player-control
+                  aria-pressed={page === episodePage}
                   data-tv-episode-focus-group='pages'
-                  className={`tv-focusable shrink-0 cursor-pointer rounded-2xl px-5 py-3 text-xl font-black outline-none focus:ring-4 focus:ring-rose-300 ${
-                    page === episodePage ? 'bg-rose-600' : 'bg-white/10'
+                  className={`tv-focusable min-h-14 max-w-[calc(100vw-112px)] shrink-0 cursor-pointer truncate rounded-lg px-4 py-3 lg:max-w-80 text-xl font-medium outline-none hover:bg-[#303033] ${
+                    page === episodePage ? 'bg-[#303033]' : 'bg-[#232325]'
                   }`}
                 >
                   {page * 30 + 1}-
@@ -1667,7 +1996,7 @@ function TVPlayClient() {
               ))}
             </div>
           )}
-          <div className='grid grid-cols-4 gap-3'>
+          <div className='grid grid-cols-2 gap-4 sm:grid-cols-4'>
             {visibleEpisodeIndexes.map((index) => (
               <button
                 key={index}
@@ -1677,9 +2006,10 @@ function TVPlayClient() {
                 onClick={() => switchEpisode(index)}
                 data-tv-player-control
                 data-tv-episode-focus-group='episodes'
+                aria-pressed={index === episodeIndex}
                 data-tv-episode-index={index}
-                className={`tv-focusable min-h-16 cursor-pointer rounded-2xl px-3 py-3 text-lg font-black outline-none focus:ring-4 focus:ring-rose-300 ${
-                  index === episodeIndex ? 'bg-rose-600' : 'bg-white/10'
+                className={`tv-focusable min-h-14 min-w-0 cursor-pointer break-words rounded-lg px-3 py-3 text-lg font-medium outline-none hover:bg-[#303033] ${
+                  index === episodeIndex ? 'bg-[#303033]' : 'bg-[#232325]'
                 }`}
               >
                 {detail.episodes_titles?.[index] || `第 ${index + 1} 集`}
@@ -1689,12 +2019,15 @@ function TVPlayClient() {
         </aside>
       )}
       {showDanmakuSettings && (
-        <div className='absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-10 backdrop-blur-sm'>
+        <div className='absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-6'>
           <section
             data-tv-player-control
             data-tv-focus-scope='active'
             data-tv-danmaku-settings
-            className='w-[720px] max-w-[92vw] rounded-[34px] border border-white/10 bg-slate-950/95 p-7 text-white shadow-2xl shadow-black/80'
+            role='dialog'
+            aria-modal='true'
+            aria-label='弹幕设置'
+            className='max-h-[calc(100dvh-48px)] w-[720px] max-w-full overflow-y-auto rounded-2xl border border-white/[0.08] bg-[#19191b] p-7 text-[#ededed]'
             onKeyDownCapture={(event) => {
               const target = event.target;
               if (
@@ -1733,29 +2066,34 @@ function TVPlayClient() {
               }
             }}
           >
-            <div className='mb-7 flex items-center justify-between gap-5'>
-              <h2 className='flex items-center gap-3 text-3xl font-black'>
-                <SlidersHorizontal className='h-8 w-8 text-rose-500' />
+            <div className='mb-6 flex items-center justify-between gap-4'>
+              <h2 className='flex items-center gap-3 text-2xl font-medium'>
+                <SlidersHorizontal
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                  className='h-[18px] w-[18px] text-[#a1a1a6]'
+                />
                 弹幕设置
               </h2>
               <button
-                onClick={() => {
-                  setShowDanmakuSettings(false);
-                  blurTVPlayerControl();
-                }}
+                onClick={closePlayerDialog}
                 data-tv-player-control
-                className='tv-focusable flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-2xl bg-white/10 px-5 py-4 text-2xl font-black outline-none focus:ring-4 focus:ring-rose-300'
+                className='tv-focusable flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg bg-[#232325] px-4 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
               >
-                <X className='h-7 w-7' />
+                <X
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                  className='h-[18px] w-[18px]'
+                />
                 关闭
               </button>
             </div>
 
-            <div className='space-y-7'>
+            <div className='space-y-6'>
               <label className='block'>
-                <div className='mb-3 flex items-center justify-between text-xl font-bold'>
+                <div className='mb-3 flex items-center justify-between text-xl font-medium'>
                   <span>字号</span>
-                  <span className='text-rose-200'>
+                  <span className='text-[#ededed]'>
                     {danmakuSettings.fontSize}px
                   </span>
                 </div>
@@ -1775,14 +2113,14 @@ function TVPlayClient() {
                       fontSize: Number(event.target.value),
                     }))
                   }
-                  className='tv-focusable h-3 w-full cursor-pointer accent-rose-600 outline-none'
+                  className='tv-focusable h-6 w-full cursor-pointer accent-[#ededed] outline-none'
                 />
               </label>
 
               <label className='block'>
-                <div className='mb-3 flex items-center justify-between text-xl font-bold'>
+                <div className='mb-3 flex items-center justify-between text-xl font-medium'>
                   <span>显示区域</span>
-                  <span className='text-rose-200'>
+                  <span className='text-[#ededed]'>
                     {danmakuSettings.displayArea}%
                   </span>
                 </div>
@@ -1801,14 +2139,14 @@ function TVPlayClient() {
                       displayArea: Number(event.target.value),
                     }))
                   }
-                  className='tv-focusable h-3 w-full cursor-pointer accent-rose-600 outline-none'
+                  className='tv-focusable h-6 w-full cursor-pointer accent-[#ededed] outline-none'
                 />
               </label>
 
               <label className='block'>
-                <div className='mb-3 flex items-center justify-between text-xl font-bold'>
+                <div className='mb-3 flex items-center justify-between text-xl font-medium'>
                   <span>不透明度</span>
-                  <span className='text-rose-200'>
+                  <span className='text-[#ededed]'>
                     {Math.round(danmakuSettings.opacity * 100)}%
                   </span>
                 </div>
@@ -1827,7 +2165,7 @@ function TVPlayClient() {
                       opacity: Number(event.target.value) / 100,
                     }))
                   }
-                  className='tv-focusable h-3 w-full cursor-pointer accent-rose-600 outline-none'
+                  className='tv-focusable h-6 w-full cursor-pointer accent-[#ededed] outline-none'
                 />
               </label>
             </div>
@@ -1835,45 +2173,47 @@ function TVPlayClient() {
         </div>
       )}
       {showDetail && (
-        <div className='absolute inset-0 z-40 flex items-center justify-center bg-black/72 p-10 backdrop-blur-sm'>
+        <div className='absolute inset-0 z-40 flex items-center justify-center bg-black/70 p-6'>
           <section
             data-tv-player-control
-            className='max-h-[82vh] w-[980px] max-w-[92vw] overflow-y-auto rounded-[42px] border border-white/10 bg-slate-950/95 p-8 text-white shadow-2xl shadow-black/80'
+            data-tv-focus-scope='active'
+            role='dialog'
+            aria-modal='true'
+            aria-label='视频详情'
+            className='max-h-[calc(100dvh-48px)] w-[980px] max-w-full overflow-y-auto rounded-2xl border border-white/[0.08] bg-[#19191b] p-8 text-[#ededed]'
           >
-            <div className='mb-6 flex items-start justify-between gap-6'>
-              <div>
-                <h2 className='text-5xl font-black'>{detail.title}</h2>
-                <div className='mt-4 flex flex-wrap gap-3 text-xl font-bold text-slate-200'>
-                  <span className='rounded-full bg-rose-600 px-4 py-2'>
+            <div className='mb-6 flex items-start justify-between gap-4'>
+              <div className='min-w-0'>
+                <h2 className='break-words text-3xl font-medium'>
+                  {detail.title}
+                </h2>
+                <div className='mt-4 flex flex-wrap gap-3 text-xl font-medium text-[#a1a1a6]'>
+                  <span className='text-[#a1a1a6]'>
                     {detail.source_name || detail.source}
                   </span>
                   {detail.year && (
-                    <span className='rounded-full bg-white/10 px-4 py-2'>
-                      {detail.year}
-                    </span>
+                    <span className='text-[#a1a1a6]'>{detail.year}</span>
                   )}
                   {detail.type_name && (
-                    <span className='rounded-full bg-white/10 px-4 py-2'>
-                      {detail.type_name}
-                    </span>
+                    <span className='text-[#a1a1a6]'>{detail.type_name}</span>
                   )}
                   {detail.vod_remarks && (
-                    <span className='rounded-full bg-white/10 px-4 py-2'>
-                      {detail.vod_remarks}
-                    </span>
+                    <span className='text-[#a1a1a6]'>{detail.vod_remarks}</span>
                   )}
-                  <span className='rounded-full bg-white/10 px-4 py-2'>
-                    {episodeTitle}
-                  </span>
+                  <span className='text-[#a1a1a6]'>{episodeTitle}</span>
                 </div>
               </div>
               <button
                 ref={detailCloseButtonRef}
-                onClick={() => setShowDetail(false)}
+                onClick={closePlayerDialog}
                 data-tv-player-control
-                className='tv-focusable flex shrink-0 cursor-pointer items-center gap-2 rounded-2xl bg-white/10 px-5 py-4 text-2xl font-black outline-none focus:ring-4 focus:ring-rose-300'
+                className='tv-focusable flex shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-[#232325] px-4 py-3 text-xl font-medium outline-none hover:bg-[#303033]'
               >
-                <X className='h-7 w-7' />
+                <X
+                  strokeWidth={1.5}
+                  aria-hidden='true'
+                  className='h-[18px] w-[18px]'
+                />
                 关闭
               </button>
             </div>
@@ -1881,30 +2221,38 @@ function TVPlayClient() {
               <img
                 src={detail.poster}
                 alt=''
-                className='float-left mr-7 mb-4 h-72 w-48 rounded-3xl object-cover shadow-xl shadow-black/50'
+                className='mb-4 w-32 rounded-lg object-cover sm:float-left sm:mr-6 sm:w-48'
               />
             )}
-            <p className='whitespace-pre-line text-2xl leading-relaxed text-slate-200'>
+            <p className='whitespace-pre-line break-words text-xl leading-8 text-[#a1a1a6]'>
               {detail.desc || '暂无详情简介'}
             </p>
           </section>
         </div>
       )}
       {digitBuffer && (
-        <div className='absolute right-10 top-32 rounded-3xl bg-black/75 px-7 py-5 text-5xl font-black text-white shadow-2xl'>
+        <div className='absolute right-6 top-24 rounded-2xl bg-[#19191b]/95 px-6 py-4 text-4xl font-medium text-[#ededed]'>
           第 {digitBuffer} 集
         </div>
       )}
       {showVolumeHint && !showPanel && !showEpisodes && (
-        <div className='absolute right-10 top-1/2 flex -translate-y-1/2 flex-col items-center gap-4 rounded-3xl bg-black/80 px-6 py-7 text-3xl font-black text-white shadow-2xl backdrop-blur'>
+        <div className='absolute right-6 top-1/2 flex -translate-y-1/2 flex-col items-center gap-3 rounded-2xl bg-[#19191b]/95 px-4 py-5 text-xl text-[#ededed]'>
           {muted || volume <= 0 ? (
-            <VolumeX className='h-10 w-10' />
+            <VolumeX
+              strokeWidth={1.5}
+              aria-hidden='true'
+              className='h-[18px] w-[18px]'
+            />
           ) : (
-            <Volume2 className='h-10 w-10' />
+            <Volume2
+              strokeWidth={1.5}
+              aria-hidden='true'
+              className='h-[18px] w-[18px]'
+            />
           )}
-          <div className='relative h-56 w-4 overflow-hidden rounded-full bg-white/20'>
+          <div className='relative h-40 w-2 overflow-hidden rounded-full bg-white/20'>
             <div
-              className='absolute bottom-0 left-0 right-0 rounded-full bg-rose-600'
+              className='absolute bottom-0 left-0 right-0 rounded-full bg-[#ededed]'
               style={{ height: `${Math.round((muted ? 0 : volume) * 100)}%` }}
             />
           </div>
@@ -1914,8 +2262,8 @@ function TVPlayClient() {
         </div>
       )}
       {seekHint && !showPanel && !showEpisodes && (
-        <div className='absolute bottom-16 left-1/2 w-[720px] max-w-[86vw] -translate-x-1/2 rounded-[34px] bg-black/82 px-8 py-6 text-white shadow-2xl backdrop-blur'>
-          <div className='mb-4 flex items-center justify-between text-3xl font-black'>
+        <div className='absolute bottom-16 left-1/2 w-[720px] max-w-[86vw] -translate-x-1/2 rounded-2xl bg-[#19191b]/95 px-8 py-6 text-[#ededed]'>
+          <div className='mb-4 flex flex-wrap items-center justify-between gap-3 text-xl tabular-nums'>
             <span>
               {seekHint.delta > 0
                 ? `快进 ${seekHint.delta}s`
@@ -1930,7 +2278,7 @@ function TVPlayClient() {
           </div>
           <div className='h-3 overflow-hidden rounded-full bg-white/20'>
             <div
-              className='h-full rounded-full bg-rose-600'
+              className='h-full rounded-full bg-[#ededed]'
               style={{
                 width: seekHint.duration
                   ? `${Math.min(

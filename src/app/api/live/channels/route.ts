@@ -4,6 +4,7 @@ import { getCachedLiveChannels } from '@/lib/live';
 import { requireFeaturePermission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
+export const maxDuration = 240;
 
 export async function GET(request: NextRequest) {
   try {

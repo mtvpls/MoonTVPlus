@@ -87,9 +87,9 @@ export class PostgresStorage implements IStorage {
           INSERT INTO play_records (
             username, key, title, source_name, cover, year,
             episode_index, total_episodes, play_time, total_time,
-            save_time, search_title, new_episodes, is_anime, is_duanju
+            save_time, search_title, new_episodes, is_anime, is_duanju, line
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
           ON CONFLICT (username, key) DO UPDATE SET
             title = EXCLUDED.title,
             source_name = EXCLUDED.source_name,
@@ -103,7 +103,8 @@ export class PostgresStorage implements IStorage {
             search_title = EXCLUDED.search_title,
             new_episodes = EXCLUDED.new_episodes,
             is_anime = EXCLUDED.is_anime,
-            is_duanju = COALESCE(EXCLUDED.is_duanju, play_records.is_duanju)
+            is_duanju = COALESCE(EXCLUDED.is_duanju, play_records.is_duanju),
+            line = EXCLUDED.line
         `
         )
         .bind(
@@ -122,7 +123,8 @@ export class PostgresStorage implements IStorage {
           record.new_episodes || null,
           record.is_anime ? 1 : 0,
           // undefined = 本次不表态（不是短剧页/判断不出），别冲掉已有的标记
-          record.is_duanju === undefined ? null : record.is_duanju ? 1 : 0
+          record.is_duanju === undefined ? null : record.is_duanju ? 1 : 0,
+          record.line || null
         )
         .run();
     } catch (err) {
@@ -273,9 +275,9 @@ export class PostgresStorage implements IStorage {
           INSERT INTO favorites (
             username, key, source_name, total_episodes, title,
             year, cover, save_time, search_title, origin,
-            is_completed, vod_remarks
+            is_completed, vod_remarks, is_invalid
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           ON CONFLICT (username, key) DO UPDATE SET
             source_name = EXCLUDED.source_name,
             total_episodes = EXCLUDED.total_episodes,
@@ -286,7 +288,8 @@ export class PostgresStorage implements IStorage {
             search_title = EXCLUDED.search_title,
             origin = EXCLUDED.origin,
             is_completed = EXCLUDED.is_completed,
-            vod_remarks = EXCLUDED.vod_remarks
+            vod_remarks = EXCLUDED.vod_remarks,
+            is_invalid = EXCLUDED.is_invalid
         `
         )
         .bind(
@@ -301,7 +304,8 @@ export class PostgresStorage implements IStorage {
           favorite.search_title || '',
           favorite.origin || null,
           favorite.is_completed ? 1 : 0,
-          favorite.vod_remarks || null
+          favorite.vod_remarks || null,
+          favorite.is_invalid ? 1 : 0
         )
         .run();
     } catch (err) {
@@ -375,6 +379,7 @@ export class PostgresStorage implements IStorage {
       new_episodes: row.new_episodes || undefined,
       is_anime: row.is_anime === 1 || row.is_anime === true,
       is_duanju: row.is_duanju === 1 || row.is_duanju === true,
+      line: row.line || undefined,
     };
   }
 
@@ -389,6 +394,7 @@ export class PostgresStorage implements IStorage {
       search_title: row.search_title || '',
       origin: row.origin as 'vod' | 'live' | undefined,
       is_completed: row.is_completed === 1,
+      is_invalid: row.is_invalid === 1,
       vod_remarks: row.vod_remarks || undefined,
     };
   }

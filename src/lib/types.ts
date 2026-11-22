@@ -1,6 +1,19 @@
 import { AdminConfig } from './admin.types';
 import { MangaReadRecord, MangaShelfItem } from './manga.types';
 import { BookReadRecord, BookShelfItem } from './book.types';
+import type { TVBoxBridgeLine } from './tvbox-bridge.shared';
+
+// 播放源测速结果，失败和不支持测速同样作为终态缓存。
+export interface SourceVideoInfo {
+  quality: string;
+  loadSpeed: string;
+  pingTime: number;
+  bitrate: string;
+  hasError?: boolean;
+  errorType?: 'timeout' | 'unreachable';
+  unsupported?: boolean;
+  reason?: string;
+}
 
 // 播放记录数据结构
 export interface PlayRecord {
@@ -21,6 +34,8 @@ export interface PlayRecord {
   /** 是否短剧（短剧竖屏页写入；普通播放页按 CMS type_name/class 判断）。
       继续观看据此改用 /duanju/play 进去。 */
   is_duanju?: boolean;
+  /** 线路（仅 tvbox 这类多线路源写入）：下次播放同一视频从这条线路续播 */
+  line?: string;
 }
 
 // 收藏数据结构
@@ -34,6 +49,7 @@ export interface Favorite {
   search_title: string; // 搜索时使用的标题
   origin?: 'vod' | 'live';
   is_completed?: boolean; // 是否已完结
+  is_invalid?: boolean; // 源站标题完全变更后失效，重新收藏时恢复
   vod_remarks?: string; // 视频备注信息
 }
 
@@ -349,6 +365,13 @@ export interface SearchResult {
   refresh14m?: boolean;
   /** OpenList 路径元信息：分类 */
   category?: string;
+  /**
+   * TVBox 桥接源的多线路信息（一个 site 就是一张卡，卡内切线路）。
+   * 非 tvbox 源为空。
+   */
+  lines?: TVBoxBridgeLine[];
+  /** 当前选中的线路名（lines[].name），空则用第一条 */
+  activeLine?: string;
 }
 
 // 豆瓣数据结构

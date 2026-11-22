@@ -13,6 +13,7 @@ import {
   getBatchMangaUpdateEmailTemplate,
   MangaShelfUpdate,
 } from '@/lib/email.templates';
+import { hasFavoriteTitleChanged } from '@/lib/favorite-title';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import {
   getLastGlobalLiveRefreshTime,
@@ -24,6 +25,7 @@ import { MangaChapter, MangaShelfItem } from '@/lib/manga.types';
 import { startOpenListRefresh } from '@/lib/openlist-refresh';
 import { getSuwayomiConfig, loginWithSimpleAuth, SuwayomiClient } from '@/lib/suwayomi.client';
 import { SearchResult } from '@/lib/types';
+import { syncTVBoxLiveSources } from '@/lib/tvbox-live.server';
 
 export const runtime = 'nodejs';
 const MAX_INLINE_MANGA_COVERS = 3;
@@ -254,9 +256,12 @@ async function refreshAllLiveChannels() {
     return;
   }
 
+  try { await syncTVBoxLiveSources(true); } catch (error) {
+    console.warn('同步 TVBox 直播源失败:', error);
+  }
   // 并发刷新所有启用的直播源
   const refreshPromises = (config.LiveConfig || [])
-    .filter(liveInfo => !liveInfo.disabled)
+    .filter(liveInfo => !liveInfo.disabled && (!liveInfo.tvbox || config.TVBoxBridgeConfig?.Enabled))
     .map(async (liveInfo) => {
       try {
         const nums = await refreshLiveChannels(liveInfo);
@@ -489,6 +494,7 @@ async function refreshRecordAndFavorites() {
                 new_episodes: updatedNewEpisodes > 0 ? updatedNewEpisodes : undefined,
                 is_anime: record.is_anime,
                 is_duanju: record.is_duanju,
+                line: record.line,
               });
               console.log(
                 `更新播放记录: ${record.title} (${record.total_episodes} -> ${episodeCount}, 新增 ${newEpisodesCount} 集)`
@@ -511,7 +517,9 @@ async function refreshRecordAndFavorites() {
       try {
         let favorites = await db.getAllFavorites(user);
         favorites = Object.fromEntries(
-          Object.entries(favorites).filter(([_, fav]) => fav.origin !== 'live')
+          Object.entries(favorites).filter(
+            ([_, fav]) => fav.origin !== 'live' && !fav.is_invalid
+          )
         );
         const totalFavorites = Object.keys(favorites).length;
         let processedFavorites = 0;
@@ -539,9 +547,20 @@ async function refreshRecordAndFavorites() {
               continue;
             }
 
+            if (hasFavoriteTitleChanged(fav.title, favDetail.title || '')) {
+              await db.saveFavorite(user, source, id, {
+                ...fav,
+                is_invalid: true,
+              });
+              console.log(`收藏已失效 (源站标题变更): ${key} (${fav.title} -> ${favDetail.title})`);
+              processedFavorites++;
+              continue;
+            }
+
             const favEpisodeCount = favDetail.episodes?.length || 0;
             if (favEpisodeCount > 0 && favEpisodeCount !== fav.total_episodes) {
               await db.saveFavorite(user, source, id, {
+                ...fav,
                 title: favDetail.title || fav.title,
                 source_name: fav.source_name,
                 cover: favDetail.poster || fav.cover,

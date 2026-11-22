@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getAvailableApiSites } from '@/lib/config';
+import { resolveTVBoxBridgeSites } from '@/lib/tvbox-bridge.server';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,19 @@ export async function GET(request: NextRequest) {
 
   try {
     const specialOnly = request.nextUrl.searchParams.get('special') === '1';
+    if (request.nextUrl.searchParams.get('type') === 'tvbox') {
+      const sites = await resolveTVBoxBridgeSites(
+        authInfo.username,
+        specialOnly
+      );
+      return NextResponse.json({
+        sources: sites.map((site) => ({
+          key: site.key,
+          name: site.name,
+          api: '',
+        })),
+      });
+    }
     const apiSites = await getAvailableApiSites(authInfo.username, specialOnly);
 
     return NextResponse.json({

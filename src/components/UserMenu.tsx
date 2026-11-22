@@ -107,6 +107,8 @@ export const UserMenu: React.FC = () => {
     useState(false);
   const [subscribeYellowFilterEnabled, setSubscribeYellowFilterEnabled] =
     useState(false);
+  const [subscribeIncludeTVBoxEnabled, setSubscribeIncludeTVBoxEnabled] =
+    useState(false);
 
   // Web 电视扫码登录入口（手机摄像头扫描电视端二维码）
   const [isTvQrScannerOpen, setIsTvQrScannerOpen] = useState(false);
@@ -175,7 +177,7 @@ export const UserMenu: React.FC = () => {
   const [preferMode, setPreferMode] = useState<
     'balanced' | 'resolution' | 'speed'
   >('balanced'); // 优选偏好：综合判定/分辨率优先/网速优先
-  const [speedTestTimeout, setSpeedTestTimeout] = useState(4000); // 测速超时时间（毫秒）
+  const [speedTestTimeout, setSpeedTestTimeout] = useState(6000); // 测速超时时间（毫秒）
   const [fluidSearch, setFluidSearch] = useState(true);
   const [tmdbBackdropDisabled, setTmdbBackdropDisabled] = useState(false);
   const [enableTrailers, setEnableTrailers] = useState(false);
@@ -352,7 +354,7 @@ export const UserMenu: React.FC = () => {
   const animeDataSourceOptions = [
     { value: 'direct', label: '直连（浏览器直连 Bangumi）' },
     { value: 'server-proxy', label: '服务器代理（由服务器访问 Bangumi）' },
-    { value: 'sakura', label: '桜色镜像站（bangumi.lol）' },
+    { value: 'sakura', label: '镜像站（bgm.lat）' },
     { value: 'custom-baseurl', label: '自定义 Base URL' },
   ];
 
@@ -519,7 +521,8 @@ export const UserMenu: React.FC = () => {
           buildSubscribeUrl(
             token,
             subscribeAdFilterEnabled,
-            subscribeYellowFilterEnabled
+            subscribeYellowFilterEnabled,
+            subscribeIncludeTVBoxEnabled
           )
         );
       }
@@ -555,7 +558,8 @@ export const UserMenu: React.FC = () => {
               buildSubscribeUrl(
                 token,
                 subscribeAdFilterEnabled,
-                subscribeYellowFilterEnabled
+                subscribeYellowFilterEnabled,
+                subscribeIncludeTVBoxEnabled
               )
             );
 
@@ -596,7 +600,8 @@ export const UserMenu: React.FC = () => {
   const buildSubscribeUrl = (
     token: string,
     adFilter: boolean,
-    yellowFilter: boolean
+    yellowFilter: boolean,
+    includeTVBox: boolean
   ) => {
     const currentOrigin = window.location.origin;
     const url = new URL('/api/tvbox/subscribe', currentOrigin);
@@ -606,6 +611,9 @@ export const UserMenu: React.FC = () => {
     }
     if (yellowFilter) {
       url.searchParams.set('yellowFilter', 'true');
+    }
+    if (includeTVBox) {
+      url.searchParams.set('includeTVBox', 'true');
     }
     return url.toString();
   };
@@ -1652,13 +1660,15 @@ export const UserMenu: React.FC = () => {
       buildSubscribeUrl(
         tvboxToken,
         subscribeAdFilterEnabled,
-        subscribeYellowFilterEnabled
+        subscribeYellowFilterEnabled,
+        subscribeIncludeTVBoxEnabled
       )
     );
   }, [
     tvboxToken,
     subscribeAdFilterEnabled,
     subscribeYellowFilterEnabled,
+    subscribeIncludeTVBoxEnabled,
     isSubscribeOpen,
   ]);
 
@@ -2404,7 +2414,7 @@ export const UserMenu: React.FC = () => {
         setPreferMode('balanced');
         break;
       case 'speedTestTimeout':
-        setSpeedTestTimeout(4000);
+        setSpeedTestTimeout(6000);
         break;
       case 'maxConcurrentDownloads':
         setMaxConcurrentDownloads(6);
@@ -5627,6 +5637,24 @@ export const UserMenu: React.FC = () => {
                       </div>
                       <span className={`h-5 w-9 rounded-full p-0.5 transition ${subscribeYellowFilterEnabled ? 'bg-yellow-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
                         <span className={`block h-4 w-4 rounded-full bg-white transition ${subscribeYellowFilterEnabled ? 'translate-x-4' : ''}`} />
+                      </span>
+                    </button>
+                    <button
+                      type='button'
+                      role='switch'
+                      aria-checked={subscribeIncludeTVBoxEnabled}
+                      onClick={() => {
+                        setSubscribeIncludeTVBoxEnabled((prev) => !prev);
+                        setCopySuccess(false);
+                      }}
+                      className='flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-green-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 dark:border-white/10 dark:bg-slate-900/70 sm:col-span-2'
+                    >
+                      <div>
+                        <div className='text-sm font-bold text-slate-800 dark:text-slate-200'>加入 TVBox 源</div>
+                        <div className='mt-1 text-xs text-slate-500 dark:text-slate-400'>开启后返回原有源与 TVBox 桥接源的多仓订阅</div>
+                      </div>
+                      <span aria-hidden='true' className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition ${subscribeIncludeTVBoxEnabled ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                        <span className={`block h-4 w-4 rounded-full bg-white transition ${subscribeIncludeTVBoxEnabled ? 'translate-x-4' : ''}`} />
                       </span>
                     </button>
                   </div>

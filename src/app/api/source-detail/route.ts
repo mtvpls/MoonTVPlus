@@ -67,80 +67,9 @@ import {
   normalizeScriptSources,
   parseScriptSourceValue,
 } from '@/lib/source-script';
+import { parseTVBoxBridgeSourceValue } from '@/lib/tvbox-bridge.shared';
 
 export const runtime = 'nodejs';
-
-/**
- * 解析站点 origin。
- * 优先级：SITE_BASE（站点 url 环境变量）> NEXT_PUBLIC_SITE_URL > 请求头 Host。
- */
-function getRequestSiteOrigin(request: NextRequest): string {
-  const fromEnv =
-    (process.env.SITE_BASE || '').trim() ||
-    (process.env.NEXT_PUBLIC_SITE_URL || '').trim();
-
-  if (fromEnv) {
-    return fromEnv.replace(/\/$/, '');
-  }
-
-  let host =
-    request.headers.get('host') || request.headers.get('x-forwarded-host');
-
-  if (host && !/^[a-zA-Z0-9.-]+(:\d+)?$/.test(host)) {
-    host = null;
-  }
-
-  if (!host) {
-    try {
-      host = new URL(request.url).host;
-    } catch {
-      host = 'localhost';
-    }
-  }
-
-  const proto =
-    request.headers.get('x-forwarded-proto') ||
-    (host.includes('localhost') || host.includes('127.0.0.1')
-      ? 'http'
-      : 'https');
-
-  return `${proto}://${host}`.replace(/\/$/, '');
-}
-
-/**
- * MoonTVPlus APP / OrionTV 客户端：对配置的视频源 m3u8 套一层去广告代理。
- * UA 小写包含 "moontvplus app" 或 "oriontv" 时生效（不匹配仅含 moontvplus 的其它客户端）。
- */
-function applyClientAdProxyToEpisodes(
-  request: NextRequest,
-  sourceCode: string,
-  episodes: string[] | undefined,
-  clientAdSourceApis: string[] | undefined
-): string[] | undefined {
-  if (!episodes || episodes.length === 0) return episodes;
-  if (!clientAdSourceApis || !clientAdSourceApis.includes(sourceCode)) {
-    return episodes;
-  }
-
-  const ua = (request.headers.get('user-agent') || '').toLowerCase();
-  if (!ua.includes('moontvplus app') && !ua.includes('oriontv')) {
-    return episodes;
-  }
-
-  const origin = getRequestSiteOrigin(request);
-  return episodes.map((episode) => {
-    if (!episode || typeof episode !== 'string') return episode;
-    if (
-      episode.includes('/api/proxy-m3u8') ||
-      episode.includes('/api/proxy/vod/m3u8')
-    ) {
-      return episode;
-    }
-    // 仅处理 http(s) 直链 m3u8，站内相对播放地址不改写
-    if (!/^https?:\/\//i.test(episode)) return episode;
-    return `${origin}/api/proxy-m3u8?url=${encodeURIComponent(episode)}`;
-  });
-}
 
 /**
  * 网盘集标题：保留完整文件名（去掉常见视频扩展名），
@@ -231,6 +160,63 @@ export async function GET(request: NextRequest) {
         detailId: id,
         result: detailExecution.result,
       });
+
+      return NextResponse.json(normalized);
+    } catch (error) {
+      return NextResponse.json(
+        { error: (error as Error).message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // TVBox 桥接源：一个 site 就是一张卡，sources[] 全部当作线路放进 lines[]
+  const bridgeSiteKey = parseTVBoxBridgeSourceValue(sourceCode);
+  if (bridgeSiteKey) {
+    try {
+      const { getTVBoxBridgeEndpoint, resolveTVBoxBridgeSites, getTVBoxBridgeDetail, normalizeTVBoxBridgeDetailResult } =
+        await import('@/lib/tvbox-bridge.server');
+
+      const sites = await resolveTVBoxBridgeSites(
+        authInfo.username,
+        specialOnly
+      );
+      const site = sites.find((item) => item.siteKey === bridgeSiteKey);
+      if (!site) {
+        return NextResponse.json(
+          { error: '该 TVBox 源不可用或已被停用' },
+          { status: 403 }
+        );
+      }
+
+      const endpoint = await getTVBoxBridgeEndpoint();
+      if (!endpoint) {
+        return NextResponse.json(
+          { error: 'TVBox 桥接未启用' },
+          { status: 503 }
+        );
+      }
+
+      const detail = await getTVBoxBridgeDetail(endpoint, site.siteKey, id);
+      const normalized = normalizeTVBoxBridgeDetailResult({
+        source: sourceCode,
+        site,
+        detailId: id,
+        result: detail,
+        specialOnly,
+      });
+
+      // 请求里指定了线路就按它展开剧集：换线路后回填卡片的详情
+      // 不能拿默认的第一条线路覆盖（否则选中的线路会被顶回第一条）
+      const requestedLine = searchParams.get('line');
+      const requested = requestedLine
+        ? normalized.lines?.find((line) => line.name === requestedLine)
+        : undefined;
+      if (requested) {
+        normalized.activeLine = requested.name;
+        normalized.episodes = requested.episodes;
+        normalized.episodes_titles = requested.episodes_titles;
+      }
 
       return NextResponse.json(normalized);
     } catch (error) {
@@ -1298,31 +1284,7 @@ export async function GET(request: NextRequest) {
       proxyMode: apiSite.proxyMode || false,
     };
 
-    // 客户端广告配置：指定源 + APP/OrionTV UA 时 m3u8 套 proxy-m3u8
-    const adminConfig = await getConfig();
-    const clientAdEnabled = (adminConfig.ClientAdSourceApis || []).includes(
-      sourceCode
-    );
-    resultWithProxy.episodes =
-      applyClientAdProxyToEpisodes(
-        request,
-        sourceCode,
-        resultWithProxy.episodes,
-        adminConfig.ClientAdSourceApis
-      ) || resultWithProxy.episodes;
-
     const cacheTime = await getCacheTime();
-
-    // 同一源在不同 UA 下 episodes 可能不同，避免 CDN/共享缓存串号
-    if (clientAdEnabled) {
-      return NextResponse.json(resultWithProxy, {
-        headers: {
-          'Cache-Control': 'private, no-store',
-          Vary: 'User-Agent',
-          'Netlify-Vary': 'query',
-        },
-      });
-    }
 
     return NextResponse.json(resultWithProxy, {
       headers: {

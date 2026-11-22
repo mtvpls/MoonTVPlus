@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { API_CONFIG, getAvailableApiSites, getConfig } from '@/lib/config';
 import { parseJsonLosslessIntegers } from '@/lib/json';
+import { fetchTVBoxSourceSearchPage } from '@/lib/source-search-tvbox.server';
+import { isTVBoxBridgeSource } from '@/lib/tvbox-bridge.shared';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
@@ -29,13 +31,26 @@ export async function GET(request: NextRequest) {
   const specialOnly = searchParams.get('special') === '1';
 
   if (!sourceKey) {
-    return NextResponse.json(
-      { error: '缺少参数: source' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: '缺少参数: source' }, { status: 400 });
   }
 
   try {
+    if (isTVBoxBridgeSource(sourceKey)) {
+      const data = await fetchTVBoxSourceSearchPage({
+        user: authInfo.username,
+        source: sourceKey,
+        specialOnly,
+        mode: 'home',
+        signal: request.signal,
+      });
+      if (!data) {
+        return NextResponse.json(
+          { error: '该 TVBox 源不可用' },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({ categories: data.categories });
+    }
     const config = await getConfig();
     const apiSites = await getAvailableApiSites(authInfo.username, specialOnly);
     const targetSite = apiSites.find((site) => site.key === sourceKey);
@@ -87,9 +102,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to get categories:', error);
-    return NextResponse.json(
-      { error: '获取分类列表失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '获取分类列表失败' }, { status: 500 });
   }
 }

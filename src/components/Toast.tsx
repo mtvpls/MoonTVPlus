@@ -1,7 +1,8 @@
 'use client';
 
-import { CheckCircle, Info, X,XCircle } from 'lucide-react';
+import { CheckCircle, Info, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface ToastProps {
   message: string;
@@ -10,8 +11,18 @@ export interface ToastProps {
   onClose?: () => void;
 }
 
-export default function Toast({ message, type = 'info', duration = 3000, onClose }: ToastProps) {
+export default function Toast({
+  message,
+  type = 'info',
+  duration = 3000,
+  onClose,
+}: ToastProps) {
+  const [mounted, setMounted] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -32,9 +43,9 @@ export default function Toast({ message, type = 'info', duration = 3000, onClose
   };
 
   const icons = {
-    success: <CheckCircle className="w-5 h-5" />,
-    error: <XCircle className="w-5 h-5" />,
-    info: <Info className="w-5 h-5" />,
+    success: <CheckCircle className='w-5 h-5' />,
+    error: <XCircle className='w-5 h-5' />,
+    info: <Info className='w-5 h-5' />,
   };
 
   const colors = {
@@ -43,22 +54,29 @@ export default function Toast({ message, type = 'info', duration = 3000, onClose
     info: 'bg-blue-500/90',
   };
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       className={`fixed top-20 left-1/2 -translate-x-1/2 z-[9999] transition-all duration-300 ${
         isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
       }`}
     >
-      <div className={`${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg flex items-start gap-3 min-w-[300px] max-w-[min(90vw,560px)]`}>
-        <div className="flex-shrink-0">{icons[type]}</div>
-        <div className="flex-1 text-sm font-medium whitespace-pre-wrap break-words">{message}</div>
+      <div
+        className={`${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg flex items-start gap-3 min-w-[300px] max-w-[min(90vw,560px)]`}
+      >
+        <div className='flex-shrink-0'>{icons[type]}</div>
+        <div className='flex-1 text-sm font-medium whitespace-pre-wrap break-words'>
+          {message}
+        </div>
         <button
           onClick={handleClose}
-          className="flex-shrink-0 hover:bg-white/20 rounded p-1 transition-colors"
+          className='flex-shrink-0 hover:bg-white/20 rounded p-1 transition-colors'
         >
-          <X className="w-4 h-4" />
+          <X className='w-4 h-4' />
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

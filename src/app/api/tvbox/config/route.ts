@@ -11,10 +11,7 @@ export async function GET(request: NextRequest) {
   // 验证用户登录
   const authInfo = getAuthInfoFromCookie(request);
   if (!authInfo || !authInfo.username) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   // 检查是否开启订阅功能
@@ -41,11 +38,14 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const clientOrigin = searchParams.get('origin');
   const adFilter = searchParams.get('adFilter') === 'true'; // 获取去广告参数
+  const includeTVBox = searchParams.get('includeTVBox') === 'true';
 
   const baseUrl = siteBase || clientOrigin || request.nextUrl.origin;
 
   // 构建订阅链接，包含 adFilter 参数
-  const subscribeUrl = `${baseUrl}/api/tvbox/subscribe?token=${encodeURIComponent(subscribeToken)}&adFilter=${adFilter}`;
+  const subscribeUrl = `${baseUrl}/api/tvbox/subscribe?token=${encodeURIComponent(
+    subscribeToken
+  )}&adFilter=${adFilter}${includeTVBox ? '&includeTVBox=true' : ''}`;
 
   return NextResponse.json(
     {

@@ -226,11 +226,22 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
     return ref;
   };
 
+  /**
+   * 搜索结果里的集数。
+   *
+   * 懒详情源（tvbox 桥接等）搜索阶段 episodes 一定是空的，只能退回备注里
+   * 解析出来的 vod_total，否则聚合卡上永远显示 0 集。
+   */
+  const getEpisodeCount = (item: SearchResult) => {
+    const length = item.episodes?.length || 0;
+    return length > 0 ? length : item.vod_total || 0;
+  };
+
   const computeGroupStats = (group: SearchResult[]) => {
     const episodes = (() => {
       const countMap = new Map<number, number>();
       group.forEach((g) => {
-        const len = g.episodes?.length || 0;
+        const len = getEpisodeCount(g);
         if (len > 0) countMap.set(len, (countMap.get(len) || 0) + 1);
       });
       let max = 0;
@@ -417,8 +428,8 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
       }
     }
 
-    // 2.4 兜底：使用 episodes.length（最不可靠）
-    return item.episodes.length === 1 ? 'movie' : 'tv';
+    // 2.4 兜底：使用集数（最不可靠；懒详情源用备注里解析出的集数）
+    return getEpisodeCount(item) === 1 ? 'movie' : 'tv';
   };
 
   // 辅助函数：检查标题是否包含搜索词（用于精确搜索）
@@ -2381,7 +2392,7 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
                             })
                           : filteredAllResults.map((item) => {
                               const type =
-                                item.episodes.length > 1 ? 'tv' : 'movie';
+                                getEpisodeCount(item) > 1 ? 'tv' : 'movie';
                               const itemIsAnime = isAnimeCategoryText(
                                 item.type_name,
                                 item.class
@@ -2393,7 +2404,7 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
                                   id: item.id,
                                   title: item.title,
                                   poster: item.poster,
-                                  episodes: item.episodes.length,
+                                  episodes: getEpisodeCount(item),
                                   source: item.source,
                                   sourceName: item.source_name,
                                   doubanId: item.douban_id,
@@ -2420,7 +2431,7 @@ export function SearchPageClient({ searchBase = '/search' }: { searchBase?: stri
                                     }
                                     title={item.title}
                                     poster={item.poster}
-                                    episodes={item.episodes.length}
+                                    episodes={getEpisodeCount(item)}
                                     source={item.source}
                                     source_name={item.source_name}
                                     douban_id={item.douban_id}

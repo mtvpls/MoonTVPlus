@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 
 import {
+  ChevronDown,
+  ChevronUp,
   LayoutGrid,
   List as ListIcon,
   Link as LinkIcon,
@@ -23,9 +25,29 @@ import { generateStorageKey, getCachedPlayRecordsSnapshot } from '@/lib/db.clien
 import { isEpisodeHiddenByFilter } from '@/lib/episode-filter';
 import { loadAllLocalEpisodeProgressRecords } from '@/lib/episode-progress';
 import { isNetdiskSource } from '@/lib/netdisk/source';
-import { EpisodeFilterConfig,SearchResult } from '@/lib/types';
+import { appendSpecialSourceParam } from '@/lib/special-source.client';
+import { probeTVBoxBridgePlaybackLines } from '@/lib/tvbox-bridge.client';
+import {
+  buildSourceTestKey,
+  getActiveTVBoxBridgeLine,
+  getTVBoxBridgeLines,
+  isTVBoxBridgeSource,
+  parseTVBoxBridgePlayUrl,
+  buildTVBoxBridgeSourceValue,
+} from '@/lib/tvbox-bridge.shared';
+import { EpisodeFilterConfig,SearchResult, SourceVideoInfo } from '@/lib/types';
 import { getVideoResolutionFromM3u8, SpeedTestError } from '@/lib/utils';
 import type { SpeedTestErrorType } from '@/lib/utils';
+
+/** 线路本身不支持测速（直播 / 需要二次解析），与「测速失败」区分开展示 */
+class UnsupportedLineError extends Error {
+  reason?: string;
+  constructor(reason?: string) {
+    super(reason || '不支持测速');
+    this.name = 'UnsupportedLineError';
+    this.reason = reason;
+  }
+}
 
 import DanmakuPanel from '@/components/DanmakuPanel';
 import EpisodeFilterSettings from '@/components/EpisodeFilterSettings';
@@ -244,14 +266,7 @@ const EpisodeListItem: React.FC<EpisodeListItemProps> = ({
 };
 
 // 定义视频信息类型
-interface VideoInfo {
-  quality: string;
-  loadSpeed: string;
-  pingTime: number;
-  bitrate: string; // 视频码率
-  hasError?: boolean; // 添加错误状态标识
-  errorType?: SpeedTestErrorType; // 失败类型：超时 / 无法访问
-}
+type VideoInfo = SourceVideoInfo;
 
 interface EpisodeSelectorProps {
   /** 总集数 */
@@ -267,7 +282,14 @@ interface EpisodeSelectorProps {
   /** 用户点击选集后的回调 */
   onChange?: (episodeNumber: number) => void;
   /** 换源相关 */
-  onSourceChange?: (source: string, id: string, title: string) => void;
+  onSourceChange?: (
+    source: string,
+    id: string,
+    title: string,
+    line?: string
+  ) => void;
+  /** 切换线路（同一源内的线路，tvbox 源可用） */
+  onLineChange?: (source: string, id: string, line: string) => void;
   currentSource?: string;
   currentId?: string;
   episodeProgressContentKey?: string;
@@ -276,8 +298,12 @@ interface EpisodeSelectorProps {
   availableSources?: SearchResult[];
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
+  /** 重新搜索换源（搜索失败时面板上「重试」用） */
+  onRetrySourceSearch?: () => void;
   /** 后台源加载状态 */
   backgroundSourcesLoading?: boolean;
+  /** 补到 tvbox 详情（线路/剧集）后回传给播放页，用于补全当前详情 */
+  onBridgeDetail?: (detail: SearchResult) => void;
   /** 预计算的测速结果，避免重复测速 */
   precomputedVideoInfo?: Map<string, VideoInfo>;
   /** 弹幕相关 */
@@ -307,6 +333,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   value = 1,
   onChange,
   onSourceChange,
+  onLineChange,
   currentSource,
   currentId,
   episodeProgressContentKey,
@@ -314,7 +341,9 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   availableSources = [],
   sourceSearchLoading = false,
   sourceSearchError = null,
+  onRetrySourceSearch,
   backgroundSourcesLoading = false,
+  onBridgeDetail,
   precomputedVideoInfo,
   onDanmakuSelect,
   currentDanmakuSelection,
@@ -422,21 +451,22 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
   // 存储每个源的视频信息
   const [videoInfoMap, setVideoInfoMap] = useState<Map<string, VideoInfo>>(
-    new Map()
-  );
-  const [attemptedSources, setAttemptedSources] = useState<Set<string>>(
-    new Set()
+    () => new Map(precomputedVideoInfo)
   );
   // 存储正在重新测试的源
   const [retestingSources, setRetestingSources] = useState<Set<string>>(
     new Set()
   );
+  const [testingLines, setTestingLines] = useState<Set<string>>(new Set());
   // 标记初始测速是否已完成
   const [initialTestingCompleted, setInitialTestingCompleted] = useState(false);
   // 标记是否正在进行全部重测
   const [isRetestingAll, setIsRetestingAll] = useState(false);
-  // 标记是否正在进行初始测速
-  const [isInitialTesting, setIsInitialTesting] = useState(false);
+  // tvbox 卡展开的线路测速面板（按「源-id」记，展开后可选线路 / 看全部测速结果）
+  const [expandedLinePanels, setExpandedLinePanels] = useState<Set<string>>(
+    new Set()
+  );
+  const isInitialTesting = retestingSources.size > 0 && !isRetestingAll;
   const [watchedEpisodes, setWatchedEpisodes] = useState<Set<number>>(new Set());
   // 选集按钮长按/右键：原集名 popup（样式参考标题上方 aka 提示）
   const [episodeNamePopup, setEpisodeNamePopup] =
@@ -505,13 +535,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   }, [clearEpisodeNamePopupTimer]);
 
   // 使用 ref 来避免闭包问题
-  const attemptedSourcesRef = useRef<Set<string>>(new Set());
-  const videoInfoMapRef = useRef<Map<string, VideoInfo>>(new Map());
-
-  // 同步状态到 ref
-  useEffect(() => {
-    attemptedSourcesRef.current = attemptedSources;
-  }, [attemptedSources]);
+  const videoInfoMapRef = useRef<Map<string, VideoInfo>>(videoInfoMap);
+  const sourceTestTasksRef = useRef<Map<string, Promise<void>>>(new Map());
 
   useEffect(() => {
     videoInfoMapRef.current = videoInfoMap;
@@ -613,7 +638,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     return true;
   });
 
-  // 读取测速超时设置，默认4秒
+  // 读取测速超时设置，默认6秒
   const [speedTestTimeout] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('speedTestTimeout');
@@ -621,8 +646,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         return Number(saved);
       }
     }
-    return 4000;
+    return 6000;
   });
+
+  /** 桥接解析（含 Spider）的独立上限。 */
+  const BRIDGE_PARSE_TIMEOUT = 15000;
 
   // 集数过滤逻辑
   const isEpisodeFiltered = useCallback(
@@ -658,74 +686,473 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     }
   }, [episodeGroupsAsc, totalEpisodes, value]);
 
-  // 获取视频信息的函数 - 移除 attemptedSources 依赖避免不必要的重新创建
-  const getVideoInfo = useCallback(async (source: SearchResult) => {
-    const sourceKey = `${source.source}-${source.id}`;
+  /**
+   * tvbox 搜索结果的线路只有 /api/detail 才知道（搜索阶段 episodes 一律为空）。
+   * 换源列表里的卡片大多来自搜索结果，测速前要先补一次详情，否则既没有线路、
+   * 也没有可测的播放地址。结果做进程内缓存，详情是懒加载且各卡片共用同一 id。
+   */
+  const bridgeDetailCacheRef = useRef<Map<string, Promise<SearchResult | null>>>(
+    new Map()
+  );
+  /** 已拿到的详情（同步可读），getSourceTestEntries 同步展开线路用 */
+  const bridgeDetailMapRef = useRef<Map<string, SearchResult>>(new Map());
+  /** 正在展开线路的卡，避免同一轮测速里重复补详情 */
+  const bridgeExpandRef = useRef<Map<string, Promise<void>>>(new Map());
+  /** 已经补过详情的 tvbox 卡 key（成功失败都记，避免反复打桥接） */
+  const expandedBridgeKeysRef = useRef<Set<string>>(new Set());
+  const [bridgeExpandTick, setBridgeExpandTick] = useState(0);
 
-    // 使用 ref 获取最新的状态，避免闭包问题
-    if (attemptedSourcesRef.current.has(sourceKey)) {
-      return;
-    }
+  const getSourceWithBridgeDetail = useCallback((source: SearchResult) => {
+    // 播放页已经选定线路时，以它的详情为准，测速缓存不能覆盖当前线路。
+    if (getTVBoxBridgeLines(source).length > 0) return source;
+    const cached = bridgeDetailMapRef.current.get(`${source.source}-${source.id}`);
+    return cached ? { ...source, ...cached } : source;
+  }, []);
 
-    // 获取第一集的URL
-    if (!source.episodes || source.episodes.length === 0) {
+  const displayedSources = useMemo(
+    () => availableSources.map(getSourceWithBridgeDetail),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 详情缓存保存在 ref 中，通过 tick 刷新卡片。
+    [availableSources, bridgeExpandTick, getSourceWithBridgeDetail]
+  );
+
+  const getBridgeDetail = useCallback(
+    (source: SearchResult, line?: string): Promise<SearchResult | null> => {
+      // 指定线路时不走「默认第一条」的缓存，单独请求
+      const cacheKey = line
+        ? `${source.source}-${source.id}@${line}`
+        : `${source.source}-${source.id}`;
+      const cached = bridgeDetailCacheRef.current.get(cacheKey);
+      if (cached) return cached;
+
+      const request = (async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(
+          () => controller.abort(),
+          BRIDGE_PARSE_TIMEOUT
+        );
+        try {
+          // 搜索结果的 tvbox 源带的是裸 siteKey，统一换成 tvbox: 前缀，源名称/线路才认得出来
+          const detailSource = isTVBoxBridgeSource(source.source)
+            ? source.source
+            : buildTVBoxBridgeSourceValue(source.source);
+          const response = await fetch(
+            appendSpecialSourceParam(
+              `/api/source-detail?source=${encodeURIComponent(
+                detailSource
+              )}&id=${encodeURIComponent(source.id)}&title=${encodeURIComponent(
+                source.title
+              )}${line ? `&line=${encodeURIComponent(line)}` : ''}`
+            ),
+            { signal: controller.signal }
+          );
+          if (!response.ok) throw new Error('获取线路详情失败');
+          const detail = (await response.json()) as SearchResult;
+          if (!detail) throw new Error('线路详情为空');
+          // 详情里带着站点 key；万一桥接回包缺了，按请求源补上，否则会被当成普通源
+          if (!detail.source) detail.source = detailSource;
+          if (getTVBoxBridgeLines(detail).length === 0) {
+            throw new Error('线路详情为空');
+          }
+          // 详情本身进缓存：测速条目直接复用它，不必再等第二次详情请求
+          // 同一张卡可能有「默认线路」和「选中线路」两份详情，合并保存，后到的线路不丢
+          const cardKey = `${source.source}-${source.id}`;
+          const previous = bridgeDetailMapRef.current.get(cardKey);
+          bridgeDetailMapRef.current.set(cardKey, {
+            ...(previous || detail),
+            ...detail,
+            // 已经有过活动线路就别被后到的默认详情（第一条）顶掉：
+            // 播放中选中的线路以 URL / 播放记录为准
+            activeLine: previous?.activeLine ?? detail.activeLine,
+            episodes: previous?.activeLine
+              ? previous.episodes
+              : detail.episodes?.length
+                ? detail.episodes
+                : previous?.episodes || [],
+            episodes_titles: previous?.activeLine
+              ? previous.episodes_titles || []
+              : detail.episodes?.length
+                ? detail.episodes_titles || []
+                : previous?.episodes_titles || [],
+          });
+          if (line) setBridgeExpandTick((tick) => tick + 1);
+          return detail;
+        } catch {
+          // 失败不缓存，下次重测可以再试
+          bridgeDetailCacheRef.current.delete(cacheKey);
+          if (!line) {
+            bridgeDetailMapRef.current.delete(`${source.source}-${source.id}`);
+          }
+          return null;
+        } finally {
+          clearTimeout(timeout);
+        }
+      })();
+
+      bridgeDetailCacheRef.current.set(cacheKey, request);
+      return request;
+    },
+    []
+  );
+
+  /**
+   * 测速探测地址。
+   *
+   * tvbox 线路的播放地址是本地懒解析接口（/api/tvbox-bridge/play），直接测它测的是
+   * 本地接口，而且它会 307 跳转到跨域的媒体地址，浏览器 fetch 必然失败。
+   * 所以先走 /api/tvbox-bridge/probe（同源、JSON）拿到真实媒体地址；
+   * 直播 / 需二次解析的线路 probe 会回 unsupported，界面显示「不支持测速」。
+   */
+  const resolveSpeedTestUrl = useCallback(
+    async (
+      episodeUrl: string,
+      signal?: AbortSignal
+    ): Promise<
+      | { kind: 'url'; url: string }
+      | { kind: 'unsupported'; reason?: string }
+      | { kind: 'failed' }
+    > => {
+      const play = parseTVBoxBridgePlayUrl(episodeUrl);
+      if (!play) return { kind: 'url', url: episodeUrl };
+      try {
+        const data = (
+          await probeTVBoxBridgePlaybackLines([episodeUrl], signal)
+        ).get(episodeUrl);
+        if (data && !data.ok && data.unsupported) {
+          return { kind: 'unsupported', reason: data.reason };
+        }
+        if (!data?.ok) return { kind: 'failed' };
+        if (typeof data.url !== 'string' || !data.url) return { kind: 'failed' };
+        return { kind: 'url', url: data.url };
+      } catch {
+        return { kind: 'failed' };
+      }
+    },
+    []
+  );
+
+  /**
+   * 测一次播放地址。
+   *
+   * TVBox 线路解析后与普通源共用浏览器测速。
+   */
+  const probeStream = useCallback(
+    async (episodeUrl: string): Promise<
+      Awaited<ReturnType<typeof getVideoResolutionFromM3u8>>
+    > => {
+      if (!parseTVBoxBridgePlayUrl(episodeUrl)) {
+        return getVideoResolutionFromM3u8(episodeUrl, speedTestTimeout);
+      }
+
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), BRIDGE_PARSE_TIMEOUT);
+      });
+      let resolved: Awaited<ReturnType<typeof resolveSpeedTestUrl>> | null;
+      try {
+        resolved = await Promise.race([
+          resolveSpeedTestUrl(episodeUrl, controller.signal),
+          timeout,
+        ]);
+      } finally {
+        clearTimeout(timer);
+        controller.abort();
+      }
+      if (!resolved) {
+        throw new SpeedTestError('timeout', '解析播放地址超时');
+      }
+      if (resolved.kind === 'unsupported') {
+        throw new UnsupportedLineError(resolved.reason);
+      }
+      if (resolved.kind === 'failed') {
+        throw new SpeedTestError('unreachable', '获取媒体流地址失败');
+      }
+
+      return getVideoResolutionFromM3u8(resolved.url, speedTestTimeout);
+    },
+    [resolveSpeedTestUrl, speedTestTimeout]
+  );
+
+  // 详情已由 testSource 展开，这里只探测对应线路的地址。
+  const getVideoInfo = useCallback(async (source: SearchResult, line?: string) => {
+    // tvbox 源按线路分别测速，key 里带线路名；其他源保持「源-id」
+    const sourceKey = buildSourceTestKey(source.source, source.id, line);
+
+    const testable = source;
+
+    const lineInfo = line
+      ? getTVBoxBridgeLines(testable).find((item) => item.name === line)
+      : undefined;
+    const episodes = lineInfo ? lineInfo.episodes : testable.episodes;
+
+    // 没有剧集就没有可测的地址。这里必须落一个终态并把 key 标成已测，
+    // 否则这张卡/这条线路永远停在「等待测速」，也永远不会触发「测完」判断。
+    if (!episodes || episodes.length === 0) {
+      const emptyInfo: VideoInfo = {
+        quality: '错误',
+        loadSpeed: '未知',
+        pingTime: 0,
+        bitrate: '未知',
+        hasError: true,
+        errorType: 'unreachable',
+        reason: '无剧集',
+      };
+      videoInfoMapRef.current.set(sourceKey, emptyInfo);
+      setVideoInfoMap((prev) => new Map(prev).set(sourceKey, emptyInfo));
       return;
     }
     const episodeUrl =
-      source.episodes.length > 1 ? source.episodes[1] : source.episodes[0];
+      episodes.length > 1 ? episodes[1] : episodes[0];
 
-    // 标记为已尝试
-    setAttemptedSources((prev) => new Set(prev).add(sourceKey));
+    const writeErrorInfo = (errorType: SpeedTestErrorType) => {
+      const errorInfo: VideoInfo = {
+        quality: '错误',
+        loadSpeed: '未知',
+        pingTime: 0,
+        bitrate: '未知',
+        hasError: true,
+        errorType,
+      };
+      videoInfoMapRef.current.set(sourceKey, errorInfo);
+      setVideoInfoMap((prev) => new Map(prev).set(sourceKey, errorInfo));
+    };
 
+    setTestingLines((prev) => new Set(prev).add(sourceKey));
     try {
-      const info = await getVideoResolutionFromM3u8(episodeUrl, speedTestTimeout);
+      const info = await probeStream(episodeUrl);
+      if (isTVBoxBridgeSource(source.source) && info.loadSpeed === '未知') {
+        writeErrorInfo('timeout');
+        return;
+      }
+      videoInfoMapRef.current.set(sourceKey, info);
       setVideoInfoMap((prev) => new Map(prev).set(sourceKey, info));
     } catch (error) {
-      // 失败时保存错误状态，并区分超时与无法访问
-      const errorType: SpeedTestErrorType =
-        error instanceof SpeedTestError ? error.type : 'unreachable';
-      setVideoInfoMap((prev) =>
-        new Map(prev).set(sourceKey, {
+      if (error instanceof UnsupportedLineError) {
+        // 直播 / 需二次解析：占位成「不支持测速」，不当成故障
+        const unsupportedInfo: VideoInfo = {
           quality: '错误',
           loadSpeed: '未知',
           pingTime: 0,
           bitrate: '未知',
-          hasError: true,
-          errorType,
-        })
-      );
+          unsupported: true,
+          reason: error.reason,
+        };
+        videoInfoMapRef.current.set(sourceKey, unsupportedInfo);
+        setVideoInfoMap((prev) => new Map(prev).set(sourceKey, unsupportedInfo));
+        return;
+      }
+      // 失败时保存错误状态，并区分超时与无法访问
+      const errorType: SpeedTestErrorType =
+        error instanceof SpeedTestError ? error.type : 'unreachable';
+      writeErrorInfo(errorType);
+    } finally {
+      setTestingLines((prev) => {
+        const next = new Set(prev);
+        next.delete(sourceKey);
+        return next;
+      });
     }
-  }, [speedTestTimeout]);
+  }, [probeStream]);
+
+  /**
+   * 一张卡的所有测速条目（同步）。
+   *
+   * tvbox 源是「一源一卡 + 卡内多线路」，进入播放后的线路测速是**全部线路**
+   * （优选阶段的 5 条上限只作用于搜索阶段，不在这里）。
+   * 来自搜索结果的 tvbox 卡没有 lines，此时只返回「源-id」这一条占位，
+   * 由 ensureSourceExpanded 补完详情再把状态替换成按线路展开的版本。
+   */
+  const getSourceTestEntries = useCallback(
+    (source: SearchResult): Array<{ key: string; line?: string; isActive?: boolean }> => {
+      if (!isTVBoxBridgeSource(source.source)) {
+        return [{ key: buildSourceTestKey(source.source, source.id) }];
+      }
+      const displaySource = getSourceWithBridgeDetail(source);
+      const lines = getTVBoxBridgeLines(displaySource);
+      if (lines.length === 0) {
+        return [{ key: buildSourceTestKey(source.source, source.id) }];
+      }
+      // 播放中的卡用播放页给的活动线路，其余卡用详情里的默认线路（第一条）
+      const isPlayingCard =
+        source.source === currentSource && source.id === currentId;
+      const activeLine = getActiveTVBoxBridgeLine({
+        ...displaySource,
+        activeLine: isPlayingCard ? displaySource.activeLine : undefined,
+      })?.name;
+      return lines.map((line) => ({
+        key: buildSourceTestKey(source.source, source.id, line.name),
+        line: line.name,
+        isActive: line.name === activeLine,
+      }));
+    },
+    [getSourceWithBridgeDetail, currentSource, currentId]
+  );
+
+  /**
+   * 补到详情的当前 tvbox 卡回传给播放页。
+   *
+   * 从历史记录 / 搜索结果直接进入播放时，详情可能缺剧集，选集和换源都不可用；
+   * 换源页补到的详情正好补上（带线路的那一刻回传一次）。
+   */
+  const mergeBridgeDetail = useCallback(
+    (detail: SearchResult) => {
+      if (
+        currentSource === detail.source &&
+        currentId === detail.id &&
+        getTVBoxBridgeLines(detail).length > 0
+      ) {
+        onBridgeDetail?.(detail);
+      }
+    },
+    [currentId, currentSource, onBridgeDetail]
+  );
+
+  /**
+   * 搜索结果的 tvbox 卡先补详情，再按线路测速。
+   *
+   * 搜索阶段 episodes / lines 一律为空，不补详情既没有可测地址，
+   * 也不知道有几条线路。补到后记进 bridgeDetailMapRef，测速条目按线路展开；
+   * bridgeExpandTick 让测速批量任务在下一轮重新计算（不依赖父组件是否回填 availableSources）。
+   * 同一张卡只补一次（expandedBridgeKeysRef），失败也不重试，避免反复打桥接。
+   */
+  const ensureSourceExpanded = useCallback(
+    async (source: SearchResult) => {
+      if (!isTVBoxBridgeSource(source.source) || !source.id) return;
+      const cardKey = `${source.source}-${source.id}`;
+      if (getTVBoxBridgeLines(getSourceWithBridgeDetail(source)).length > 0) return;
+      // 已尝试的详情不自动重拉，失败的卡由单卡重测或全部重测触发重试。
+      if (expandedBridgeKeysRef.current.has(cardKey)) return;
+      const running = bridgeExpandRef.current.get(cardKey);
+      if (running) return running;
+
+      // 播放中的卡按它真正生效的线路取详情，别用默认第一条把选中线路顶掉
+      const line =
+        source.source === currentSource && source.id === currentId
+          ? source.activeLine
+          : undefined;
+
+      const task = (async () => {
+        try {
+          const detail = await getBridgeDetail(source, line);
+          if (detail) {
+            // 缓存里带着 siteKey；搜索结果是裸 key 时补上 tvbox: 前缀，线路才认得出来
+            mergeBridgeDetail({
+              ...detail,
+              source: isTVBoxBridgeSource(source.source)
+                ? source.source
+                : buildTVBoxBridgeSourceValue(detail.source || source.source),
+            });
+            setBridgeExpandTick((tick) => tick + 1);
+          }
+        } finally {
+          // 成功失败都记；失败会写入卡片测速结果，手动重测时清除标记。
+          expandedBridgeKeysRef.current.add(cardKey);
+        }
+      })();
+
+      bridgeExpandRef.current.set(cardKey, task);
+      try {
+        await task;
+      } finally {
+        bridgeExpandRef.current.delete(cardKey);
+      }
+    },
+    [getBridgeDetail, getSourceWithBridgeDetail, mergeBridgeDetail, currentSource, currentId]
+  );
+
+  /** 一张卡是否已经全部测过（tvbox 要求每条线路都有结果） */
+  const isSourceFullyTested = useCallback(
+    (source: SearchResult) => {
+      const entries = getSourceTestEntries(source);
+      if (entries.length === 0) return false;
+      return entries.every((entry) => videoInfoMapRef.current.has(entry.key));
+    },
+    [getSourceTestEntries]
+  );
+
+  /** 测一张卡：tvbox 源逐条线路测（全部线路），同一站点内限 2 条并发，避免被源站限流 */
+  const testSource = useCallback(
+    async (source: SearchResult) => {
+      const cardKey = `${source.source}-${source.id}`;
+      const running = sourceTestTasksRef.current.get(cardKey);
+      if (running) return running;
+
+      setRetestingSources((prev) => new Set(prev).add(cardKey));
+      const task = (async () => {
+        await ensureSourceExpanded(source);
+        const testable = getSourceWithBridgeDetail(source);
+        const entries = getSourceTestEntries(testable).filter(
+          (entry) => !videoInfoMapRef.current.has(entry.key)
+        );
+        // 每条线路的解析从 probeStream 的超时窗口内开始，不能在这里先等整批解析。
+        // 一条完成后马上显示结果并继续下一条，慢线路不阻塞其他线路。
+        let nextIndex = 0;
+        const worker = async () => {
+          while (nextIndex < entries.length) {
+            const entry = entries[nextIndex++];
+            await getVideoInfo(testable, entry.line);
+          }
+        };
+        await Promise.all(
+          Array.from({ length: Math.min(2, entries.length) }, worker)
+        );
+      })();
+      sourceTestTasksRef.current.set(cardKey, task);
+      try {
+        await task;
+      } finally {
+        sourceTestTasksRef.current.delete(cardKey);
+        setRetestingSources((prev) => {
+          const next = new Set(prev);
+          next.delete(cardKey);
+          return next;
+        });
+      }
+    },
+    [ensureSourceExpanded, getSourceWithBridgeDetail, getSourceTestEntries, getVideoInfo]
+  );
 
   // 重测所有源的函数
   const retestAllSources = useCallback(async () => {
-    if (!availableSources || availableSources.length === 0) return;
+    if (!availableSources.length || sourceTestTasksRef.current.size > 0) return;
 
     setIsRetestingAll(true);
 
-    // 清空之前的测速结果
-    setVideoInfoMap(new Map());
-    setAttemptedSources(new Set());
-    attemptedSourcesRef.current = new Set();
-    videoInfoMapRef.current = new Map();
+    // 重测期间把卡上所有线路都标成「测速中」，已测出的旧结果先清掉，避免显示成没在动
+    const replacedKeys = new Set<string>();
+    availableSources.forEach((source) => {
+      // 搜索结果里的 tvbox 卡此刻还没展开线路，补详情后 key 会变，干脆连占位 key 一起清
+      replacedKeys.add(buildSourceTestKey(source.source, source.id));
+      getSourceTestEntries(source).forEach((entry) => replacedKeys.add(entry.key));
+    });
+    setVideoInfoMap((prev) => {
+      const next = new Map(prev);
+      replacedKeys.forEach((key) => next.delete(key));
+      return next;
+    });
+    replacedKeys.forEach((key) => videoInfoMapRef.current.delete(key));
 
-    // 筛选需要测速的源（排除 openlist/emby/xiaoya）
+    // 上次补详情失败的卡这一轮重新补，旧的失败提示一并清掉
+    expandedBridgeKeysRef.current.clear();
+
+    // 每张卡先补详情，再按线路实测；补详情失败也写入失败结果，允许手动重试。
     const sourcesToTest = availableSources.filter((source) => {
       if (source.source === 'openlist' || source.source === 'emby' || source.source.startsWith('emby_') || source.source === 'xiaoya') {
         return false;
       }
       return true;
     });
-
-    // 分批测速，每批最多5个
+    // 分批测速，每批最多5个源，tvbox 卡内按线路展开测全部线路
     const batchSize = 5;
-    for (let i = 0; i < sourcesToTest.length; i += batchSize) {
-      const batch = sourcesToTest.slice(i, i + batchSize);
-      await Promise.all(batch.map(source => getVideoInfo(source)));
+    try {
+      for (let i = 0; i < sourcesToTest.length; i += batchSize) {
+        const batch = sourcesToTest.slice(i, i + batchSize);
+        await Promise.all(batch.map((source) => testSource(source)));
+      }
+    } finally {
+      setIsRetestingAll(false);
     }
-
-    setIsRetestingAll(false);
-  }, [availableSources, getVideoInfo]);
+  }, [availableSources, getSourceTestEntries, testSource]);
 
   // 当有预计算结果时，先合并到videoInfoMap中
   useEffect(() => {
@@ -739,107 +1166,73 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         return newMap;
       });
 
-      setAttemptedSources((prev) => {
-        const newSet = new Set(prev);
-        precomputedVideoInfo.forEach((info, key) => {
-          if (!info.hasError) {
-            newSet.add(key);
-          }
-        });
-        return newSet;
-      });
-
-      // 同步更新 ref，确保 getVideoInfo 能立即看到更新
+      // 已有的逐线路结果无需重复探测。
       precomputedVideoInfo.forEach((info, key) => {
-        if (!info.hasError) {
-          attemptedSourcesRef.current.add(key);
-        }
+        videoInfoMapRef.current.set(key, info);
       });
     }
   }, [precomputedVideoInfo]);
 
-  // 当切换到换源tab并且有源数据时，异步获取视频信息 - 移除 attemptedSources 依赖避免循环触发
+  /**
+   * 一批卡里挑出「线路已展开、且还没测完」的卡。
+   *
+   * tvbox 卡来自搜索结果时先补详情；已带线路的卡直接参与测速。
+   * 完成与否只看逐线路结果，不把开始请求当作测完。
+   */
+  const pickPendingSources = useCallback(
+    async (sources: SearchResult[]) => {
+      const candidates = sources.filter(
+        (source) =>
+          source.source !== 'openlist' &&
+          source.source !== 'emby' &&
+          !source.source.startsWith('emby_') &&
+          source.source !== 'xiaoya'
+      );
+      const pendingSources: SearchResult[] = [];
+      for (const source of candidates) {
+        if (isSourceFullyTested(source)) continue;
+        pendingSources.push(getSourceWithBridgeDetail(source));
+      }
+      return pendingSources;
+    },
+    [getSourceWithBridgeDetail, isSourceFullyTested]
+  );
+
+  // 初始列表与后台新增结果共用同一条测速流程，每张卡只有一个正在执行的任务。
   useEffect(() => {
+    let cancelled = false;
     const fetchVideoInfosInBatches = async () => {
       if (
         !optimizationEnabled || // 若关闭测速则直接退出
+        isRetestingAll ||
         activeTab !== 'sources' ||
         availableSources.length === 0
       )
         return;
 
-      // 筛选出尚未测速的播放源，并排除不需要测速的源（openlist/emby/xiaoya）
-      const pendingSources = availableSources.filter((source) => {
-        const sourceKey = `${source.source}-${source.id}`;
-        // 跳过已测速的源
-        if (attemptedSourcesRef.current.has(sourceKey)) return false;
-        // 跳过不需要测速的源
-        if (source.source === 'openlist' || source.source === 'emby' || source.source.startsWith('emby_') || source.source === 'xiaoya') return false;
-        return true;
-      });
+      const pendingSources = await pickPendingSources(availableSources);
 
-      if (pendingSources.length === 0) return;
+      if (cancelled) return;
+      if (pendingSources.length === 0) {
+        setInitialTestingCompleted(true);
+        return;
+      }
 
-      // 标记开始初始测速
-      setIsInitialTesting(true);
-
-      const batchSize = Math.ceil(pendingSources.length / 2);
+      const batchSize = 5;
 
       for (let start = 0; start < pendingSources.length; start += batchSize) {
+        if (cancelled) return;
         const batch = pendingSources.slice(start, start + batchSize);
-        await Promise.all(batch.map(getVideoInfo));
+        await Promise.all(batch.map((source) => testSource(source)));
       }
 
       // 初始测速完成后，标记为已完成
-      setIsInitialTesting(false);
-      if (!initialTestingCompleted) {
-        setInitialTestingCompleted(true);
-      }
+      if (!cancelled) setInitialTestingCompleted(true);
     };
 
     fetchVideoInfosInBatches();
-    // 依赖项保持与之前一致
-  }, [activeTab, availableSources, getVideoInfo, optimizationEnabled, initialTestingCompleted, currentSource]);
-
-  // 监听后台加载完成，触发自动测速
-  const prevBackgroundLoadingRef = useRef<boolean>(false);
-  useEffect(() => {
-    // 当后台加载从 true 变为 false 时（即加载完成）
-    if (prevBackgroundLoadingRef.current && !backgroundSourcesLoading) {
-      // 如果当前选项卡在换源位置，触发测速
-      if (activeTab === 'sources' && optimizationEnabled) {
-        // 筛选出尚未测速的播放源，并排除不需要测速的源（openlist/emby/xiaoya）
-        const pendingSources = availableSources.filter((source) => {
-          const sourceKey = `${source.source}-${source.id}`;
-          // 跳过已测速的源
-          if (attemptedSourcesRef.current.has(sourceKey)) return false;
-          // 跳过不需要测速的源
-          if (source.source === 'openlist' || source.source === 'emby' || source.source.startsWith('emby_') || source.source === 'xiaoya') return false;
-          return true;
-        });
-
-        if (pendingSources.length > 0) {
-          const batchSize = Math.ceil(pendingSources.length / 2);
-
-          const fetchInBatches = async () => {
-            for (let start = 0; start < pendingSources.length; start += batchSize) {
-              const batch = pendingSources.slice(start, start + batchSize);
-              await Promise.all(batch.map(getVideoInfo));
-            }
-
-            if (!initialTestingCompleted) {
-              setInitialTestingCompleted(true);
-            }
-          };
-
-          fetchInBatches();
-        }
-      }
-    }
-
-    // 更新前一次的加载状态
-    prevBackgroundLoadingRef.current = backgroundSourcesLoading;
-  }, [backgroundSourcesLoading, activeTab, availableSources, getVideoInfo, optimizationEnabled, initialTestingCompleted, currentSource]);
+    return () => { cancelled = true; };
+  }, [activeTab, availableSources, pickPendingSources, testSource, optimizationEnabled, backgroundSourcesLoading, bridgeExpandTick, isRetestingAll]);
 
   // 根据 descending 状态决定分组标签的排序和内容
   const categories = useMemo(() => {
@@ -950,7 +1343,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
   const handleSourceClick = useCallback(
     (source: SearchResult) => {
-      onSourceChange?.(source.source, source.id, source.title);
+      // tvbox 一源一卡，卡内当前选中的线路随换源一起带过去
+      onSourceChange?.(
+        source.source,
+        source.id,
+        source.title,
+        getActiveTVBoxBridgeLine(source)?.name
+      );
     },
     [onSourceChange]
   );
@@ -973,28 +1372,64 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     return unit === 'MB/s' ? value * 1024 : value;
   }, []);
 
+  /**
+   * 一张卡「当前展示」的测速结果 key。
+   *
+   * 非 tvbox 源 = `源-id`；tvbox 源取卡上选中线路的结果（播放中的卡 = 实际播放的线路，
+   * 其余卡 = 默认第一条线路），保证卡片上显示的分辨率/速度与实际会播放的线路一致。
+   * 卡上还没有 lines 时（搜索结果）回退到无线路 key，等详情补回后自动切到线路 key。
+   */
+  const getSourceInfoKey = useCallback(
+    (source: SearchResult) => {
+      const entries = getSourceTestEntries(source);
+      const usedKey = `${source.source}-${source.id}`;
+      if (entries.length === 1 && entries[0].key === usedKey) return usedKey;
+      // 播放中的卡默认展示实际播放线路；用户在看线路面板时跟着面板里的「当前」走
+      const preferredKey =
+        source.source === currentSource && source.id === currentId
+          ? expandedLinePanels.has(usedKey)
+            ? getActiveTVBoxBridgeLine(source)?.name
+            : undefined
+          : undefined;
+      return (
+        entries.find((entry) => preferredKey && entry.line === preferredKey) ||
+        entries.find((entry) => entry.isActive) ||
+        entries[0]
+      ).key;
+    },
+    [getSourceTestEntries, expandedLinePanels, currentSource, currentId]
+  );
+
   // 重新测试单个源
   const handleRetestSource = useCallback(
     async (source: SearchResult, e: React.MouseEvent) => {
       e.stopPropagation(); // 阻止事件冒泡，避免触发换源
       const sourceKey = `${source.source}-${source.id}`;
+      if (sourceTestTasksRef.current.has(sourceKey)) return;
 
       // 标记为正在测试
       setRetestingSources((prev) => new Set(prev).add(sourceKey));
 
-      // 从已尝试列表中移除，允许重新测试
-      setAttemptedSources((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(sourceKey);
-        return newSet;
-      });
+      // 上次补详情失败的卡允许再打一次桥接（「重试」按钮走的就是这里），
+      // 缓存里失败的结果已在 getBridgeDetail 里清掉
+      expandedBridgeKeysRef.current.delete(sourceKey);
 
-      // 同步更新 ref
-      attemptedSourcesRef.current.delete(sourceKey);
-
-      // 执行测试
+      // 执行测试（tvbox 卡：先补详情，再把该卡所有线路一起重测）
       try {
-        await getVideoInfo(source);
+        await ensureSourceExpanded(source);
+        const testKeys = [sourceKey, ...getSourceTestEntries(source).map((entry) => entry.key)];
+        setVideoInfoMap((prev) => {
+          const next = new Map(prev);
+          testKeys.forEach((key) => next.delete(key));
+          return next;
+        });
+
+        // 同步更新 ref
+        testKeys.forEach((key) => {
+          videoInfoMapRef.current.delete(key);
+        });
+
+        await testSource(source);
       } finally {
         // 无论成功或失败，都移除测试标记
         setRetestingSources((prev) => {
@@ -1004,7 +1439,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         });
       }
     },
-    [getVideoInfo]
+    [ensureSourceExpanded, getSourceTestEntries, testSource]
   );
 
   const currentEpisodeGroup = episodeGroupsAsc[currentPage] ?? {
@@ -1051,22 +1486,20 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     <div className='md:ml-2 px-4 py-0 h-full rounded-xl bg-black/10 dark:bg-white/5 flex flex-col border border-white/0 dark:border-white/30 overflow-hidden'>
       {/* 主要的 Tab 切换 - 无缝融入设计 */}
       <div className='flex mb-1 -mx-6 flex-shrink-0'>
-        {/* 选集选项卡 - 仅在多集时显示 */}
-        {totalEpisodes > 1 && (
-          <div
-            onClick={() => !isRoomMember && setActiveTab('episodes')}
-            className={`flex-1 py-3 px-6 text-center transition-all duration-200 font-medium relative
-              ${isRoomMember ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
-              ${activeTab === 'episodes'
-                ? 'text-green-600 dark:text-green-400'
-                : inactiveTabClass
-              }
-            `.trim()}
-          >
-            选集
-            {isRoomMember && <span className="ml-1 text-xs">🔒</span>}
-          </div>
-        )}
+        {/* 选集选项卡 */}
+        <div
+          onClick={() => !isRoomMember && setActiveTab('episodes')}
+          className={`flex-1 py-3 px-6 text-center transition-all duration-200 font-medium relative
+            ${isRoomMember ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+            ${activeTab === 'episodes'
+              ? 'text-green-600 dark:text-green-400'
+              : inactiveTabClass
+            }
+          `.trim()}
+        >
+          选集
+          {isRoomMember && <span className="ml-1 text-xs">🔒</span>}
+        </div>
 
         {/* 换源选项卡 */}
         <div
@@ -1296,9 +1729,9 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
       {/* 换源 Tab 内容 */}
       {activeTab === 'sources' && (
-        <div className='flex flex-col h-full mt-2'>
+        <div className='flex min-h-0 min-w-0 flex-1 flex-col mt-2'>
           {/* 全部重测按钮 - 右上角 */}
-          {!sourceSearchLoading && !sourceSearchError && availableSources.length > 0 && (
+          {!sourceSearchLoading && availableSources.length > 0 && (
             <div className='flex justify-end mb-2 px-2 pb-2 border-b border-gray-300 dark:border-gray-700'>
               <button
                 onClick={retestAllSources}
@@ -1314,28 +1747,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             </div>
           )}
 
-          {sourceSearchLoading && (
-            <div className='flex items-center justify-center py-8'>
-              <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-green-500'></div>
-              <span className={`ml-2 text-sm ${mutedTextClass}`}>
-                搜索中...
-              </span>
-            </div>
-          )}
-
-          {sourceSearchError && (
-            <div className='flex items-center justify-center py-8'>
-              <div className='text-center'>
-                <div className='text-red-500 text-2xl mb-2'>⚠️</div>
-                <p className='text-sm text-red-600 dark:text-red-400'>
-                  {sourceSearchError}
-                </p>
-              </div>
-            </div>
-          )}
-
           {!sourceSearchLoading &&
-            !sourceSearchError &&
+            !backgroundSourcesLoading &&
             availableSources.length === 0 && (
               <div className='flex items-center justify-center py-8'>
                 <div className='text-center'>
@@ -1347,11 +1760,9 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
               </div>
             )}
 
-          {!sourceSearchLoading &&
-            !sourceSearchError &&
-            availableSources.length > 0 && (
-              <div className='flex-1 overflow-y-auto space-y-2 pb-20'>
-                {[...availableSources]
+          {(displayedSources.length > 0 || sourceSearchLoading || backgroundSourcesLoading || sourceSearchError) && (
+              <div className='min-h-0 min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto space-y-2 pb-20'>
+                {[...displayedSources]
                   .sort((a, b) => {
                     const aIsCurrent =
                       a.source?.toString() === currentSource?.toString() &&
@@ -1366,13 +1777,20 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
                     // 如果初始测速已完成，按网速排序（快的在前）
                     if (initialTestingCompleted) {
-                      const aKey = `${a.source}-${a.id}`;
-                      const bKey = `${b.source}-${b.id}`;
+                      const aKey = getSourceInfoKey(a);
+                      const bKey = getSourceInfoKey(b);
                       const aInfo = videoInfoMap.get(aKey);
                       const bInfo = videoInfoMap.get(bKey);
 
-                      const aSpeed = aInfo ? parseSpeedToKBps(aInfo.loadSpeed) : -1;
-                      const bSpeed = bInfo ? parseSpeedToKBps(bInfo.loadSpeed) : -1;
+                      // 失败 / 不支持测速按 0 算：排在成功且有速度的后面，但不至于沉到未测的后面
+                      const speedOf = (info: typeof aInfo) =>
+                        info
+                          ? info.hasError || info.unsupported
+                            ? 0
+                            : parseSpeedToKBps(info.loadSpeed)
+                          : -1;
+                      const aSpeed = speedOf(aInfo);
+                      const bSpeed = speedOf(bInfo);
 
                       // 速度快的排在前面（降序）
                       return bSpeed - aSpeed;
@@ -1384,13 +1802,20 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                     const isCurrentSource =
                       source.source?.toString() === currentSource?.toString() &&
                       source.id?.toString() === currentId?.toString();
+                    // tvbox 是「一源一卡 + 卡内线路选择器」
+                    const bridgeLines = getTVBoxBridgeLines(source);
+                    const activeLine = getActiveTVBoxBridgeLine(source);
+                    const cardKey = `${source.source}-${source.id}`;
+                    const linePanelOpen = expandedLinePanels.has(cardKey);
+                    const activeEpisodeCount =
+                      activeLine?.episodes.length ?? source.episodes.length;
                     return (
                       <div
                         key={`${source.source}-${source.id}`}
                         onClick={() =>
                           !isCurrentSource && handleSourceClick(source)
                         }
-                        className={`flex items-start gap-3 px-2 py-3 rounded-lg transition-all select-none duration-200 relative
+                        className={`flex min-w-0 w-full items-start gap-3 px-2 py-3 rounded-lg transition-all select-none duration-200 relative
                       ${isCurrentSource
                          ? 'bg-green-500/10 dark:bg-green-500/20 border-green-500/30 border'
                           : 'hover:bg-gray-200/50 dark:hover:bg-white/10 hover:scale-[1.02] cursor-pointer'
@@ -1415,7 +1840,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                         </div>
 
                         {/* 信息区域 */}
-                        <div className='flex-1 min-w-0 flex flex-col justify-between h-20'>
+                        <div className='flex-1 min-w-0 flex flex-col justify-between min-h-20 gap-1'>
                           {/* 标题和分辨率 - 顶部 */}
                           <div className='flex items-start justify-between gap-3 h-6'>
                             <div className='flex-1 min-w-0 relative group/title'>
@@ -1431,10 +1856,24 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                               )}
                             </div>
                             {(() => {
-                              const sourceKey = `${source.source}-${source.id}`;
+                              const sourceKey = getSourceInfoKey(source);
                               const videoInfo = videoInfoMap.get(sourceKey);
 
                               if (videoInfo && videoInfo.quality !== '未知') {
+                                if (videoInfo.unsupported) {
+                                  return (
+                                    <div
+                                      title={
+                                        videoInfo.reason
+                                          ? `${videoInfo.reason}，不支持测速`
+                                          : '不支持测速'
+                                      }
+                                      className='bg-gray-500/10 dark:bg-gray-400/20 text-gray-500 dark:text-gray-400 px-1.5 py-0 rounded text-xs flex-shrink-0 min-w-[50px] text-center'
+                                    >
+                                      不支持测速
+                                    </div>
+                                  );
+                                }
                                 if (videoInfo.hasError) {
                                   return (
                                     <div className='bg-gray-500/10 dark:bg-gray-400/20 text-red-600 dark:text-red-400 px-1.5 py-0 rounded text-xs flex-shrink-0 min-w-[50px] text-center'>
@@ -1472,39 +1911,314 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                           </div>
 
                           {/* 源名称和集数信息 - 垂直居中 */}
-                          <div className='flex items-center justify-between'>
-                            <span className={`text-xs px-2 py-1 border rounded ${sourcePillTextClass} ${
+                          <div className='flex min-w-0 items-center justify-between gap-2'>
+                            <span title={source.source_name} className={`min-w-0 truncate text-xs px-2 py-1 border rounded ${sourcePillTextClass} ${
                               source.source === 'xiaoya' ? 'border-blue-500' : isNetdiskSource(source.source) ? 'border-purple-500' : source.source === 'openlist' || source.source === 'emby' || source.source?.startsWith('emby_')
                            ? 'border-yellow-500'
+                                : isTVBoxBridgeSource(source.source) ? 'border-cyan-500'
                                 : 'border-gray-500/60'
                       }`}>
                               {source.source_name}
                             </span>
-                            {source.episodes.length > 1 && (
-                              <span className={`text-xs ${faintTextClass} font-medium`}>
-                                {source.episodes.length} 集
+                            {activeEpisodeCount > 1 && (
+                              <span className={`shrink-0 whitespace-nowrap text-xs ${faintTextClass} font-medium`}>
+                                {activeEpisodeCount} 集
                               </span>
                             )}
                           </div>
 
+                          {/* tvbox：卡内线路选择器（点击不触发换源卡片本身） */}
+                          {bridgeLines.length > 1 && (
+                            <div
+                              className='flex min-w-0 w-full items-center gap-1 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {bridgeLines.map((line) => {
+                                // 只有正在播放的卡才标出「选中线路」，避免每张卡都亮着默认线路
+                                // 其余卡片还没被选择，不把默认第一条标成当前线路。
+                                const isActive =
+                                  isCurrentSource &&
+                                  line.name === activeLine?.name;
+                                // 每条线路各自有测速结果，状态直接标在线路上
+                                const lineInfo = videoInfoMap.get(
+                                  buildSourceTestKey(
+                                    source.source,
+                                    source.id,
+                                    line.name
+                                  )
+                                );
+                                const isLineTesting =
+                                  !lineInfo &&
+                                  testingLines.has(
+                                    buildSourceTestKey(
+                                      source.source,
+                                      source.id,
+                                      line.name
+                                    )
+                                  );
+                                return (
+                                  <button
+                                    key={line.name}
+                                    type='button'
+                                    title={
+                                      lineInfo
+                                        ? lineInfo.unsupported
+                                          ? `${lineInfo.reason || '该线路'}，不支持测速`
+                                          : lineInfo.hasError
+                                            ? lineInfo.errorType === 'timeout'
+                                              ? '测速超时'
+                                              : '源无法访问'
+                                            : `${lineInfo.quality} · ${lineInfo.loadSpeed} · ${lineInfo.pingTime}ms`
+                                        : isLineTesting
+                                          ? '测速中...'
+                                          : '等待测速'
+                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // 当前卡：原地换线路（保留进度）；
+                                      // 其他卡：等同于换到该源的那条线路
+                                      if (isCurrentSource) {
+                                        onLineChange?.(
+                                          source.source,
+                                          source.id,
+                                          line.name
+                                        );
+                                      } else {
+                                        onSourceChange?.(
+                                          source.source,
+                                          source.id,
+                                          source.title,
+                                          line.name
+                                        );
+                                      }
+                                    }}
+                                    className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded border text-xs transition-colors ${
+                                      lineInfo?.hasError
+                                        ? 'border-red-500/40 text-red-600 dark:text-red-400'
+                                        : isActive
+                                        ? 'border-green-500/60 bg-green-500/15 text-green-700 dark:text-green-300'
+                                        : `border-gray-500/30 ${sourcePillTextClass} ${
+                                            useLightTextOnBackdrop
+                                              ? 'hover:bg-white/15'
+                                              : 'hover:bg-gray-200/60 dark:hover:bg-white/10'
+                                          }`
+                                    } ${lineInfo?.unsupported ? 'opacity-60' : ''}`}
+                                  >
+                                    {line.name}
+                                    {lineInfo && lineInfo.unsupported && (
+                                      <span className='text-[10px] opacity-70'>
+                                        不支持测速
+                                      </span>
+                                    )}
+                                    {isLineTesting && (
+                                      <span className='text-[10px] opacity-70'>
+                                        测速中
+                                      </span>
+                                    )}
+                                    {lineInfo &&
+                                      !lineInfo.hasError &&
+                                      !lineInfo.unsupported &&
+                                      lineInfo.loadSpeed !== '未知' && (
+                                        <span className='text-[10px] opacity-70'>
+                                          {lineInfo.loadSpeed}
+                                        </span>
+                                      )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* tvbox：每条线路先显示名称，测速数据另起一行自动换行。
+                              点行即切线路（当前卡原地换线路，其他卡换到该源）。 */}
+                          {bridgeLines.length > 1 && (
+                            <div
+                              className='flex min-w-0 flex-col gap-1'
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type='button'
+                                title={
+                                  linePanelOpen
+                                    ? '收起线路测速'
+                                    : '展开线路测速'
+                                }
+                                onClick={() =>
+                                  setExpandedLinePanels((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(cardKey)) next.delete(cardKey);
+                                    else next.add(cardKey);
+                                    return next;
+                                  })
+                                }
+                                className={`flex items-center gap-1 self-start px-1.5 py-0.5 rounded text-[11px] transition-colors ${
+                                  linePanelOpen
+                                    ? 'text-green-600 dark:text-green-400 bg-green-500/10'
+                                    : `${
+                                        useLightTextOnBackdrop
+                                          ? 'text-white/80'
+                                          : 'text-gray-500 dark:text-gray-400'
+                                      } ${
+                                        useLightTextOnBackdrop
+                                          ? 'hover:bg-white/15 hover:text-white'
+                                          : 'hover:bg-gray-200/60 dark:hover:bg-white/10'
+                                      }`
+                                }`}
+                              >
+                                {linePanelOpen ? (
+                                  <ChevronUp className='w-3 h-3' />
+                                ) : (
+                                  <ChevronDown className='w-3 h-3' />
+                                )}
+                                线路测速 · {bridgeLines.length} 条
+                              </button>
+                              {linePanelOpen && (
+                                <div className='min-w-0 rounded-md border border-gray-500/20 dark:border-white/10 bg-white/40 dark:bg-black/20 py-0.5'>
+                                  {bridgeLines.map((line) => {
+                                    const lineKey = buildSourceTestKey(
+                                      source.source,
+                                      source.id,
+                                      line.name
+                                    );
+                                    const lineInfo = videoInfoMap.get(lineKey);
+                                    // 只有这条线路的任务在执行时才显示测速中。
+                                    const lineTesting =
+                                      !lineInfo && testingLines.has(lineKey);
+                                    const lineActive =
+                                      isCurrentSource &&
+                                      line.name === activeLine?.name;
+                                    const lineSpeed =
+                                      lineInfo &&
+                                      !lineInfo.hasError &&
+                                      !lineInfo.unsupported &&
+                                      lineInfo.loadSpeed !== '未知'
+                                        ? lineInfo.loadSpeed
+                                        : null;
+                                    const lineState = lineInfo
+                                      ? lineInfo.unsupported
+                                        ? (lineInfo.reason || '不支持测速')
+                                        : lineInfo.hasError
+                                          ? lineInfo.errorType === 'timeout'
+                                            ? '测速超时'
+                                            : '无法访问'
+                                          : null
+                                      : lineTesting
+                                        ? '测速中'
+                                        : '未测速';
+                                    return (
+                                      <button
+                                        key={line.name}
+                                        type='button'
+                                        onClick={() => {
+                                          if (isCurrentSource) {
+                                            onLineChange?.(
+                                              source.source,
+                                              source.id,
+                                              line.name
+                                            );
+                                          } else {
+                                            onSourceChange?.(
+                                              source.source,
+                                              source.id,
+                                              source.title,
+                                              line.name
+                                            );
+                                          }
+                                        }}
+                                        className={`w-full min-w-0 flex flex-col items-stretch gap-1.5 overflow-hidden px-2 py-2 text-left text-xs rounded transition-colors ${
+                                          lineActive
+                                            ? 'bg-green-500/15 text-green-700 dark:text-green-300'
+                                            : `${sourcePillTextClass} ${
+                                                useLightTextOnBackdrop
+                                                  ? 'hover:bg-white/15'
+                                                  : 'hover:bg-gray-200/60 dark:hover:bg-white/10'
+                                              }`
+                                        }`}
+                                      >
+                                        <span className='flex min-w-0 items-start gap-2'>
+                                          <span title={line.name} className='min-w-0 flex-1 truncate leading-5'>
+                                            {line.name}
+                                          </span>
+                                          {lineActive && (
+                                            <span className='shrink-0 whitespace-nowrap text-[10px] leading-5 px-1 rounded bg-green-500/20 text-green-700 dark:text-green-300'>
+                                              当前
+                                            </span>
+                                          )}
+                                          {!lineSpeed && (
+                                            <span
+                                              className={`min-w-0 max-w-[55%] break-words text-right text-[11px] leading-5 ${
+                                                lineInfo?.hasError
+                                                  ? 'text-red-500/90 dark:text-red-400'
+                                                  : useLightTextOnBackdrop
+                                                    ? 'text-white/70'
+                                                    : 'text-gray-500 dark:text-gray-400'
+                                              }`}
+                                            >
+                                              {lineState}
+                                            </span>
+                                          )}
+                                        </span>
+                                        {lineSpeed ? (
+                                          <span className='flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 tabular-nums'>
+                                            <span className='whitespace-nowrap text-green-600 dark:text-green-400'>
+                                              {lineSpeed}
+                                            </span>
+                                            <span className='whitespace-nowrap text-orange-600 dark:text-orange-400'>
+                                              {lineInfo?.pingTime}ms
+                                            </span>
+                                            {lineInfo?.bitrate &&
+                                              lineInfo.bitrate !== '未知' && (
+                                                <span className='whitespace-nowrap text-purple-600 dark:text-purple-400'>
+                                                  {lineInfo.bitrate}
+                                                </span>
+                                              )}
+                                            {lineInfo?.quality &&
+                                              lineInfo.quality !== '未知' && (
+                                                <span
+                                                  className={`whitespace-nowrap ${
+                                                    useLightTextOnBackdrop
+                                                      ? 'text-white/70'
+                                                      : 'text-gray-500 dark:text-gray-400'
+                                                  }`}
+                                                >
+                                                  {lineInfo.quality}
+                                                </span>
+                                              )}
+                                          </span>
+                                        ) : null}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {/* 网络信息 - 底部 */}
-                          <div className='flex items-end justify-between h-6'>
-                            <div className='flex items-end gap-3'>
+                          <div className='flex min-w-0 flex-wrap items-end justify-between gap-x-3 gap-y-1 min-h-6'>
+                            <div className='flex min-w-0 flex-wrap items-end gap-x-3 gap-y-1'>
                               {(() => {
-                                const sourceKey = `${source.source}-${source.id}`;
+                                const sourceKey = getSourceInfoKey(source);
                                 const videoInfo = videoInfoMap.get(sourceKey);
                                 if (videoInfo) {
+                                  if (videoInfo.unsupported) {
+                                    return (
+                                      <div className='text-gray-500 dark:text-gray-400 font-medium text-xs'>
+                                        不支持测速
+                                      </div>
+                                    );
+                                  }
                                   if (!videoInfo.hasError) {
                                     return (
-                                      <div className='flex items-end gap-3 text-xs'>
-                                        <div className='text-green-600 dark:text-green-400 font-medium text-xs'>
+                                      <div className='flex min-w-0 flex-wrap items-end gap-x-3 gap-y-1 text-xs'>
+                                        <div className='whitespace-nowrap text-green-600 dark:text-green-400 font-medium text-xs'>
                                           {videoInfo.loadSpeed}
                                         </div>
-                                        <div className='text-orange-600 dark:text-orange-400 font-medium text-xs'>
+                                        <div className='whitespace-nowrap text-orange-600 dark:text-orange-400 font-medium text-xs'>
                                           {videoInfo.pingTime}ms
                                         </div>
                                         {videoInfo.bitrate && videoInfo.bitrate !== '未知' && (
-                                          <div className='text-purple-600 dark:text-purple-400 font-medium text-xs'>
+                                          <div className='whitespace-nowrap text-purple-600 dark:text-purple-400 font-medium text-xs'>
                                             {videoInfo.bitrate}
                                           </div>
                                         )}
@@ -1530,9 +2244,12 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                                 return null;
                               }
 
-                              const sourceKey = `${source.source}-${source.id}`;
-                              const isTesting = retestingSources.has(sourceKey);
-                              const videoInfo = videoInfoMap.get(sourceKey);
+                              // 卡片整体一个「重测」态，测速结果按当前线路取
+                              const retestKey = `${source.source}-${source.id}`;
+                              const isTesting = retestingSources.has(retestKey);
+                              const videoInfo = videoInfoMap.get(
+                                getSourceInfoKey(source)
+                              );
 
                               // 只有第一次测试完成后（有测速数据）才显示重新测试按钮
                               if (videoInfo) {
@@ -1557,8 +2274,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                       </div>
                     );
                   })}
-                {/* 后台加载提示 */}
-                {backgroundSourcesLoading && (
+                {/* 搜索与后台加载共用底部提示 */}
+                {(sourceSearchLoading || backgroundSourcesLoading) && (
                   <div className='flex items-center justify-center py-6 border-t border-gray-300 dark:border-gray-700'>
                     <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-green-500'></div>
                     <span className={`ml-2 text-sm ${mutedTextClass}`}>
@@ -1566,20 +2283,48 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                     </span>
                   </div>
                 )}
-                <div className='flex-shrink-0 mt-auto pt-2 border-t border-gray-400 dark:border-gray-700'>
-                  <button
-                    onClick={() => {
-                      if (videoTitle) {
-                        router.push(
-                          `/search?q=${encodeURIComponent(videoTitle)}`
-                        );
-                      }
-                    }}
-                    className={`w-full text-center text-xs ${faintTextClass} hover:text-green-500 dark:hover:text-green-400 transition-colors py-2`}
+                {/* 搜索失败与重试放在列表底部、搜索入口的分割线之前。 */}
+                {sourceSearchError && !sourceSearchLoading && (
+                  <div
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${
+                      useLightTextOnBackdrop
+                        ? 'bg-black/30 text-white/80'
+                        : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                    }`}
                   >
-                    影片匹配有误？点击去搜索
-                  </button>
-                </div>
+                    <span className='flex-1 truncate' title={sourceSearchError}>
+                      {availableSources.length > 0
+                        ? '换源搜索失败，已有结果仍可用'
+                        : `搜索失败：${sourceSearchError}`}
+                    </span>
+                    <button
+                      onClick={() => onRetrySourceSearch?.()}
+                      className={`shrink-0 font-medium transition-colors ${
+                        useLightTextOnBackdrop
+                          ? 'text-white hover:text-white/80'
+                          : 'text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300'
+                      }`}
+                    >
+                      重试
+                    </button>
+                  </div>
+                )}
+                {displayedSources.length > 0 && (
+                  <div className='flex-shrink-0 mt-auto pt-2 border-t border-gray-400 dark:border-gray-700'>
+                    <button
+                      onClick={() => {
+                        if (videoTitle) {
+                          router.push(
+                            `/search?q=${encodeURIComponent(videoTitle)}`
+                          );
+                        }
+                      }}
+                      className={`w-full text-center text-xs ${faintTextClass} hover:text-green-500 dark:hover:text-green-400 transition-colors py-2`}
+                    >
+                      影片匹配有误？点击去搜索
+                    </button>
+                  </div>
+                )}
               </div>
             )}
         </div>

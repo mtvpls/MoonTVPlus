@@ -24,11 +24,31 @@ const keyConfigs: Record<
   digit: { key: '0', code: 'Digit0', keyCode: 48 },
 };
 
-function dispatchKeyboardEvent(type: 'keydown' | 'keyup', cfg: {
-  key: string;
-  code: string;
-  keyCode: number;
-}, repeat = false) {
+export function isTVRemoteMenuKey(
+  event: Pick<KeyboardEvent, 'key' | 'code' | 'keyCode' | 'which'>
+) {
+  return (
+    event.key === 'ContextMenu' ||
+    event.key === 'Menu' ||
+    event.key === 'BrowserContextMenu' ||
+    event.code === 'ContextMenu' ||
+    event.code === 'Menu' ||
+    event.keyCode === 93 ||
+    event.keyCode === 82 ||
+    event.which === 93 ||
+    event.which === 82
+  );
+}
+
+function dispatchKeyboardEvent(
+  type: 'keydown' | 'keyup',
+  cfg: {
+    key: string;
+    code: string;
+    keyCode: number;
+  },
+  repeat = false
+) {
   const event = new KeyboardEvent(type, {
     key: cfg.key,
     code: cfg.code,
@@ -45,11 +65,12 @@ function dispatchKeyboardEvent(type: 'keydown' | 'keyup', cfg: {
   document.dispatchEvent(event);
 }
 
-export function fireTVRemoteKey(command: TVRemoteKey | TVRemoteKeyCommand, repeat = false) {
+export function fireTVRemoteKey(
+  command: TVRemoteKey | TVRemoteKeyCommand,
+  repeat = false
+) {
   const normalized =
-    typeof command === 'string'
-      ? { key: command, repeat }
-      : command;
+    typeof command === 'string' ? { key: command, repeat } : command;
   let cfg = keyConfigs[normalized.key];
 
   if (normalized.key === 'digit') {
@@ -67,7 +88,10 @@ export function fireTVRemoteKey(command: TVRemoteKey | TVRemoteKeyCommand, repea
   dispatchKeyboardEvent('keyup', cfg, Boolean(normalized.repeat));
 }
 
-function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+function setNativeValue(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string
+) {
   const prototype = Object.getPrototypeOf(element);
   const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
   descriptor?.set?.call(element, value);
@@ -75,7 +99,10 @@ function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
 
 function getTextTarget() {
   const active = document.activeElement;
-  if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+  if (
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLTextAreaElement
+  ) {
     return active;
   }
 

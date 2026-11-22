@@ -1,13 +1,13 @@
 'use client';
 
 import {
+  Clapperboard,
   Film,
   Heart,
   Home,
   MonitorPlay,
   Radio,
   Search,
-  Sparkles,
   Tv,
   User,
 } from 'lucide-react';
@@ -22,7 +22,7 @@ const navItems = [
   { label: '主页', href: '/tv', icon: Home },
   { label: '电影', href: '/tv/movie', icon: Film },
   { label: '剧集', href: '/tv/series', icon: Tv },
-  { label: '动漫', href: '/tv/anime', icon: Sparkles },
+  { label: '动漫', href: '/tv/anime', icon: Clapperboard },
   { label: '综艺', href: '/tv/variety', icon: MonitorPlay },
   { label: '直播', href: '/tv/live', icon: Radio },
   { label: '私人影库', href: '/tv/private', icon: Heart },
@@ -32,9 +32,11 @@ const navItems = [
 export default function TVLayout({
   children,
   showNav = true,
+  fullBleed = false,
 }: {
   children: ReactNode;
   showNav?: boolean;
+  fullBleed?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -52,37 +54,57 @@ export default function TVLayout({
   }, [pathname, showNav]);
 
   return (
-    <main className='min-h-screen overflow-x-hidden bg-black text-slate-50'>
-      <div className='fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,rgba(225,29,72,0.22),transparent_34%),radial-gradient(circle_at_90%_10%,rgba(79,70,229,0.24),transparent_30%),linear-gradient(180deg,#05050b_0%,#000_55%)]' />
+    <main className='min-h-screen overflow-x-hidden bg-[#141415] text-[#ededed]'>
       {showNav && (
-        <header className='fixed left-6 right-6 top-5 z-40 rounded-[28px] border border-white/10 bg-slate-950/78 px-5 py-3 shadow-2xl shadow-black/60 backdrop-blur-xl'>
-          <nav className='flex items-center justify-center gap-3 overflow-x-auto overscroll-x-contain px-4 py-3 [scrollbar-width:none]'>
-            {navItems.map((item) => {
-              const active =
-                item.href === '/tv'
-                  ? pathname === '/tv'
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  data-tv-home-nav={item.href === '/tv' ? 'true' : undefined}
-                  className={`group flex shrink-0 cursor-pointer items-center gap-2 rounded-2xl px-5 py-3 text-xl font-semibold outline-none transition duration-200 tv-focusable ${
-                    active
-                      ? 'bg-rose-600 text-white shadow-lg shadow-rose-950/40'
-                      : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white focus:bg-white/12'
-                  }`}
-                >
-                  <Icon className='h-6 w-6' />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+        <header className='fixed inset-x-0 top-0 z-40 border-b border-white/[0.08] bg-[#0f0f10] px-4 py-3 sm:px-6'>
+          <nav
+            aria-label='电视导航'
+            className='overflow-x-auto overscroll-x-contain p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+          >
+            <div className='mx-auto flex w-max items-center gap-1'>
+              {navItems.map((item) => {
+                const active =
+                  item.href === '/tv'
+                    ? pathname === '/tv'
+                    : pathname === item.href ||
+                      pathname.startsWith(`${item.href}/`);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    data-tv-home-nav={item.href === '/tv' ? 'true' : undefined}
+                    className={`tv-focusable relative flex h-12 shrink-0 cursor-pointer items-center gap-2 rounded-lg px-4 text-lg font-medium outline-none xl:text-xl ${
+                      active
+                        ? 'bg-[#232325] text-[#ededed] after:absolute after:inset-x-4 after:bottom-1 after:h-0.5 after:rounded-sm after:bg-rose-500'
+                        : 'text-[#a1a1a6] hover:bg-[#232325] hover:text-[#ededed]'
+                    }`}
+                  >
+                    <Icon
+                      className='h-[18px] w-[18px] shrink-0'
+                      strokeWidth={1.5}
+                      aria-hidden='true'
+                    />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </nav>
         </header>
       )}
-      <div className={`relative z-10 px-8 pb-16 ${showNav ? 'pt-32' : 'pt-16'}`}>{children}</div>
+      <div
+        className={`relative z-10 ${
+          fullBleed
+            ? ''
+            : `mx-auto max-w-[1800px] px-6 pb-16 lg:px-12 ${
+                showNav ? 'pt-28' : 'pt-12'
+              }`
+        }`}
+      >
+        {children}
+      </div>
       <TVVirtualRemote />
     </main>
   );
